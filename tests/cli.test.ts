@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { runCli, VERSION, type CliIO } from "../src/app.js";
+import { runCli, VERSION } from "../src/app.js";
+import type { CliIO } from "../src/io.js";
 
 test("the CLI exposes its alpha help and version", () => {
   const stdout: string[] = [];

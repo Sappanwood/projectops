@@ -15,7 +15,7 @@ Markdown/JSON artifact 为权威数据，通过统一 `pops` CLI 和 Local Web W
 
 核心场景：
 
-1. 初始化一个 workspace 并登记 Repo。
+1. 初始化一个 workspace 并显式登记 Repo（`pops init` + `pops project add`，两个动作分离）。
 2. 创建和推进 Backlog item。
 3. 编写、验证和批准 Plan，并 materialize 为 Backlog。
 4. 在 delivery 结束后生成 Report。
@@ -26,8 +26,8 @@ Markdown/JSON artifact 为权威数据，通过统一 `pops` CLI 和 Local Web W
 
 | 模块 | 目标能力 | 当前状态 |
 |---|---|---|
-| Workspace/Catalog | 初始化、项目注册、typed roots、doctor | 未实现 |
-| Backlog | Store bootstrap、CRUD、dependency、queue | 未实现 |
+| Workspace/Catalog | 初始化、项目注册、typed roots、doctor | 已实现（init、project add/list/doctor） |
+| Backlog | Store bootstrap、CRUD、dependency、queue | 部分实现（init/add/list/show/update 与 depends_on 存储；queue 未实现） |
 | Plan | authoring、validation、review、approval、materialization | 未实现 |
 | Report | delivery evidence 生成和关联 | 未实现 |
 | Project Docs | roles、templates、scaffold、check | 未实现 |
@@ -41,6 +41,8 @@ Markdown/JSON artifact 为权威数据，通过统一 `pops` CLI 和 Local Web W
 - 不建立覆盖所有 artifact 的通用 schema 或生命周期。
 - 跨领域关联使用稳定 logical URI，不把机器绝对路径写入 artifact。
 - 派生索引和未来 UI preference 不得成为业务 authority。
+- Workspace 是聚合父目录，project 必须是其子路径；workspace 根自身不可登记。
+- 登记不强求 git repo，任意目录均可登记；重复登记报错。
 
 ## Alpha 产品约束
 
@@ -52,7 +54,7 @@ Markdown/JSON artifact 为权威数据，通过统一 `pops` CLI 和 Local Web W
 
 ## 演进路线
 
-1. Workspace/Catalog 与 Backlog 纵向闭环。
+1. ~~Workspace/Catalog 与 Backlog 纵向闭环。~~（基础版已交付：init、显式 project 登记、doctor、backlog store 与 CRUD、状态流转）
 2. Plan、Project Docs 和 materialization。
 3. Report 与 Retrospective 闭环。
 4. Local Web Workbench。
