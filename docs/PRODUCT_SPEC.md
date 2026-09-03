@@ -1,0 +1,60 @@
+# ProjectOps 产品规格
+
+## 产品概述
+
+ProjectOps 是面向人类开发者和 Coding Agent 的本地 Project Operations 产品。它以 Git-friendly 的
+Markdown/JSON artifact 为权威数据，通过统一 `pops` CLI 和 Local Web Workbench 管理项目工作流。
+
+当前阶段目标是快速验证核心闭环，不提供现有 Workspace Control 的兼容层和迁移工具。
+
+## 目标用户与使用场景
+
+- 单机维护多个代码项目的开发者。
+- 需要稳定、机器可读任务和计划契约的 Coding Agent。
+- 希望把计划、任务、交付证据和工作流改进保留在 Git 中的团队。
+
+核心场景：
+
+1. 初始化一个 workspace 并登记 Repo。
+2. 创建和推进 Backlog item。
+3. 编写、验证和批准 Plan，并 materialize 为 Backlog。
+4. 在 delivery 结束后生成 Report。
+5. 建立和检查 Repo 长期文档体系。
+6. 记录、分类并处理 Workflow Retrospective。
+
+## 核心功能
+
+| 模块 | 目标能力 | 当前状态 |
+|---|---|---|
+| Workspace/Catalog | 初始化、项目注册、typed roots、doctor | 未实现 |
+| Backlog | Store bootstrap、CRUD、dependency、queue | 未实现 |
+| Plan | authoring、validation、review、approval、materialization | 未实现 |
+| Report | delivery evidence 生成和关联 | 未实现 |
+| Project Docs | roles、templates、scaffold、check | 未实现 |
+| Retrospective | inbox、triage、active、archive | 未实现 |
+| Workbench | 统一浏览和受控写入 | 未实现 |
+| CLI bootstrap | `pops --help`、`pops --version` | 已实现 |
+
+## 数据契约原则
+
+- Workspace topology、Backlog、Plan、Report、Docs 和 Retrospective 使用独立 versioned schema。
+- 不建立覆盖所有 artifact 的通用 schema 或生命周期。
+- 跨领域关联使用稳定 logical URI，不把机器绝对路径写入 artifact。
+- 派生索引和未来 UI preference 不得成为业务 authority。
+
+## Alpha 产品约束
+
+- 只支持受信任的本地用户和 workspace。
+- 优先正确工作流，不承诺完整非法输入处理。
+- 不承诺 crash consistency、跨进程事务或对抗性并发安全。
+- 不承诺旧版本 schema、现有 Workspace Control 或其他 Project Ops layout 的兼容。
+- 真实用户问题出现后再增加 edge-case 行为和回归测试。
+
+## 演进路线
+
+1. Workspace/Catalog 与 Backlog 纵向闭环。
+2. Plan、Project Docs 和 materialization。
+3. Report 与 Retrospective 闭环。
+4. Local Web Workbench。
+5. 安装发行、升级和按真实需求补充 hardening。
+

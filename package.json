@@ -1,0 +1,26 @@
+{
+  "name": "projectops",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Local project operations for humans and coding agents",
+  "type": "module",
+  "bin": {
+    "pops": "dist/cli.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "node --import tsx src/cli.ts",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/cli.js"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0"
+  }
+}
+
