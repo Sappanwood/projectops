@@ -6,6 +6,7 @@ import path from "node:path";
 import {
   MANIFEST_DIR,
   MANIFEST_FILE,
+  RETROSPECTIVE_ARTIFACT_TYPE,
   WORKSPACE_SCHEMA,
   type WorkspaceManifest,
 } from "./workspace.js";
@@ -67,6 +68,10 @@ function validateManifest(value: unknown): string | null {
   if (!isRecord(value.artifact_layout.roots)) return "invalid artifact_layout.roots";
   for (const [key, type] of Object.entries(value.artifact_layout.roots)) {
     if (typeof type !== "string") return `invalid artifact type for ${key}`;
+  }
+  if (!isRecord(value.retrospectives) || value.retrospectives.type !== RETROSPECTIVE_ARTIFACT_TYPE ||
+      !isSafeRelativePath(value.retrospectives.root)) {
+    return "invalid retrospectives descriptor";
   }
   if (!isRecord(value.projects)) return "invalid projects";
   for (const [id, registration] of Object.entries(value.projects)) {

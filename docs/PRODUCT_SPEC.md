@@ -31,7 +31,7 @@ Markdown/JSON artifact 为权威数据，通过统一 `pops` CLI 和 Local Web W
 | Plan | authoring、查询、validation、review、approval、materialization | authoring/query/validation/approval/materialization 已实现 |
 | Report | delivery evidence 生成和关联 | 部分实现（Report@1 schema/storage、单 Plan 生成资格校验与 `pops report create/list/show`；已覆盖 completed/partial/no-clobber CLI smoke） |
 | Project Docs | roles、templates、scaffold、check | scaffold/check 已实现 |
-| Retrospective | inbox、triage、active、archive | 未实现 |
+| Retrospective | workspace 级 Markdown 记录、inbox/active/archive store 与派生索引 | 基础契约已实现（Retrospective@1、Store@1、manifest 路由和 `pops init` bootstrap；capture/triage/lifecycle 未实现） |
 | Workbench | 统一浏览和受控写入 | 未实现 |
 | CLI bootstrap | `pops --help`、`pops --version` | 已实现 |
 
@@ -53,6 +53,7 @@ Markdown/JSON artifact 为权威数据，通过统一 `pops` CLI 和 Local Web W
 - docs check 不检查链接完整性、内容新鲜度、措辞质量或跨文档语义一致性。
 - Report 使用独立的 `report/Report@1` Markdown artifact，记录稳定 ID、标题、project、生成时间、`completed|partial` outcome、Plan logical reference、Backlog 状态结果、验证证据、偏离、workaround 和 Repo 文档 logical references；Report 文件只在已登记 project 的 reports root 内创建，并拒绝覆盖既有文件。
 - Report 生成只接受已持久化、已批准且已 materialize 的单份 Plan，并从同一 project 的 Backlog mapping 读取实际状态；只有所有 task 为 `done` 时生成 `completed`，未完成 task 必须经过显式且带非空说明的 partial 接受。
+- Retrospective 使用独立的 `retrospective/Retrospective@1` Markdown 记录和 `retrospective/Store@1` store；记录至少包含 `id`、`created_at`、`project`、`task`、`trigger`、`status`、`harness`、`model` 与 Markdown 正文，其中 `project`、`task` 在 provenance 不可用时可显式为 `null`，但缺失字段仍无效。每个 workspace 的 `.pops/workspace.json` 以顶层 `retrospectives` descriptor（`type: workflow/retrospectives@1`、相对 `root`）表达唯一 workspace-level root；`pops init` 创建该 store。权威记录分别位于 `inbox/`、`active/`、`archive/`，`index.json` 与 `INDEX.md` 可从 Markdown 重建。
 
 ## Alpha 产品约束
 

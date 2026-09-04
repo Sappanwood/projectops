@@ -6,6 +6,8 @@ export const WORKSPACE_SCHEMA = "workspace/Manifest@1";
 export const MANIFEST_DIR = ".pops";
 export const MANIFEST_FILE = "workspace.json";
 export const OPS_ROOT = "ops";
+export const RETROSPECTIVE_ARTIFACT_TYPE = "workflow/retrospectives@1";
+export const RETROSPECTIVE_ROOT = "retrospectives";
 
 export type ArtifactKey = "backlog" | "plans" | "reports" | "adr" | "research";
 
@@ -24,6 +26,11 @@ export type ArtifactLayout = {
   roots: Record<ArtifactKey, string>;
 };
 
+export type WorkspaceRetrospectives = {
+  type: typeof RETROSPECTIVE_ARTIFACT_TYPE;
+  root: string;
+};
+
 export type ProjectRegistration = {
   path: string;
 };
@@ -32,6 +39,7 @@ export type WorkspaceManifest = {
   schema: typeof WORKSPACE_SCHEMA;
   name: string;
   artifact_layout: ArtifactLayout;
+  retrospectives: WorkspaceRetrospectives;
   projects: Record<string, ProjectRegistration>;
 };
 
@@ -42,6 +50,10 @@ export function newWorkspaceManifest(name: string): WorkspaceManifest {
     artifact_layout: {
       ops_root: OPS_ROOT,
       roots: { ...ARTIFACT_TYPES },
+    },
+    retrospectives: {
+      type: RETROSPECTIVE_ARTIFACT_TYPE,
+      root: RETROSPECTIVE_ROOT,
     },
     projects: {},
   };
@@ -66,6 +78,13 @@ export function projectArtifactRoots(
     path.join(base, key),
   ]);
   return Object.fromEntries(entries) as Record<ArtifactKey, string>;
+}
+
+export function workspaceRetrospectiveRoot(
+  workspaceRoot: string,
+  retrospectives: WorkspaceRetrospectives,
+): string {
+  return path.join(workspaceRoot, retrospectives.root);
 }
 
 export function slugifyProjectId(name: string): string {
