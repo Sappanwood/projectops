@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -10,57 +10,226 @@ const REPO_ROOT = path.resolve(import.meta.dirname, "..");
 const CLI = path.join(REPO_ROOT, "dist", "cli.js");
 
 function pops(cwd: string, args: string[]): { code: number; stdout: string; stderr: string } {
-  const result = spawnSync(process.execPath, [CLI, ...args], { cwd, encoding: "utf8" });
+  const result = spawnSync(process.execPath, [CLI, ...args], {
+    cwd,
+    encoding: "utf8",
+    timeout: 30_000,
+    killSignal: "SIGTERM",
+  });
   return { code: result.status ?? -1, stdout: result.stdout, stderr: result.stderr };
 }
 
 test("end-to-end smoke: init, register, backlog bootstrap and CRUD", () => {
   const ws = mkdtempSync(path.join(tmpdir(), "pops-smoke-"));
 
-  let r = pops(ws, ["init"]);
-  assert.equal(r.code, 0, r.stderr);
-  assert.ok(existsSync(path.join(ws, ".pops", "workspace.json")));
+  try {
+    let r = pops(ws, ["init"]);
+    assert.equal(r.code, 0, r.stderr);
+    assert.ok(existsSync(path.join(ws, ".pops", "workspace.json")));
 
-  mkdirSync(path.join(ws, "app"));
-  r = pops(ws, ["project", "add", "app"]);
-  assert.equal(r.code, 0, r.stderr);
+    mkdirSync(path.join(ws, "app"));
+    r = pops(ws, ["project", "add", "app"]);
+    assert.equal(r.code, 0, r.stderr);
 
-  r = pops(ws, ["project", "list", "--json"]);
-  assert.equal(r.code, 0, r.stderr);
-  const projects = JSON.parse(r.stdout) as { projects: { id: string }[] };
-  assert.deepEqual(projects.projects, [{ id: "app", path: "app" }]);
+    r = pops(ws, ["project", "list", "--json"]);
+    assert.equal(r.code, 0, r.stderr);
+    const projects = JSON.parse(r.stdout) as { projects: { id: string }[] };
+    assert.deepEqual(projects.projects, [{ id: "app", path: "app" }]);
 
-  r = pops(ws, ["backlog", "init", "app"]);
-  assert.equal(r.code, 0, r.stderr);
+    r = pops(ws, ["backlog", "init", "app"]);
+    assert.equal(r.code, 0, r.stderr);
 
-  r = pops(ws, [
-    "backlog", "add", "app",
-    "-T", "Smoke task", "-c", "feature", "--priority", "P1", "-b", "smoke body",
-  ]);
-  assert.equal(r.code, 0, r.stderr);
+    r = pops(ws, [
+      "backlog", "add", "app",
+      "-T", "Smoke task", "-c", "feature", "--priority", "P1", "-b", "smoke body",
+    ]);
+    assert.equal(r.code, 0, r.stderr);
 
-  r = pops(ws, ["backlog", "show", "app", "APP-001", "--json"]);
-  assert.equal(r.code, 0, r.stderr);
-  const item = JSON.parse(r.stdout) as { title: string; revision: string };
-  assert.equal(item.title, "Smoke task");
+    r = pops(ws, ["backlog", "show", "app", "APP-001", "--json"]);
+    assert.equal(r.code, 0, r.stderr);
+    const item = JSON.parse(r.stdout) as { title: string; revision: string };
+    assert.equal(item.title, "Smoke task");
 
-  r = pops(ws, [
-    "backlog", "update", "app", "APP-001",
-    "--status", "done", "--expected-revision", item.revision,
-  ]);
-  assert.equal(r.code, 0, r.stderr);
+    r = pops(ws, [
+      "backlog", "update", "app", "APP-001",
+      "--status", "done", "--expected-revision", item.revision,
+    ]);
+    assert.equal(r.code, 0, r.stderr);
 
-  r = pops(ws, ["backlog", "list", "app", "--status", "done", "--json"]);
-  assert.equal(r.code, 0, r.stderr);
-  const done = JSON.parse(r.stdout) as { items: unknown[] };
-  assert.equal(done.items.length, 1);
+    r = pops(ws, ["backlog", "list", "app", "--status", "done", "--json"]);
+    assert.equal(r.code, 0, r.stderr);
+    const done = JSON.parse(r.stdout) as { items: unknown[] };
+    assert.equal(done.items.length, 1);
 
-  r = pops(ws, ["project", "doctor", "--json"]);
-  assert.equal(r.code, 0, r.stderr);
-  const doctor = JSON.parse(r.stdout) as { ok: boolean; problems: unknown[] };
-  assert.equal(doctor.ok, true);
-  assert.deepEqual(doctor.problems, []);
+    r = pops(ws, ["project", "doctor", "--json"]);
+    assert.equal(r.code, 0, r.stderr);
+    const doctor = JSON.parse(r.stdout) as { ok: boolean; problems: unknown[] };
+    assert.equal(doctor.ok, true);
+    assert.deepEqual(doctor.problems, []);
 
-  const itemFile = readFileSync(path.join(ws, "ops", "app", "backlog", "items", "APP-001.md"), "utf8");
-  assert.match(itemFile, /status: done/);
+    const itemFile = readFileSync(path.join(ws, "ops", "app", "backlog", "items", "APP-001.md"), "utf8");
+    assert.match(itemFile, /status: done/);
+  } finally {
+    rmSync(ws, { recursive: true, force: true });
+  }
+});
+
+test("end-to-end smoke: Plan lifecycle and Backlog materialization", () => {
+  const ws = mkdtempSync(path.join(tmpdir(), "pops-plan-smoke-"));
+
+  try {
+    let r = pops(ws, ["init"]);
+    assert.equal(r.code, 0, r.stderr);
+
+    mkdirSync(path.join(ws, "app"));
+    r = pops(ws, ["project", "add", "app"]);
+    assert.equal(r.code, 0, r.stderr);
+
+    r = pops(ws, ["backlog", "init", "app"]);
+    assert.equal(r.code, 0, r.stderr);
+
+    const inputPath = path.join(ws, "release-plan.json");
+    writeFileSync(inputPath, `${JSON.stringify({
+      title: "Release workflow",
+      goal: "Publish a repeatable release.",
+      items: [
+        {
+          key: "release",
+          title: "Release",
+          item_type: "epic",
+          priority: "P1",
+          body: "Release work.",
+        },
+        {
+          key: "prepare",
+          title: "Prepare release",
+          item_type: "task",
+          priority: "P1",
+          body: "Update release notes.",
+          parent: "release",
+        },
+        {
+          key: "publish",
+          title: "Publish release",
+          item_type: "task",
+          priority: "P1",
+          body: "Publish the package.",
+          parent: "release",
+          depends_on: ["prepare"],
+        },
+      ],
+    }, null, 2)}\n`, "utf8");
+
+    r = pops(ws, ["plan", "create", "app", "--input", inputPath, "--json"]);
+    assert.equal(r.code, 0, r.stderr);
+    const created = JSON.parse(r.stdout) as { ok: boolean; plan: { id: string; status: string } };
+    assert.deepEqual(created, {
+      ok: true,
+      plan: {
+        schema: "plan/Plan@1",
+        id: "plan-release-workflow",
+        title: "Release workflow",
+        goal: "Publish a repeatable release.",
+        items: [
+          { key: "release", title: "Release", item_type: "epic", priority: "P1", body: "Release work.", depends_on: [] },
+          { key: "prepare", title: "Prepare release", item_type: "task", priority: "P1", body: "Update release notes.", parent: "release", depends_on: [] },
+          { key: "publish", title: "Publish release", item_type: "task", priority: "P1", body: "Publish the package.", parent: "release", depends_on: ["prepare"] },
+        ],
+        status: "draft",
+      },
+    });
+
+    r = pops(ws, ["plan", "list", "app", "--json"]);
+    assert.equal(r.code, 0, r.stderr);
+    assert.deepEqual(JSON.parse(r.stdout), {
+      ok: true,
+      plans: [{ id: "plan-release-workflow", title: "Release workflow", goal: "Publish a repeatable release.", item_count: 3 }],
+    });
+
+    r = pops(ws, ["plan", "show", "app", "plan-release-workflow", "--json"]);
+    assert.equal(r.code, 0, r.stderr);
+    const shown = JSON.parse(r.stdout) as { items: { key: string; parent?: string; depends_on: string[] }[] };
+    assert.deepEqual(shown.items.map(({ key, parent, depends_on }) => ({ key, parent, depends_on })), [
+      { key: "release", parent: undefined, depends_on: [] },
+      { key: "prepare", parent: "release", depends_on: [] },
+      { key: "publish", parent: "release", depends_on: ["prepare"] },
+    ]);
+
+    r = pops(ws, ["plan", "validate", "app", "plan-release-workflow", "--json"]);
+    assert.equal(r.code, 0, r.stderr);
+    assert.equal((JSON.parse(r.stdout) as { ok: boolean; plan: { status: string } }).ok, true);
+    assert.equal((JSON.parse(r.stdout) as { plan: { status: string } }).plan.status, "draft");
+
+    r = pops(ws, [
+      "plan", "approve", "app", "plan-release-workflow",
+      "--review-note", "Reviewed for release.", "--json",
+    ]);
+    assert.equal(r.code, 0, r.stderr);
+    const approved = JSON.parse(r.stdout) as { ok: boolean; plan: { status: string; approval: { review_note: string } } };
+    assert.equal(approved.ok, true);
+    assert.equal(approved.plan.status, "approved");
+    assert.equal(approved.plan.approval.review_note, "Reviewed for release.");
+
+    r = pops(ws, ["plan", "materialize", "app", "plan-release-workflow", "--json"]);
+    assert.equal(r.code, 0, r.stderr);
+    const materialized = JSON.parse(r.stdout) as {
+      ok: boolean;
+      no_op: boolean;
+      plan_id: string;
+      mapping: Record<string, string>;
+      items: { key: string; id: string; disposition: string }[];
+    };
+    assert.equal(materialized.ok, true);
+    assert.equal(materialized.no_op, false);
+    assert.equal(materialized.plan_id, "plan-release-workflow");
+    assert.deepEqual(materialized.mapping, {
+      release: "APP-001",
+      prepare: "APP-002",
+      publish: "APP-003",
+    });
+    assert.deepEqual(materialized.items.map(({ key, id, disposition }) => ({ key, id, disposition })), [
+      { key: "release", id: "APP-001", disposition: "created" },
+      { key: "prepare", id: "APP-002", disposition: "created" },
+      { key: "publish", id: "APP-003", disposition: "created" },
+    ]);
+
+    r = pops(ws, ["backlog", "list", "app", "--json"]);
+    assert.equal(r.code, 0, r.stderr);
+    const listed = JSON.parse(r.stdout) as { ok: boolean; items: { id: string; parent_id: string | null }[] };
+    assert.equal(listed.ok, true);
+    assert.deepEqual(listed.items.map(({ id }) => id), ["APP-001", "APP-002", "APP-003"]);
+    assert.equal(listed.items.find(({ id }) => id === "APP-002")?.parent_id, "APP-001");
+
+    r = pops(ws, ["backlog", "show", "app", "APP-003", "--json"]);
+    assert.equal(r.code, 0, r.stderr);
+    const publish = JSON.parse(r.stdout) as { parent_id: string | null; depends_on: string[] };
+    assert.equal(publish.parent_id, "APP-001");
+    assert.deepEqual(publish.depends_on, ["APP-002"]);
+
+    r = pops(ws, ["plan", "show", "app", "plan-release-workflow", "--json"]);
+    assert.equal(r.code, 0, r.stderr);
+    const stored = JSON.parse(r.stdout) as { materialization: { mapping: Record<string, string> } };
+    assert.deepEqual(stored.materialization.mapping, materialized.mapping);
+
+    r = pops(ws, ["plan", "materialize", "app", "plan-release-workflow", "--json"]);
+    assert.equal(r.code, 0, r.stderr);
+    const retry = JSON.parse(r.stdout) as {
+      no_op: boolean;
+      mapping: Record<string, string>;
+      items: { key: string; id: string; disposition: string }[];
+    };
+    assert.equal(retry.no_op, true);
+    assert.deepEqual(retry.mapping, materialized.mapping);
+    assert.deepEqual(retry.items.map(({ key, id, disposition }) => ({ key, id, disposition })), [
+      { key: "release", id: "APP-001", disposition: "reused" },
+      { key: "prepare", id: "APP-002", disposition: "reused" },
+      { key: "publish", id: "APP-003", disposition: "reused" },
+    ]);
+
+    r = pops(ws, ["backlog", "list", "app", "--json"]);
+    assert.equal(r.code, 0, r.stderr);
+    assert.equal((JSON.parse(r.stdout) as { items: unknown[] }).items.length, 3);
+  } finally {
+    rmSync(ws, { recursive: true, force: true });
+  }
 });

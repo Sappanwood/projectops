@@ -73,6 +73,9 @@ src/
     item.ts               Backlog domain：item schema、frontmatter 序列化、revision
     storeFs.ts            filesystem adapter：store 创建与读取
     itemFs.ts             filesystem adapter：item 文件读写
+  plan/
+    plan.ts               Plan domain：Plan@1 schema、校验与生命周期
+    planFs.ts             filesystem adapter：Plan artifact 的列出、读写与解析
   useCases/               每个 CLI 子命令一个 use case，编排 domain 与 adapters
 ```
 
