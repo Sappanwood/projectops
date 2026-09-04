@@ -25,8 +25,9 @@ flowchart TD
     ReadModel --> Web
 ```
 
-当前 Repo 已落地 Workspace/Catalog、Backlog、Plan authoring/query/validation/approval/materialization 与 Project Docs
-scaffold/check 纵向切片；Report、Retrospective、Workbench 仍是目标域，上图是新增纵向能力时必须保持的目标依赖方向。
+当前 Repo 已落地 Workspace/Catalog、Backlog、Plan authoring/query/validation/approval/materialization、Project Docs
+scaffold/check，以及 Report@1 schema 与 Markdown filesystem adapter；Report generation、Retrospective、Workbench
+仍是目标域，上图是新增纵向能力时必须保持的目标依赖方向。
 
 ## 核心技术栈
 
@@ -76,12 +77,16 @@ src/
   plan/
     plan.ts               Plan domain：Plan@1 schema、校验与生命周期
     planFs.ts             filesystem adapter：Plan artifact 的列出、读写与解析
+  report/
+    report.ts             Report domain：Report@1 schema 与稳定 Markdown 序列化
+    reportFs.ts           filesystem adapter：Report 的 containment、列出、读取与 no-clobber 创建
   docs/
     projectDocs.ts        Project Docs domain：固定角色和内置 Markdown 模板
     projectDocsFs.ts      filesystem adapter：预检、canonical containment、no-clobber scaffold
   useCases/
     docsScaffold.ts       application：创建固定 Project Docs 文件
     docsCheck.ts          application：只读检查固定 Project Docs 文件
+    reportContext.ts      application：解析已登记 project 的 typed reports root
     ...                    每个 CLI 子命令一个 use case，编排 domain 与 adapters
 ```
 
@@ -106,6 +111,9 @@ src/
   非普通目标或越界 parent 会在写入前失败。
 - `pops docs check <project>` 复用同一固定文档集合，只读使用 `lstat` 检查目标为普通文件并读取内容确认存在 Markdown 一级标题；符号链接按非普通文件诊断，
   缺失、非普通或缺少标题时按固定路径顺序收集全部 `problems`，不写入 project。
+- Report：`reports/report-<slug>.md` 使用独立的 `report/Report@1` frontmatter，保存标题、project、`created_at`、outcome、Plan logical reference、
+  Backlog 结果、验证证据、偏离、workaround 与 `repo_docs`（Repo 文档 logical references），正文为 Markdown body。Report adapter 只接受 workspace 内的 reports root，拒绝缺失或非目录 root、
+  非普通 target、schema 无效文件和已存在 target；写入使用 `wx` no-clobber，序列化不会注入机器绝对路径。
 
 ## 当前 CLI 流程
 
