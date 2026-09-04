@@ -30,6 +30,7 @@ pops init ~/my-workspace
 
 # 2. 显式登记一个目录为 project（workspace 的子路径，任意目录均可）
 cd ~/my-workspace
+mkdir my-app
 pops project add my-app
 
 # 3. 查看注册表与拓扑健康

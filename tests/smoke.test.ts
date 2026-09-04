@@ -8,6 +8,12 @@ import test from "node:test";
 // Runs the built CLI as a real subprocess: the closest thing to a user invocation.
 const REPO_ROOT = path.resolve(import.meta.dirname, "..");
 const CLI = path.join(REPO_ROOT, "dist", "cli.js");
+const PROJECT_DOCS = [
+  "README.md",
+  "AGENTS.md",
+  path.join("docs", "PRODUCT_SPEC.md"),
+  path.join("docs", "ARCHITECTURE.md"),
+];
 
 function pops(cwd: string, args: string[]): { code: number; stdout: string; stderr: string } {
   const result = spawnSync(process.execPath, [CLI, ...args], {
@@ -229,6 +235,74 @@ test("end-to-end smoke: Plan lifecycle and Backlog materialization", () => {
     r = pops(ws, ["backlog", "list", "app", "--json"]);
     assert.equal(r.code, 0, r.stderr);
     assert.equal((JSON.parse(r.stdout) as { items: unknown[] }).items.length, 3);
+  } finally {
+    rmSync(ws, { recursive: true, force: true });
+  }
+});
+
+test("end-to-end smoke: Project Docs scaffold, no-clobber and check diagnostics", () => {
+  const ws = mkdtempSync(path.join(tmpdir(), "pops-docs-smoke-"));
+
+  try {
+    let r = pops(ws, ["init"]);
+    assert.equal(r.code, 0, r.stderr);
+
+    mkdirSync(path.join(ws, "app"));
+    r = pops(ws, ["project", "add", "app"]);
+    assert.equal(r.code, 0, r.stderr);
+
+    r = pops(ws, ["docs", "scaffold", "app", "--json"]);
+    assert.equal(r.code, 0, r.stderr);
+    assert.deepEqual(JSON.parse(r.stdout), {
+      ok: true,
+      project: "app",
+      created: PROJECT_DOCS,
+      skipped: [],
+    });
+
+    r = pops(ws, ["docs", "check", "app", "--json"]);
+    assert.equal(r.code, 0, r.stderr);
+    assert.deepEqual(JSON.parse(r.stdout), {
+      ok: true,
+      project: "app",
+      problems: [],
+    });
+
+    const project = path.join(ws, "app");
+    const readme = path.join(project, "README.md");
+    const handwritten = "# Handwritten README\n\nThis content belongs to the project.\n";
+    writeFileSync(readme, handwritten, "utf8");
+    const beforeSecondScaffold = new Map(
+      PROJECT_DOCS.map((target) => [target, readFileSync(path.join(project, target))]),
+    );
+
+    r = pops(ws, ["docs", "scaffold", "app", "--json"]);
+    assert.equal(r.code, 0, r.stderr);
+    assert.deepEqual(JSON.parse(r.stdout), {
+      ok: true,
+      project: "app",
+      created: [],
+      skipped: PROJECT_DOCS,
+    });
+    for (const target of PROJECT_DOCS) {
+      assert.deepEqual(readFileSync(path.join(project, target)), beforeSecondScaffold.get(target));
+    }
+    assert.equal(readFileSync(readme, "utf8"), handwritten);
+
+    rmSync(path.join(project, "docs", "PRODUCT_SPEC.md"));
+    r = pops(ws, ["docs", "check", "app", "--json"]);
+    assert.equal(r.code, 1, r.stderr);
+    const failed = JSON.parse(r.stdout) as {
+      ok: boolean;
+      project: string;
+      problems: { path: string; issue: string }[];
+    };
+    assert.equal(failed.ok, false);
+    assert.equal(failed.project, "app");
+    assert.deepEqual(failed.problems, [{
+      path: path.join("docs", "PRODUCT_SPEC.md"),
+      issue: "document is missing",
+    }]);
   } finally {
     rmSync(ws, { recursive: true, force: true });
   }
