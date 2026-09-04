@@ -30,7 +30,7 @@ Markdown/JSON artifact 为权威数据，通过统一 `pops` CLI 和 Local Web W
 | Backlog | Store bootstrap、CRUD、dependency、queue | 部分实现（init/add/list/show/update 与 depends_on 存储；queue 未实现） |
 | Plan | authoring、查询、validation、review、approval、materialization | authoring/query/validation/approval/materialization 已实现 |
 | Report | delivery evidence 生成和关联 | 未实现 |
-| Project Docs | roles、templates、scaffold、check | scaffold 已实现（check 未实现） |
+| Project Docs | roles、templates、scaffold、check | scaffold/check 已实现 |
 | Retrospective | inbox、triage、active、archive | 未实现 |
 | Workbench | 统一浏览和受控写入 | 未实现 |
 | CLI bootstrap | `pops --help`、`pops --version` | 已实现 |
@@ -49,6 +49,8 @@ Markdown/JSON artifact 为权威数据，通过统一 `pops` CLI 和 Local Web W
 - Project Docs scaffold 为每个已登记 project 提供固定的 README.md、AGENTS.md、docs/PRODUCT_SPEC.md 和 docs/ARCHITECTURE.md 模板；模板包含角色标题和待填写提示，不支持外部模板源或自定义变量。
 - scaffold 预检固定写入目标，已有普通文件保持字节不变并记入 `skipped`；新建文件记入 `created`，JSON receipt 不包含绝对路径。
 - scaffold 的写入目标限制在已登记 project 的 canonical 路径内；目标为非普通文件或 docs parent 越界时返回错误，不产生部分 scaffold。
+- `pops docs check` 只读检查同一固定文档集合：每个目标必须是普通文件并包含客观可识别的 Markdown 一级标题；缺失、非普通文件或缺少标题时返回非零，并在 `--json` 的 `problems` 数组中按固定路径顺序返回全部诊断。
+- docs check 不检查链接完整性、内容新鲜度、措辞质量或跨文档语义一致性。
 
 ## Alpha 产品约束
 

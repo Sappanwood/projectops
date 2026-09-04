@@ -25,8 +25,8 @@ flowchart TD
     ReadModel --> Web
 ```
 
-当前 Repo 已落地 Workspace/Catalog、Backlog 与 Plan authoring/query/validation/approval/materialization
-纵向切片；Report、Docs、Retrospective、Workbench 仍是目标域，上图是新增纵向能力时必须保持的目标依赖方向。
+当前 Repo 已落地 Workspace/Catalog、Backlog、Plan authoring/query/validation/approval/materialization 与 Project Docs
+scaffold/check 纵向切片；Report、Retrospective、Workbench 仍是目标域，上图是新增纵向能力时必须保持的目标依赖方向。
 
 ## 核心技术栈
 
@@ -79,7 +79,10 @@ src/
   docs/
     projectDocs.ts        Project Docs domain：固定角色和内置 Markdown 模板
     projectDocsFs.ts      filesystem adapter：预检、canonical containment、no-clobber scaffold
-  useCases/               每个 CLI 子命令一个 use case，编排 domain 与 adapters
+  useCases/
+    docsScaffold.ts       application：创建固定 Project Docs 文件
+    docsCheck.ts          application：只读检查固定 Project Docs 文件
+    ...                    每个 CLI 子命令一个 use case，编排 domain 与 adapters
 ```
 
 ## 数据文件格式
@@ -101,12 +104,14 @@ src/
   `docs/PRODUCT_SPEC.md` 和 `docs/ARCHITECTURE.md`。模板内容由 Docs domain 持有；application use case 预检 project、docs parent 和全部目标，
   通过 `wx` 创建缺失文件，已有普通文件跳过并在 JSON receipt 的 `created`/`skipped` 中返回。canonical 路径必须仍位于 project 和 workspace 内，
   非普通目标或越界 parent 会在写入前失败。
+- `pops docs check <project>` 复用同一固定文档集合，只读使用 `lstat` 检查目标为普通文件并读取内容确认存在 Markdown 一级标题；符号链接按非普通文件诊断，
+  缺失、非普通或缺少标题时按固定路径顺序收集全部 `problems`，不写入 project。
 
 ## 当前 CLI 流程
 
 1. `src/cli.ts` 把参数、I/O adapter 和 cwd 交给 `runCli`。
-2. `src/app.ts` 路由到命令：`init`、`project add|list|doctor`、`docs scaffold`、`backlog init|add|list|show|update`、`plan create|list|show|validate|approve|materialize`。
-3. 每个子命令对应 `src/useCases/` 下的一个 use case，编排 domain 逻辑与 filesystem adapter；Docs scaffold 由 `docsScaffold.ts` 调用共享的 Docs domain 和 adapter；Plan 的 create/list/show/validate/approve/materialize
+2. `src/app.ts` 路由到命令：`init`、`project add|list|doctor`、`docs scaffold|check`、`backlog init|add|list|show|update`、`plan create|list|show|validate|approve|materialize`。
+3. 每个子命令对应 `src/useCases/` 下的一个 use case，编排 domain 逻辑与 filesystem adapter；Docs scaffold 由 `docsScaffold.ts` 调用共享的 Docs domain 和 adapter，Docs check 由 `docsCheck.ts` 调用同一 Docs adapter；Plan 的 create/list/show/validate/approve/materialize
    共享同一 `plan/` domain 和 filesystem adapter，materialize 通过 `backlog/add.ts` 复用 Backlog item 创建规则，不启动内部 CLI subprocess。
 4. use case 以退出码表达成功、明确错误或 unknown 命令；错误信息写 stderr，机器可读结果经 `--json` 写 stdout。
 5. 后续 command 按纵向用例加入对应 domain module，不在入口文件堆叠存储逻辑。

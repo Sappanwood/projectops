@@ -14,6 +14,7 @@ import { planValidate } from "./useCases/planValidate.js";
 import { planApprove } from "./useCases/planApprove.js";
 import { planMaterialize } from "./useCases/planMaterialize.js";
 import { docsScaffold } from "./useCases/docsScaffold.js";
+import { docsCheck } from "./useCases/docsCheck.js";
 import type { CliIO } from "./io.js";
 
 export const VERSION = "0.0.0";
@@ -44,6 +45,7 @@ Commands:
   plan approve <project> <plan> --review-note <note>  Approve a validated Plan
   plan materialize <project> <plan>  Materialize an approved Plan into Backlog
   docs scaffold <project>       Create the fixed Project Docs files
+  docs check <project>          Check the fixed Project Docs files
 
 Project workflows will be added as vertical slices during the alpha phase.`;
 
@@ -135,6 +137,9 @@ export function runCli(args: readonly string[], io: CliIO, cwd = process.cwd()):
       const json = [first, ...subArgs].includes("--json");
       if (sub === "scaffold") {
         return docsScaffold(first, json, io, cwd);
+      }
+      if (sub === "check") {
+        return docsCheck(first, json, io, cwd);
       }
       io.stderr(`Unknown docs command: ${sub ?? ""}`);
       return 1;
