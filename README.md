@@ -24,7 +24,7 @@ pops --version
 
 ## 当前能力
 
-当前已可完成 workspace、project、Backlog、Plan 审批到 materialize、Delivery Report 生成与查询，以及 Workflow Retrospective 捕获与查询的基础工作流。
+当前已可完成 workspace、project、Backlog、Plan 审批到 materialize、Delivery Report 生成与查询，以及 Workflow Retrospective 从捕获、查询到分类和归档的完整工作流。
 
 ```bash
 # 1. 在目标目录初始化 workspace 壳（目录可以非空，生成 .pops/workspace.json）
@@ -82,7 +82,8 @@ pops report create my-app plan-release-workflow --verification "npm test" --repo
 pops report list my-app --json
 pops report show my-app report-release-workflow --json
 
-# 9. 捕获和查询 Workflow Retrospective（记录只进入 workspace 级 inbox）
+# 9. 完成 Workflow Retrospective 闭环（记录从 workspace 级 inbox 开始）
+# `pops init` 已创建 `retrospectives/` store；capture 先写入 inbox，再按 revision 推进状态。
 pops retrospective capture --trigger workflow-friction --harness codex-app --model null \
   --project my-app --task MYA-002 --body-file retrospective.md --json
 pops retrospective list --status inbox --project my-app --json
@@ -96,6 +97,9 @@ pops retrospective archive <retrospective-id> --expected-revision <revision> \
 
 `retrospective.md` 的正文必须包含三个非空 Markdown section（heading 可使用 1 至 6 级）：
 `Hidden friction encountered`、`Workarounds used` 和 `Improvement candidates`。
+
+每次成功的 triage/archive 都会更新 revision、移动唯一 Markdown authority，并重建
+`retrospectives/index.json` 和 `retrospectives/INDEX.md`；过期 revision 或已有目标会失败且保留原记录。
 
 - `pops --help`、`pops --version`
 - `pops init`：workspace 壳初始化（不登记 repo）

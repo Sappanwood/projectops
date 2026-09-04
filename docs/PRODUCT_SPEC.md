@@ -31,7 +31,7 @@ Markdown/JSON artifact 为权威数据，通过统一 `pops` CLI 和 Local Web W
 | Plan | authoring、查询、validation、review、approval、materialization | authoring/query/validation/approval/materialization 已实现 |
 | Report | delivery evidence 生成和关联 | 部分实现（Report@1 schema/storage、单 Plan 生成资格校验与 `pops report create/list/show`；已覆盖 completed/partial/no-clobber CLI smoke） |
 | Project Docs | roles、templates、scaffold、check | scaffold/check 已实现 |
-| Retrospective | workspace 级 Markdown 记录、inbox/active/archive store 与派生索引 | 部分实现（Retrospective@1、Store@1、manifest 路由、`pops init` bootstrap、`pops retrospective capture/list/show/triage/archive`；Workbench 未实现） |
+| Retrospective | workspace 级 Markdown 记录、inbox/active/archive store 与派生索引 | 已实现（Retrospective@1、Store@1、manifest 路由、`pops init` bootstrap、`pops retrospective capture/list/show/triage/archive` 与 revision 保护；Workbench 未实现） |
 | Workbench | 统一浏览和受控写入 | 未实现 |
 | CLI bootstrap | `pops --help`、`pops --version` | 已实现 |
 
@@ -69,6 +69,6 @@ Markdown/JSON artifact 为权威数据，通过统一 `pops` CLI 和 Local Web W
 
 1. ~~Workspace/Catalog 与 Backlog 纵向闭环。~~（基础版已交付：init、显式 project 登记、doctor、backlog store 与 CRUD、状态流转）
 2. Plan、Project Docs 和 materialization。（Plan 到 Backlog materialization 已实现。）
-3. Report 与 Retrospective 闭环。
+3. ~~Report 与 Retrospective 闭环。~~（Report 与 Retrospective 的 CLI 纵向闭环已实现；Workbench 仍未实现。）
 4. Local Web Workbench。
 5. 安装发行、升级和按真实需求补充 hardening。
