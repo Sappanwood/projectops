@@ -26,8 +26,8 @@ flowchart TD
 ```
 
 当前 Repo 已落地 Workspace/Catalog、Backlog、Plan authoring/query/validation/approval/materialization、Project Docs
-scaffold/check，以及 Report@1 schema 与 Markdown filesystem adapter；Report generation、Retrospective、Workbench
-仍是目标域，上图是新增纵向能力时必须保持的目标依赖方向。
+scaffold/check，以及 Report@1 schema、Markdown filesystem adapter 与单 Plan Report 生成资格校验；Report CLI、
+Retrospective、Workbench 仍是目标域，上图是新增纵向能力时必须保持的目标依赖方向。
 
 ## 核心技术栈
 
@@ -87,6 +87,7 @@ src/
     docsScaffold.ts       application：创建固定 Project Docs 文件
     docsCheck.ts          application：只读检查固定 Project Docs 文件
     reportContext.ts      application：解析已登记 project 的 typed reports root
+    reportGenerate.ts     application：从持久化 materialized Plan 与同项目 Backlog 生成 Report
     ...                    每个 CLI 子命令一个 use case，编排 domain 与 adapters
 ```
 
@@ -114,6 +115,7 @@ src/
 - Report：`reports/report-<slug>.md` 使用独立的 `report/Report@1` frontmatter，保存标题、project、`created_at`、outcome、Plan logical reference、
   Backlog 结果、验证证据、偏离、workaround 与 `repo_docs`（Repo 文档 logical references），正文为 Markdown body。Report adapter 只接受 workspace 内的 reports root，拒绝缺失或非目录 root、
   非普通 target、schema 无效文件和已存在 target；写入使用 `wx` no-clobber，序列化不会注入机器绝对路径。
+- Report generation 先从 `plansRoot` 读取并校验指定的已批准、已 materialize Plan，再按 mapping 读取同一 project 的 Backlog 条目；Report 记录所有映射结果，`completed|partial` 只由 task 的实际状态和显式 partial 说明决定，生成失败不写入 Report。
 
 ## 当前 CLI 流程
 

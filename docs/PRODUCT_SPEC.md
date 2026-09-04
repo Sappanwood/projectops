@@ -29,7 +29,7 @@ Markdown/JSON artifact 为权威数据，通过统一 `pops` CLI 和 Local Web W
 | Workspace/Catalog | 初始化、项目注册、typed roots、doctor | 已实现（init、project add/list/doctor） |
 | Backlog | Store bootstrap、CRUD、dependency、queue | 部分实现（init/add/list/show/update 与 depends_on 存储；queue 未实现） |
 | Plan | authoring、查询、validation、review、approval、materialization | authoring/query/validation/approval/materialization 已实现 |
-| Report | delivery evidence 生成和关联 | 部分实现（Report@1 schema 与 Markdown storage） |
+| Report | delivery evidence 生成和关联 | 部分实现（Report@1 schema/storage 与单 Plan 生成资格校验） |
 | Project Docs | roles、templates、scaffold、check | scaffold/check 已实现 |
 | Retrospective | inbox、triage、active、archive | 未实现 |
 | Workbench | 统一浏览和受控写入 | 未实现 |
@@ -52,6 +52,7 @@ Markdown/JSON artifact 为权威数据，通过统一 `pops` CLI 和 Local Web W
 - `pops docs check` 只读检查同一固定文档集合：每个目标必须是普通文件并包含客观可识别的 Markdown 一级标题；缺失、非普通文件或缺少标题时返回非零，并在 `--json` 的 `problems` 数组中按固定路径顺序返回全部诊断。
 - docs check 不检查链接完整性、内容新鲜度、措辞质量或跨文档语义一致性。
 - Report 使用独立的 `report/Report@1` Markdown artifact，记录稳定 ID、标题、project、生成时间、`completed|partial` outcome、Plan logical reference、Backlog 状态结果、验证证据、偏离、workaround 和 Repo 文档 logical references；Report 文件只在已登记 project 的 reports root 内创建，并拒绝覆盖既有文件。
+- Report 生成只接受已持久化、已批准且已 materialize 的单份 Plan，并从同一 project 的 Backlog mapping 读取实际状态；只有所有 task 为 `done` 时生成 `completed`，未完成 task 必须经过显式且带非空说明的 partial 接受。
 
 ## Alpha 产品约束
 
