@@ -167,7 +167,7 @@ test("built CLI completes an isolated retrospective lifecycle with revision and 
       "--disposition", "actionable", "--owner-scope", "projectops",
       "--category", "testing", "--category", "docs",
       "--next-action", "Keep the lifecycle smoke.",
-      "--related-info", "project-ops:backlog/POP-032",
+      "--related-info", "project-ops:backlog/items/POP-032.md",
       "--canonical", "project-ops:retrospectives/retro-e2e-lifecycle.md", "--json",
     ]);
     expectOk(triaged);
@@ -187,7 +187,7 @@ test("built CLI completes an isolated retrospective lifecycle with revision and 
     assert.deepEqual(activeRecord.categories, ["testing", "docs"]);
     assert.equal(activeRecord.owner_scope, "projectops");
     assert.equal(activeRecord.next_action, "Keep the lifecycle smoke.");
-    assert.deepEqual(activeRecord.related_info, ["project-ops:backlog/POP-032"]);
+    assert.deepEqual(activeRecord.related_info, ["project-ops:backlog/items/POP-032.md"]);
     assert.equal(activeRecord.canonical, "project-ops:retrospectives/retro-e2e-lifecycle.md");
     assert.equal(existsSync(path.join(root, "inbox", `${id}.md`)), false);
     assert.ok(existsSync(path.join(root, "active", `${id}.md`)));
@@ -209,7 +209,7 @@ test("built CLI completes an isolated retrospective lifecycle with revision and 
     assert.equal(activeShownRecord.owner_scope, "projectops");
     assert.deepEqual(activeShownRecord.categories, ["testing", "docs"]);
     assert.equal(activeShownRecord.next_action, "Keep the lifecycle smoke.");
-    assert.deepEqual(activeShownRecord.related_info, ["project-ops:backlog/POP-032"]);
+    assert.deepEqual(activeShownRecord.related_info, ["project-ops:backlog/items/POP-032.md"]);
     assert.equal(activeShownRecord.canonical, "project-ops:retrospectives/retro-e2e-lifecycle.md");
     assert.equal(activeShownRecord.revision, activeRecord.revision);
     const activeIndexRecord = indexRecord(root);
@@ -223,7 +223,7 @@ test("built CLI completes an isolated retrospective lifecycle with revision and 
       "retrospective", "archive", id,
       "--expected-revision", activeRecord.revision,
       "--action-disposition", "resolved", "--actioned-at", "2026-09-04T02:03:04.000Z",
-      "--backlog", "project-ops:backlog/POP-032",
+      "--backlog", "project-ops:backlog/items/POP-032.md",
       "--resolution-note", "Lifecycle smoke passed.", "--json",
     ]);
     expectOk(archived);
@@ -243,11 +243,11 @@ test("built CLI completes an isolated retrospective lifecycle with revision and 
     assert.equal(archiveRecord.owner_scope, "projectops");
     assert.deepEqual(archiveRecord.categories, ["testing", "docs"]);
     assert.equal(archiveRecord.next_action, "Keep the lifecycle smoke.");
-    assert.deepEqual(archiveRecord.related_info, ["project-ops:backlog/POP-032"]);
+    assert.deepEqual(archiveRecord.related_info, ["project-ops:backlog/items/POP-032.md"]);
     assert.equal(archiveRecord.canonical, "project-ops:retrospectives/retro-e2e-lifecycle.md");
     assert.equal(archiveRecord.action_disposition, "resolved");
     assert.equal(archiveRecord.actioned_at, "2026-09-04T02:03:04.000Z");
-    assert.deepEqual(archiveRecord.backlog, ["project-ops:backlog/POP-032"]);
+    assert.deepEqual(archiveRecord.backlog, ["project-ops:backlog/items/POP-032.md"]);
     assert.equal(archiveRecord.resolution_note, "Lifecycle smoke passed.");
     assert.equal(existsSync(path.join(root, "active", `${id}.md`)), false);
     assert.ok(existsSync(path.join(root, "archive", `${id}.md`)));
@@ -267,11 +267,11 @@ test("built CLI completes an isolated retrospective lifecycle with revision and 
     assert.equal(finalRecord.owner_scope, "projectops");
     assert.deepEqual(finalRecord.categories, ["testing", "docs"]);
     assert.equal(finalRecord.next_action, "Keep the lifecycle smoke.");
-    assert.deepEqual(finalRecord.related_info, ["project-ops:backlog/POP-032"]);
+    assert.deepEqual(finalRecord.related_info, ["project-ops:backlog/items/POP-032.md"]);
     assert.equal(finalRecord.canonical, "project-ops:retrospectives/retro-e2e-lifecycle.md");
     assert.equal(finalRecord.action_disposition, "resolved");
     assert.equal(finalRecord.actioned_at, "2026-09-04T02:03:04.000Z");
-    assert.deepEqual(finalRecord.backlog, ["project-ops:backlog/POP-032"]);
+    assert.deepEqual(finalRecord.backlog, ["project-ops:backlog/items/POP-032.md"]);
     assert.equal(finalRecord.resolution_note, "Lifecycle smoke passed.");
     assert.equal(finalRecord.path, `archive/${id}.md`);
     assert.equal(finalRecord.status, "archive");
@@ -289,11 +289,11 @@ test("built CLI completes an isolated retrospective lifecycle with revision and 
     assert.equal(finalIndexRecord.owner_scope, "projectops");
     assert.deepEqual(finalIndexRecord.categories, ["testing", "docs"]);
     assert.equal(finalIndexRecord.next_action, "Keep the lifecycle smoke.");
-    assert.deepEqual(finalIndexRecord.related_info, ["project-ops:backlog/POP-032"]);
+    assert.deepEqual(finalIndexRecord.related_info, ["project-ops:backlog/items/POP-032.md"]);
     assert.equal(finalIndexRecord.canonical, "project-ops:retrospectives/retro-e2e-lifecycle.md");
     assert.equal(finalIndexRecord.action_disposition, "resolved");
     assert.equal(finalIndexRecord.actioned_at, "2026-09-04T02:03:04.000Z");
-    assert.deepEqual(finalIndexRecord.backlog, ["project-ops:backlog/POP-032"]);
+    assert.deepEqual(finalIndexRecord.backlog, ["project-ops:backlog/items/POP-032.md"]);
     assert.equal(finalIndexRecord.resolution_note, "Lifecycle smoke passed.");
     assert.match(readFileSync(path.join(root, "INDEX.md"), "utf8"), /> Total records: 1/);
     assert.match(readFileSync(path.join(root, "INDEX.md"), "utf8"), /\| archive \| retro-e2e-lifecycle \|/);

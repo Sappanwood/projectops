@@ -257,7 +257,7 @@ test("end-to-end smoke: Plan lifecycle, Backlog materialization and Delivery Rep
       "--report-id", "report-release-smoke",
       "--verification", "npm test",
       "--verification", "npm run typecheck",
-      "--repo-doc", "project-ops:repo/README.md",
+      "--repo-doc", "README.md",
       "--json",
     ]);
     assert.equal(r.code, 0, r.stderr);

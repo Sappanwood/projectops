@@ -137,7 +137,7 @@ test("README workflow is executable for my-app and its MYA backlog", () => {
     const reportCreated = pops(workspace, [
       "report", "create", PROJECT_ID, "plan-release-workflow",
       "--verification", "npm test",
-      "--repo-doc", "project-ops:repo/README.md",
+      "--repo-doc", "README.md",
       "--json",
     ]);
     expectOk(reportCreated);
@@ -155,7 +155,7 @@ test("README workflow is executable for my-app and its MYA backlog", () => {
     assert.equal(report.report.outcome, "completed");
     assert.equal(report.report.plan, "project-ops:plans/plan-release-workflow.json");
     assert.deepEqual(report.report.verification, ["npm test"]);
-    assert.deepEqual(report.report.repo_docs, ["project-ops:repo/README.md"]);
+    assert.deepEqual(report.report.repo_docs, ["README.md"]);
     assert.deepEqual(report.report.backlog, [{
       id: "MYA-002",
       status: "done",

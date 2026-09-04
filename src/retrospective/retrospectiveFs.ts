@@ -3,13 +3,16 @@
 import {
   existsSync,
   lstatSync,
+  closeSync,
   mkdirSync,
+  openSync,
   readdirSync,
   readFileSync,
   realpathSync,
   rmdirSync,
   unlinkSync,
   writeFileSync,
+  writeSync,
 } from "node:fs";
 import { createHash } from "node:crypto";
 import path from "node:path";
@@ -114,6 +117,31 @@ export type RetrospectiveArchiveOptions = {
 
 export type RetrospectiveObserveWrite = (target: string, content: Buffer) => void;
 
+export type RetrospectiveCaptureOptions = {
+  generated?: boolean;
+  /** Test-only low-level filesystem overrides. Production callers use the default adapter. */
+  fsOps?: RetrospectiveFsOps;
+};
+
+export type RetrospectiveFsOps = {
+  openSync?: typeof openSync;
+  writeSync?: typeof writeSync;
+  closeSync?: typeof closeSync;
+  writeFileSync?: typeof writeFileSync;
+  unlinkSync?: typeof unlinkSync;
+};
+
+type ResolvedRetrospectiveFsOps = {
+  openSync: typeof openSync;
+  writeSync: typeof writeSync;
+  closeSync: typeof closeSync;
+  writeFileSync: typeof writeFileSync;
+  unlinkSync: typeof unlinkSync;
+};
+
+export const RETROSPECTIVE_RUNTIME_ROOT = path.join(".pops", "runtime", "retrospectives");
+export const RETROSPECTIVE_LOCK_STALE_MS = 1_000;
+
 export function newRetrospectiveStoreManifest(): RetrospectiveStoreManifest {
   return {
     schema: RETROSPECTIVE_STORE_SCHEMA,
@@ -209,12 +237,14 @@ export function captureRetrospective(
   storeRoot: string,
   retrospective: Retrospective,
   observeWrite?: (target: string, content: Buffer) => void,
+  options: RetrospectiveCaptureOptions = {},
 ): RetrospectiveRecord {
   const root = validateStoreLocation(workspaceRoot, storeRoot, false);
   loadRetrospectiveStore(root, workspaceRoot);
-  const release = acquireCaptureLock(root);
+  const fsOps = resolveFsOps(options.fsOps);
+  const release = acquireCaptureLock(workspaceRoot, root, fsOps);
   try {
-    return captureRetrospectiveLocked(workspaceRoot, root, retrospective, observeWrite);
+    return captureRetrospectiveLocked(workspaceRoot, root, retrospective, observeWrite, options, fsOps);
   } finally {
     release();
   }
@@ -225,50 +255,52 @@ function captureRetrospectiveLocked(
   root: string,
   retrospective: Retrospective,
   observeWrite?: (target: string, content: Buffer) => void,
+  options: RetrospectiveCaptureOptions = {},
+  fsOps: ResolvedRetrospectiveFsOps = resolveFsOps(),
 ): RetrospectiveRecord {
   const parsed = parseRetrospective(retrospective);
   if (typeof parsed === "string") throw new RetrospectiveParseError(retrospective.id, parsed);
   if (parsed.status !== "inbox") throw new RetrospectiveParseError(parsed.id, "capture records must use inbox status");
 
-  const file = retrospectivePath(root, "inbox", parsed.id);
-  if (targetExists(file)) {
-    ensureRegular(file, file);
-    throw new RetrospectiveAlreadyExistsError(parsed.id);
-  }
+  const id = options.generated ? allocateGeneratedId(root, parsed.id) : parsed.id;
+  if (allRetrospectiveIds(root).has(id)) throw new RetrospectiveAlreadyExistsError(id);
+  const captured = id === parsed.id ? parsed : { ...parsed, id };
+  const file = retrospectivePath(root, "inbox", captured.id);
   const indexFiles = [RETROSPECTIVE_INDEX_FILE, RETROSPECTIVE_READABLE_INDEX_FILE].map((name) => {
     const target = path.join(root, name);
     ensureRegular(target, target);
     return { target, content: readFileSync(target) };
   });
-  const content = serializeRetrospective(parsed);
+  const content = serializeRetrospective(captured);
   const intendedIndexes = new Map<string, Buffer>();
   let fileCreated = false;
   try {
-    writeFileSync(file, content, { encoding: "utf8", flag: "wx" });
+    writeOwnedNewFile(file, Buffer.from(content, "utf8"), fsOps);
     fileCreated = true;
+    observeWrite?.(file, Buffer.from(content, "utf8"));
     rebuildRetrospectiveIndexes(workspaceRoot, root, (target, intended) => {
       intendedIndexes.set(target, intended);
       observeWrite?.(target, intended);
-    });
+    }, fsOps);
   } catch (error) {
     if (!fileCreated) {
-      if (isErrno(error, "EEXIST")) throw new RetrospectiveAlreadyExistsError(parsed.id);
+      if (isErrno(error, "EEXIST")) throw new RetrospectiveAlreadyExistsError(captured.id);
       throw error;
     }
     try {
-      unlinkSync(file);
+      removeCreatedFile(file, fsOps);
     } catch {
       // Best-effort rollback for the trusted local Alpha store.
     }
     for (const snapshot of indexFiles) {
-      restoreDerivedSnapshot(snapshot.target, snapshot.content, intendedIndexes.get(snapshot.target));
+      restoreDerivedSnapshot(snapshot.target, snapshot.content, fsOps);
     }
     throw error;
   }
 
   return {
-    ...parsed,
-    path: `inbox/${parsed.id}.md`,
+    ...captured,
+    path: `inbox/${captured.id}.md`,
     revision: revisionOf(content),
   };
 }
@@ -281,6 +313,7 @@ export function triageRetrospective(
   expectedRevision: string,
   options: RetrospectiveTriageOptions,
   observeWrite?: RetrospectiveObserveWrite,
+  fsOps?: RetrospectiveFsOps,
 ): RetrospectiveRecord {
   if (options.destination !== "active" && options.destination !== "archive") {
     throw new RetrospectiveTransitionError(id, "triage destination must be active or archive");
@@ -304,6 +337,7 @@ export function triageRetrospective(
       ...(options.canonical === undefined ? {} : { canonical: options.canonical }),
     }),
     observeWrite,
+    resolveFsOps(fsOps),
   );
 }
 
@@ -315,6 +349,7 @@ export function archiveRetrospective(
   expectedRevision: string,
   options: RetrospectiveArchiveOptions,
   observeWrite?: RetrospectiveObserveWrite,
+  fsOps?: RetrospectiveFsOps,
 ): RetrospectiveRecord {
   validateArchiveOptions(id, options);
   return transitionRetrospective(
@@ -333,6 +368,7 @@ export function archiveRetrospective(
       resolution_note: options.resolution_note,
     }),
     observeWrite,
+    resolveFsOps(fsOps),
   );
 }
 
@@ -345,10 +381,11 @@ function transitionRetrospective(
   expectedRevision: string,
   transform: (record: Retrospective) => Retrospective,
   observeWrite?: RetrospectiveObserveWrite,
+  fsOps: ResolvedRetrospectiveFsOps = resolveFsOps(),
 ): RetrospectiveRecord {
   const root = validateStoreLocation(workspaceRoot, storeRoot, false);
   loadRetrospectiveStore(root, workspaceRoot);
-  const release = acquireCaptureLock(root);
+  const release = acquireCaptureLock(workspaceRoot, root, fsOps);
   try {
     loadRetrospectiveStore(root, workspaceRoot);
     const sourceFile = retrospectivePath(root, sourceStatus, id);
@@ -385,8 +422,9 @@ function transitionRetrospective(
     let destinationCreated = false;
     let sourceRemoved = false;
     try {
-      writeFileSync(destinationFile, destinationContent, { encoding: "utf8", flag: "wx" });
+      writeOwnedNewFile(destinationFile, destinationContent, fsOps);
       destinationCreated = true;
+      observeWrite?.(destinationFile, destinationContent);
       unlinkSync(sourceFile);
       sourceRemoved = true;
       rebuildRetrospectiveIndexes(workspaceRoot, root, (target, intended) => {
@@ -395,17 +433,17 @@ function transitionRetrospective(
       });
     } catch (error) {
       try {
-        if (sourceRemoved) restoreSourceFile(sourceFile, source.content);
+        if (sourceRemoved) restoreSourceFile(sourceFile, source.content, fsOps);
       } catch {
         // Preserve the original transition error; the source can be repaired by a later rebuild.
       }
       try {
-        if (destinationCreated) removeCreatedDestination(destinationFile, destinationContent);
+        if (destinationCreated) removeCreatedDestination(destinationFile, fsOps);
       } catch {
         // Preserve the original transition error; the target can be diagnosed by the caller.
       }
       for (const snapshot of indexSnapshots) {
-        restoreDerivedSnapshot(snapshot.target, snapshot.content, intendedIndexes.get(snapshot.target));
+        restoreDerivedSnapshot(snapshot.target, snapshot.content, fsOps);
       }
       throw error;
     }
@@ -449,6 +487,15 @@ function validateArchiveOptions(id: string, options: RetrospectiveArchiveOptions
   validateNonEmpty(id, "actioned_at", options.actioned_at);
   validateNonEmpty(id, "resolution_note", options.resolution_note);
   validateStringList(id, "backlog", options.backlog);
+  for (const reference of options.backlog) {
+    if (!isCanonicalBacklogReference(reference)) {
+      throw new RetrospectiveParseError(id, "backlog links must use project-ops:backlog/items/<PREFIX>-NNN.md logical references");
+    }
+  }
+}
+
+function isCanonicalBacklogReference(value: string): boolean {
+  return /^project-ops:backlog\/items\/[A-Z0-9]+-\d{3,}\.md$/.test(value);
 }
 
 function validateNonEmpty(id: string, field: string, value: string): void {
@@ -463,15 +510,14 @@ function validateStringList(id: string, field: string, values: string[]): void {
   }
 }
 
-function restoreSourceFile(file: string, content: string): void {
+function restoreSourceFile(file: string, content: string, fsOps: ResolvedRetrospectiveFsOps): void {
   if (targetExists(file)) return;
-  writeFileSync(file, content, { encoding: "utf8", flag: "wx" });
+  writeOwnedNewFile(file, Buffer.from(content, "utf8"), fsOps);
 }
 
-function removeCreatedDestination(file: string, intended: Buffer): void {
+function removeCreatedDestination(file: string, fsOps: ResolvedRetrospectiveFsOps): void {
   try {
-    ensureRegular(file, file);
-    if (readFileSync(file).equals(intended)) unlinkSync(file);
+    removeCreatedFile(file, fsOps);
   } catch {
     // Preserve the original transition error; check/rebuild can diagnose leftovers.
   }
@@ -596,9 +642,11 @@ export function rebuildRetrospectiveIndexes(
   workspaceRoot: string,
   storeRoot: string,
   observeWrite?: (target: string, content: Buffer) => void,
+  fsOverrides?: RetrospectiveFsOps,
 ): RetrospectiveIndex {
   const root = validateStoreLocation(workspaceRoot, storeRoot, false);
   loadRetrospectiveStore(root, workspaceRoot);
+  const fsOps = resolveFsOps(fsOverrides);
   const records: RetrospectiveIndexRecord[] = [];
   for (const status of RETROSPECTIVE_STATUSES) {
     for (const id of listRetrospectiveIds(workspaceRoot, root, status)) {
@@ -621,8 +669,8 @@ export function rebuildRetrospectiveIndexes(
     }
   }
   const index: RetrospectiveIndex = { schema: RETROSPECTIVE_INDEX_SCHEMA, records };
-  writeDerived(root, RETROSPECTIVE_INDEX_FILE, `${JSON.stringify(index, null, 2)}\n`, observeWrite);
-  writeDerived(root, RETROSPECTIVE_READABLE_INDEX_FILE, renderReadableIndex(index), observeWrite);
+  writeDerived(root, RETROSPECTIVE_INDEX_FILE, `${JSON.stringify(index, null, 2)}\n`, observeWrite, fsOps);
+  writeDerived(root, RETROSPECTIVE_READABLE_INDEX_FILE, renderReadableIndex(index), observeWrite, fsOps);
   return index;
 }
 
@@ -709,51 +757,212 @@ function writeFileNoClobber(file: string, content: string): void {
   writeFileSync(file, content, { encoding: "utf8", flag: "wx" });
 }
 
+function writeOwnedNewFile(file: string, content: Buffer, fsOps: ResolvedRetrospectiveFsOps): void {
+  const existed = targetExists(file);
+  try {
+    fsOps.writeFileSync(file, content, { flag: "wx" });
+  } catch (error) {
+    if (!existed && targetExists(file)) {
+      try {
+        removeCreatedFile(file, fsOps);
+      } catch {
+        // Preserve the original write failure; a later diagnostic can inspect the target.
+      }
+    }
+    throw error;
+  }
+}
+
+function removeCreatedFile(file: string, fsOps: ResolvedRetrospectiveFsOps): void {
+  ensureRegular(file, file);
+  fsOps.unlinkSync(file);
+}
+
 function writeDerived(
   root: string,
   name: string,
   content: string,
   observeWrite?: (target: string, content: Buffer) => void,
+  fsOps: ResolvedRetrospectiveFsOps = resolveFsOps(),
 ): void {
   const file = path.join(root, name);
   if (targetExists(file)) ensureRegular(file, file);
   const bytes = Buffer.from(content, "utf8");
+  fsOps.writeFileSync(file, bytes);
   observeWrite?.(file, bytes);
-  writeFileSync(file, bytes);
 }
 
-/** Restore a derived file only when it still contains this operation's output. */
-function restoreDerivedSnapshot(target: string, snapshot: Buffer, intended: Buffer | undefined): void {
+function allocateGeneratedId(root: string, base: string): string {
+  const existing = allRetrospectiveIds(root);
+  if (!existing.has(base)) return base;
+  let suffix = 2;
+  for (;;) {
+    const candidate = `${base}-${suffix}`;
+    if (!existing.has(candidate)) return candidate;
+    suffix += 1;
+  }
+}
+
+function allRetrospectiveIds(root: string): Set<string> {
+  const ids = new Set<string>();
+  for (const status of RETROSPECTIVE_STATUSES) {
+    const directory = path.join(root, status);
+    for (const entry of readdirSync(directory)) {
+      if (entry.endsWith(".md")) ids.add(entry.slice(0, -3));
+    }
+  }
+  return ids;
+}
+
+/** Restore a derived file from the operation snapshot while the store lock is held. */
+function restoreDerivedSnapshot(target: string, snapshot: Buffer, fsOps: ResolvedRetrospectiveFsOps): void {
   try {
     ensureRegular(target, target);
-    const current = readFileSync(target);
-    if (current.equals(snapshot) || intended === undefined || !current.equals(intended)) return;
-    writeFileSync(target, snapshot);
+    fsOps.writeFileSync(target, snapshot);
   } catch {
     // Preserve the original failure; check/rebuild can diagnose the store.
   }
 }
 
+/** Return the stable runtime lock path for a workspace retrospective store. */
+export function retrospectiveLockPath(workspaceRoot: string, storeRoot: string): string {
+  const workspace = path.resolve(workspaceRoot);
+  const relativeStore = path.relative(workspace, path.resolve(storeRoot)).split(path.sep).join("/");
+  const identity = createHash("sha256").update(relativeStore, "utf8").digest("hex").slice(0, 16);
+  return path.join(workspace, RETROSPECTIVE_RUNTIME_ROOT, `store-${identity}.lock`);
+}
+
 /** Serialize capture and derived-index publication across concurrent local processes. */
-function acquireCaptureLock(root: string): () => void {
-  const target = path.join(root, ".retrospective-capture.lock");
+function acquireCaptureLock(workspaceRoot: string, root: string, fsOps: ResolvedRetrospectiveFsOps): () => void {
+  const target = retrospectiveLockPath(workspaceRoot, root);
+  ensureRuntimeLockDirectory(workspaceRoot, path.dirname(target));
   for (let attempt = 0; attempt < 500; attempt += 1) {
+    let descriptor: number | undefined;
+    let lockCreated = false;
     try {
-      writeFileSync(target, `${process.pid}\n`, { encoding: "utf8", flag: "wx" });
+      descriptor = fsOps.openSync(target, "wx", 0o600);
+      lockCreated = true;
+      const content = Buffer.from(`${process.pid}\n`, "utf8");
+      const written = fsOps.writeSync(descriptor, content, 0, content.byteLength, null);
+      if (written !== content.byteLength) throw new Error("retrospective lock PID write was incomplete");
+      fsOps.closeSync(descriptor);
+      descriptor = undefined;
       return () => {
         try {
           ensureRegular(target, target);
-          unlinkSync(target);
+          fsOps.unlinkSync(target);
         } catch {
           // Preserve the operation result; a stale lock is diagnosable by the caller.
         }
       };
     } catch (error) {
-      if (!isErrno(error, "EEXIST")) throw new RetrospectiveTargetError(target, formatFsError(error));
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+      if (descriptor !== undefined) {
+        try {
+          fsOps.closeSync(descriptor);
+        } catch {
+          // Preserve the original lock acquisition failure.
+        }
+      }
+      if (lockCreated) {
+        try {
+          ensureRegular(target, target);
+          fsOps.unlinkSync(target);
+        } catch {
+          // Preserve the original lock acquisition failure.
+        }
+      }
+      if (isErrno(error, "EEXIST")) {
+        if (isStaleLock(target)) {
+          try {
+            fsOps.unlinkSync(target);
+          } catch (cleanupError) {
+            if (!isErrno(cleanupError, "ENOENT")) throw new RetrospectiveTargetError(target, formatFsError(cleanupError));
+          }
+          continue;
+        }
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+        continue;
+      }
+      throw new RetrospectiveTargetError(target, formatFsError(error));
     }
   }
   throw new RetrospectiveTargetError(target, "capture lock is busy");
+}
+
+function ensureRuntimeLockDirectory(workspaceRoot: string, target: string): void {
+  const workspace = path.resolve(workspaceRoot);
+  const runtime = path.resolve(target);
+  const relative = path.relative(workspace, runtime);
+  if (relative === "" || relative.startsWith("..") || path.isAbsolute(relative)) {
+    throw new RetrospectiveRootError(runtime, "runtime lock path resolves outside the workspace");
+  }
+  let current = workspace;
+  for (const part of relative.split(path.sep)) {
+    current = path.join(current, part);
+    let stat;
+    try {
+      stat = lstatSync(current);
+    } catch (error) {
+      if (!isErrno(error, "ENOENT")) throw new RetrospectiveTargetError(current, formatFsError(error));
+      try {
+        mkdirSync(current);
+      } catch (mkdirError) {
+        if (!isErrno(mkdirError, "EEXIST")) throw new RetrospectiveTargetError(current, formatFsError(mkdirError));
+        try {
+          stat = lstatSync(current);
+        } catch (inspectError) {
+          throw new RetrospectiveTargetError(current, formatFsError(inspectError));
+        }
+      }
+      if (stat === undefined) continue;
+    }
+    if (stat.isSymbolicLink() || !stat.isDirectory()) {
+      throw new RetrospectiveRootError(current, "runtime lock path contains a non-regular directory");
+    }
+  }
+}
+
+function isStaleLock(target: string): boolean {
+  try {
+    ensureRegular(target, target);
+  } catch (error) {
+    if (error instanceof RetrospectiveStoreNotFoundError) return true;
+    throw error;
+  }
+  let lockStat;
+  try {
+    lockStat = lstatSync(target);
+  } catch (error) {
+    if (isErrno(error, "ENOENT")) return true;
+    throw new RetrospectiveTargetError(target, formatFsError(error));
+  }
+  let pid: number;
+  let content: string;
+  try {
+    content = readFileSync(target, "utf8").trim();
+    pid = Number.parseInt(content, 10);
+  } catch {
+    return Date.now() - lockStat.mtimeMs > RETROSPECTIVE_LOCK_STALE_MS;
+  }
+  if (!Number.isSafeInteger(pid) || pid <= 0 || String(pid) !== content) {
+    return Date.now() - lockStat.mtimeMs > RETROSPECTIVE_LOCK_STALE_MS;
+  }
+  try {
+    process.kill(pid, 0);
+    return false;
+  } catch (error) {
+    return isErrno(error, "ESRCH");
+  }
+}
+
+function resolveFsOps(overrides: RetrospectiveFsOps = {}): ResolvedRetrospectiveFsOps {
+  return {
+    openSync: overrides.openSync ?? openSync,
+    writeSync: overrides.writeSync ?? writeSync,
+    closeSync: overrides.closeSync ?? closeSync,
+    writeFileSync: overrides.writeFileSync ?? writeFileSync,
+    unlinkSync: overrides.unlinkSync ?? unlinkSync,
+  };
 }
 
 function targetExists(file: string): boolean {

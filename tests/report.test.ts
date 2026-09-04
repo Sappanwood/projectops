@@ -144,6 +144,17 @@ test("Report serialization rejects absolute logical references", () => {
   );
 });
 
+test("Report repo docs are repository-relative paths and reject namespaced references", () => {
+  assert.deepEqual(parseReport(serializeReport({ ...validReport(), repo_docs: ["README.md", "docs/ARCHITECTURE.md"] })), {
+    ...validReport(),
+    repo_docs: ["README.md", "docs/ARCHITECTURE.md"],
+  });
+  assert.throws(
+    () => serializeReport({ ...validReport(), repo_docs: ["project-ops:repo/README.md"] }),
+    /repo-relative logical reference/i,
+  );
+});
+
 test("Report rejects machine absolute paths in all persisted string fields", () => {
   const fields = [
     "title",

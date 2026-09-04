@@ -217,7 +217,7 @@ test("retrospective triage and archive CLI transitions use revision protection",
       "--to", "active", "--expected-revision", captureReceipt.retrospective.revision,
       "--disposition", "actionable", "--owner-scope", "projectops",
       "--category", "tooling", "--category", "docs",
-      "--next-action", "update docs", "--related-info", "project-ops:backlog/POP-031", "--json",
+      "--next-action", "update docs", "--related-info", "project-ops:backlog/items/POP-031.md", "--json",
     ], workspace);
     assert.equal(triaged.code, 0, triaged.stderr.join("\n"));
     const triageReceipt = JSON.parse(triaged.stdout[0] ?? "null") as {
@@ -233,7 +233,7 @@ test("retrospective triage and archive CLI transitions use revision protection",
     const archived = run([
       "retrospective", "archive", "retro-lifecycle",
       "--expected-revision", triageReceipt.retrospective.revision,
-      "--action-disposition", "resolved", "--backlog", "project-ops:backlog/POP-031",
+      "--action-disposition", "resolved", "--backlog", "project-ops:backlog/items/POP-031.md",
       "--resolution-note", "Documentation updated.", "--json",
     ], workspace);
     assert.equal(archived.code, 0, archived.stderr.join("\n"));

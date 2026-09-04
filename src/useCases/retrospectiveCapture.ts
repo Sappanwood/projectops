@@ -10,7 +10,6 @@ import {
 } from "../retrospective/retrospective.js";
 import {
   captureRetrospective,
-  listRetrospectiveIds,
   RetrospectiveAlreadyExistsError,
   RetrospectiveParseError,
   RetrospectiveRootError,
@@ -99,12 +98,6 @@ export function retrospectiveCapture(
   const explicitId = values.id ?? values["retrospective-id"];
   const generated = explicitId === undefined;
   let id = explicitId ?? generatedId(createdAt, values, body);
-  if (generated) {
-    const existing = new Set(listRetrospectiveIds(workspace.root, root, "inbox"));
-    let suffix = 2;
-    const base = id;
-    while (existing.has(id)) id = `${base}-${suffix++}`;
-  }
   if (!/^[a-z0-9]+(?:[a-z0-9-]*[a-z0-9])?$/.test(id)) {
     return retrospectiveFailure(io, json, "--id must use lowercase slug format");
   }
@@ -128,7 +121,7 @@ export function retrospectiveCapture(
     body,
   };
   try {
-    const record = captureRetrospective(workspace.root, root, retrospective);
+    const record = captureRetrospective(workspace.root, root, retrospective, undefined, { generated });
     if (json) io.stdout(JSON.stringify({ ok: true, retrospective: record }));
     else io.stdout(`Captured ${record.id}`);
     return 0;

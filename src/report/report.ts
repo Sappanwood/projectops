@@ -135,8 +135,8 @@ function validateReport(value: unknown): string | null {
       return `report ${field} must be an array of strings`;
     }
   }
-  if (!Array.isArray(value.repo_docs) || !value.repo_docs.every((entry) => typeof entry === "string" && isLogicalReference(entry))) {
-    return "report repo_docs must be an array of logical references";
+  if (!Array.isArray(value.repo_docs) || !value.repo_docs.every((entry) => typeof entry === "string" && isRepoRelativeReference(entry))) {
+    return "report repo_docs must be an array of repo-relative logical references";
   }
   if (value.body !== undefined && typeof value.body !== "string") {
     return "report body must be a string";
@@ -164,6 +164,10 @@ function validateBacklogResult(value: unknown): string | null {
 function isLogicalReference(value: string): boolean {
   return value.trim() !== "" && !path.isAbsolute(value) && !value.includes("\\") &&
     !value.split("/").includes("..") && !value.startsWith("~");
+}
+
+function isRepoRelativeReference(value: string): boolean {
+  return isLogicalReference(value) && !value.includes(":");
 }
 
 function findMachineAbsolutePath(value: unknown, location: string): string | null {

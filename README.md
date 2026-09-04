@@ -78,7 +78,7 @@ pops backlog list my-app --json
 # 8. 完成 materialized task 并生成 Delivery Report
 plan_item_revision="$(node -e 'const { readFileSync } = require("node:fs"); const text = readFileSync("ops/my-app/backlog/items/MYA-002.md", "utf8"); const match = /^revision: ([0-9a-f]+)$/m.exec(text); if (!match) process.exit(1); process.stdout.write(match[1]);')"
 pops backlog update my-app MYA-002 --status done --expected-revision "$plan_item_revision"
-pops report create my-app plan-release-workflow --verification "npm test" --repo-doc "project-ops:repo/README.md" --json
+pops report create my-app plan-release-workflow --verification "npm test" --repo-doc "README.md" --json
 pops report list my-app --json
 pops report show my-app report-release-workflow --json
 
@@ -100,6 +100,10 @@ pops retrospective archive <retrospective-id> --expected-revision <revision> \
 
 每次成功的 triage/archive 都会更新 revision、移动唯一 Markdown authority，并重建
 `retrospectives/index.json` 和 `retrospectives/INDEX.md`；过期 revision 或已有目标会失败且保留原记录。
+capture 的显式和自动 ID 在三个状态目录中保持唯一；运行时锁位于
+`.pops/runtime/retrospectives/`。Report 的 `--repo-doc` 使用 Repo 相对路径（如
+`README.md`），archive 的 `--backlog` 使用
+`project-ops:backlog/items/<PREFIX>-NNN.md`。
 
 - `pops --help`、`pops --version`
 - `pops init`：workspace 壳初始化（不登记 repo）
@@ -112,7 +116,7 @@ pops retrospective archive <retrospective-id> --expected-revision <revision> \
 - `pops report create/list/show`：从已批准且 materialized 的 Plan 生成 completed 或显式 partial Delivery Report，并查询已生成的 Report；create 需要至少一条 `--verification`
 - `pops retrospective capture/list/show`：将调用方提供的 trigger、harness、model、project/task provenance 和 Markdown 证据捕获到 workspace 级 inbox，并按 status/project/task 查询；capture 不自动分类或流转
 - `pops retrospective triage <id>`：使用 `--expected-revision` 将 inbox 记录分类到 active 或直接 archive，并保存 disposition、owner scope、categories、next action 和 related info
-- `pops retrospective archive <id>`：使用 `--expected-revision` 将 active 记录结案到 archive，并保存 action disposition、actioned_at、backlog links 和 resolution note；两类流转均不覆盖既有目标，成功后重建派生索引
+- `pops retrospective archive <id>`：使用 `--expected-revision` 将 active 记录结案到 archive，并保存 action disposition、actioned_at、backlog links 和 resolution note；backlog link 必须使用 `project-ops:backlog/items/<PREFIX>-NNN.md`；两类流转均不覆盖既有目标，成功后重建派生索引
 - 数据全部为可读文件：workspace manifest、Plan 是 JSON，backlog item 是 frontmatter + Markdown body
 - 单元测试、端到端 smoke、类型检查和构建
 

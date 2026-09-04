@@ -91,7 +91,7 @@ test("report create/list/show expose a completed Report and preserve no-clobber"
       "--report-id", "report-release-zeta",
       "--verification", "npm test",
       "--verification", "npm run typecheck",
-      "--repo-doc", "project-ops:repo/docs/README.md",
+      "--repo-doc", "docs/README.md",
       "--json",
     ], workspace);
     assert.equal(created.code, 0, created.stderr.join("\n"));
@@ -112,7 +112,7 @@ test("report create/list/show expose a completed Report and preserve no-clobber"
         verification: ["npm test", "npm run typecheck"],
         deviations: [],
         workarounds: [],
-        repo_docs: ["project-ops:repo/docs/README.md"],
+        repo_docs: ["docs/README.md"],
         body: "",
       },
     });

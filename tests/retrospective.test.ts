@@ -7,6 +7,7 @@ import {
   readFileSync,
   rmSync,
   symlinkSync,
+  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -26,13 +27,17 @@ import {
   RetrospectiveRevisionConflictError,
   RetrospectiveRootError,
   RetrospectiveStoreAlreadyExistsError,
+  RetrospectiveTargetError,
   RetrospectiveTransitionError,
   archiveRetrospective,
+  captureRetrospective,
   createRetrospectiveStore,
   readRetrospective,
   rebuildRetrospectiveIndexes,
+  retrospectiveLockPath,
   triageRetrospective,
   writeRetrospective,
+  type RetrospectiveFsOps,
 } from "../src/retrospective/retrospectiveFs.js";
 import { newWorkspaceManifest } from "../src/catalog/workspace.js";
 import { serializeManifest, loadWorkspace } from "../src/catalog/workspaceStore.js";
@@ -287,7 +292,7 @@ test("retrospective triage moves inbox records and persists classification metad
     owner_scope: "projectops",
     categories: ["tooling", "docs"],
     next_action: "improve the command guidance",
-    related_info: ["project-ops:backlog/POP-031", "project-ops:repo/README.md"],
+    related_info: ["project-ops:backlog/items/POP-031.md", "README.md"],
   });
 
   assert.equal(moved.status, "active");
@@ -301,7 +306,7 @@ test("retrospective triage moves inbox records and persists classification metad
     owner_scope: "projectops",
     categories: ["tooling", "docs"],
     next_action: "improve the command guidance",
-    related_info: ["project-ops:backlog/POP-031", "project-ops:repo/README.md"],
+    related_info: ["project-ops:backlog/items/POP-031.md", "README.md"],
   });
   const index = JSON.parse(readFileSync(path.join(root, "index.json"), "utf8")) as { records: { status: string; path: string }[] };
   assert.deepEqual(index.records.map(({ status, path: recordPath }) => ({ status, path: recordPath })), [{ status: "active", path: `active/${retrospective.id}.md` }]);
@@ -319,7 +324,7 @@ test("retrospective archive closes active records and persists action metadata",
   const moved = archiveRetrospective(workspace, root, active.id, revisionFor(readFileSync(activeFile, "utf8")), {
     action_disposition: "resolved",
     actioned_at: "2026-09-04T15:00:00.000Z",
-    backlog: ["project-ops:backlog/POP-031"],
+    backlog: ["project-ops:backlog/items/POP-031.md"],
     resolution_note: "The lifecycle implementation is complete.",
   });
 
@@ -331,9 +336,40 @@ test("retrospective archive closes active records and persists action metadata",
     status: "archive",
     action_disposition: "resolved",
     actioned_at: "2026-09-04T15:00:00.000Z",
-    backlog: ["project-ops:backlog/POP-031"],
+    backlog: ["project-ops:backlog/items/POP-031.md"],
     resolution_note: "The lifecycle implementation is complete.",
   });
+  rmSync(workspace, { recursive: true, force: true });
+});
+
+test("retrospective archive accepts canonical backlog references for generic project prefixes", () => {
+  const workspace = freshDir();
+  const root = path.join(workspace, "retrospectives");
+  createRetrospectiveStore(workspace, root);
+  const active = { ...validRetrospective(), id: "retro-generic-backlog", status: "active" as const };
+  writeRetrospective(workspace, root, active);
+  const activeFile = path.join(root, "active", `${active.id}.md`);
+  const common = {
+    action_disposition: "resolved",
+    actioned_at: "2026-09-04T15:00:00.000Z",
+    resolution_note: "Tracked.",
+  };
+
+  assert.throws(
+    () => archiveRetrospective(workspace, root, active.id, revisionFor(readFileSync(activeFile, "utf8")), {
+      ...common,
+      backlog: ["project-ops:backlog/items/POP-031"],
+    }),
+    /canonical|logical reference/i,
+  );
+  assert.equal(existsSync(activeFile), true);
+
+  const archived = archiveRetrospective(workspace, root, active.id, revisionFor(readFileSync(activeFile, "utf8")), {
+    ...common,
+    backlog: ["project-ops:backlog/items/ABC-001.md"],
+  });
+  assert.equal(archived.status, "archive");
+  assert.deepEqual(archived.backlog, ["project-ops:backlog/items/ABC-001.md"]);
   rmSync(workspace, { recursive: true, force: true });
 });
 
@@ -492,6 +528,255 @@ test("retrospective transition rolls back source, destination, and indexes after
   assert.equal(existsSync(path.join(root, "active", `${retrospective.id}.md`)), false);
   assert.equal(readFileSync(path.join(root, "index.json"), "utf8"), indexBefore);
   assert.equal(readFileSync(path.join(root, "INDEX.md"), "utf8"), readableBefore);
+  rmSync(workspace, { recursive: true, force: true });
+});
+
+test("generated capture ids avoid records in every status while holding a workspace runtime lock", () => {
+  const workspace = freshDir();
+  const root = path.join(workspace, "retrospectives");
+  createRetrospectiveStore(workspace, root);
+  const base = validRetrospective();
+  writeRetrospective(workspace, root, { ...base, status: "active" });
+  writeRetrospective(workspace, root, { ...base, id: `${base.id}-2`, status: "archive" });
+
+  let observed = false;
+  const generated = captureRetrospective(workspace, root, base, (target) => {
+    if (!target.endsWith(`${base.id}-3.md`)) return;
+    observed = true;
+    assert.equal(existsSync(path.join(root, ".retrospective-capture.lock")), false);
+    assert.ok(existsSync(retrospectiveLockPath(workspace, root)));
+  }, { generated: true });
+
+  assert.equal(observed, true);
+  assert.equal(generated.id, `${base.id}-3`);
+  assert.equal(generated.path, `inbox/${base.id}-3.md`);
+  assert.ok(existsSync(path.join(root, "inbox", `${base.id}-3.md`)));
+  rmSync(workspace, { recursive: true, force: true });
+});
+
+test("capture cleans a record created before the write failure and restores partial derived indexes", () => {
+  const workspace = freshDir();
+  const root = path.join(workspace, "retrospectives");
+  createRetrospectiveStore(workspace, root);
+  const beforeIndex = readFileSync(path.join(root, "index.json"), "utf8");
+  const beforeReadable = readFileSync(path.join(root, "INDEX.md"), "utf8");
+  const retrospective = { ...validRetrospective(), id: "retro-write-failure" };
+
+  assert.throws(
+    () => captureRetrospective(workspace, root, retrospective, (target) => {
+      if (target.endsWith(`${retrospective.id}.md`)) {
+        writeFileSync(target, "partial record", "utf8");
+        throw new Error("injected create-then-write failure");
+      }
+      if (target.endsWith("INDEX.md")) {
+        writeFileSync(target, "partial index", "utf8");
+        throw new Error("injected partial index failure");
+      }
+    }),
+    /injected create-then-write failure/,
+  );
+  assert.equal(existsSync(path.join(root, "inbox", `${retrospective.id}.md`)), false);
+  assert.equal(readFileSync(path.join(root, "index.json"), "utf8"), beforeIndex);
+  assert.equal(readFileSync(path.join(root, "INDEX.md"), "utf8"), beforeReadable);
+
+  const partial = { ...retrospective, id: "retro-index-failure" };
+  assert.throws(
+    () => captureRetrospective(workspace, root, partial, (target) => {
+      if (target.endsWith("INDEX.md")) {
+        writeFileSync(target, "partial index", "utf8");
+        throw new Error("injected partial index failure");
+      }
+    }),
+    /injected partial index failure/,
+  );
+  assert.equal(existsSync(path.join(root, "inbox", `${partial.id}.md`)), false);
+  assert.equal(readFileSync(path.join(root, "index.json"), "utf8"), beforeIndex);
+  assert.equal(readFileSync(path.join(root, "INDEX.md"), "utf8"), beforeReadable);
+  rmSync(workspace, { recursive: true, force: true });
+});
+
+test("explicit capture ids conflict with active and archive authorities", () => {
+  const workspace = freshDir();
+  const root = path.join(workspace, "retrospectives");
+  createRetrospectiveStore(workspace, root);
+  const retrospective = validRetrospective();
+  writeRetrospective(workspace, root, { ...retrospective, status: "active" });
+
+  assert.throws(
+    () => captureRetrospective(workspace, root, retrospective),
+    /already exists/i,
+  );
+  writeRetrospective(workspace, root, { ...retrospective, id: "retro-archive-authority", status: "archive" });
+  assert.throws(
+    () => captureRetrospective(workspace, root, { ...retrospective, id: "retro-archive-authority" }),
+    /already exists/i,
+  );
+  rmSync(workspace, { recursive: true, force: true });
+});
+
+test("retrospective capture removes a stale runtime lock and leaves no artifact lock", () => {
+  const workspace = freshDir();
+  const root = path.join(workspace, "retrospectives");
+  createRetrospectiveStore(workspace, root);
+  const lock = retrospectiveLockPath(workspace, root);
+  mkdirSync(path.dirname(lock), { recursive: true });
+  writeFileSync(lock, "99999999\n", "utf8");
+
+  const captured = captureRetrospective(workspace, root, { ...validRetrospective(), id: "retro-stale-lock" });
+
+  assert.equal(captured.id, "retro-stale-lock");
+  assert.equal(existsSync(lock), false);
+  assert.equal(existsSync(path.join(root, ".retrospective-capture.lock")), false);
+  rmSync(workspace, { recursive: true, force: true });
+});
+
+test("capture rolls back after the actual record create/write helper fails", () => {
+  const workspace = freshDir();
+  const root = path.join(workspace, "retrospectives");
+  createRetrospectiveStore(workspace, root);
+  const indexBefore = readFileSync(path.join(root, "index.json"), "utf8");
+  const readableBefore = readFileSync(path.join(root, "INDEX.md"), "utf8");
+  const retrospective = { ...validRetrospective(), id: "retro-helper-record-failure" };
+  let failed = false;
+  const fsOps: RetrospectiveFsOps = {
+    writeFileSync: ((target: string, content: unknown, options: unknown) => {
+      writeFileSync(target, content as Parameters<typeof writeFileSync>[1], options as Parameters<typeof writeFileSync>[2]);
+      if (!failed && target.endsWith(`${retrospective.id}.md`)) {
+        failed = true;
+        throw new Error("injected record helper failure");
+      }
+    }) as NonNullable<RetrospectiveFsOps["writeFileSync"]>,
+  };
+
+  assert.throws(
+    () => captureRetrospective(workspace, root, retrospective, undefined, { fsOps }),
+    /injected record helper failure/,
+  );
+  assert.equal(existsSync(path.join(root, "inbox", `${retrospective.id}.md`)), false);
+  assert.equal(existsSync(retrospectiveLockPath(workspace, root)), false);
+  assert.equal(readFileSync(path.join(root, "index.json"), "utf8"), indexBefore);
+  assert.equal(readFileSync(path.join(root, "INDEX.md"), "utf8"), readableBefore);
+  rmSync(workspace, { recursive: true, force: true });
+});
+
+test("capture restores both indexes after the actual derived index write helper fails", () => {
+  const workspace = freshDir();
+  const root = path.join(workspace, "retrospectives");
+  createRetrospectiveStore(workspace, root);
+  const indexBefore = readFileSync(path.join(root, "index.json"), "utf8");
+  const readableBefore = readFileSync(path.join(root, "INDEX.md"), "utf8");
+  const retrospective = { ...validRetrospective(), id: "retro-helper-index-failure" };
+  let failed = false;
+  const fsOps: RetrospectiveFsOps = {
+    writeFileSync: ((target: string, content: unknown, options: unknown) => {
+      writeFileSync(target, content as Parameters<typeof writeFileSync>[1], options as Parameters<typeof writeFileSync>[2]);
+      if (!failed && target.endsWith("INDEX.md")) {
+        failed = true;
+        throw new Error("injected derived index helper failure");
+      }
+    }) as NonNullable<RetrospectiveFsOps["writeFileSync"]>,
+  };
+
+  assert.throws(
+    () => captureRetrospective(workspace, root, retrospective, undefined, { fsOps }),
+    /injected derived index helper failure/,
+  );
+  assert.equal(existsSync(path.join(root, "inbox", `${retrospective.id}.md`)), false);
+  assert.equal(existsSync(retrospectiveLockPath(workspace, root)), false);
+  assert.equal(readFileSync(path.join(root, "index.json"), "utf8"), indexBefore);
+  assert.equal(readFileSync(path.join(root, "INDEX.md"), "utf8"), readableBefore);
+  rmSync(workspace, { recursive: true, force: true });
+});
+
+test("transition rolls back after the actual destination write helper fails", () => {
+  const workspace = freshDir();
+  const root = path.join(workspace, "retrospectives");
+  createRetrospectiveStore(workspace, root);
+  const retrospective = validRetrospective();
+  writeRetrospective(workspace, root, retrospective);
+  const source = path.join(root, "inbox", `${retrospective.id}.md`);
+  const sourceBefore = readFileSync(source, "utf8");
+  const indexBefore = readFileSync(path.join(root, "index.json"), "utf8");
+  const readableBefore = readFileSync(path.join(root, "INDEX.md"), "utf8");
+  let failed = false;
+  const fsOps: RetrospectiveFsOps = {
+    writeFileSync: ((target: string, content: unknown, options: unknown) => {
+      writeFileSync(target, content as Parameters<typeof writeFileSync>[1], options as Parameters<typeof writeFileSync>[2]);
+      if (!failed && target.endsWith(`/active/${retrospective.id}.md`)) {
+        failed = true;
+        throw new Error("injected destination helper failure");
+      }
+    }) as NonNullable<RetrospectiveFsOps["writeFileSync"]>,
+  };
+
+  assert.throws(
+    () => triageRetrospective(workspace, root, retrospective.id, revisionFor(sourceBefore), {
+      destination: "active",
+      disposition: "actionable",
+      owner_scope: "projectops",
+      categories: ["tooling"],
+      next_action: "retry the transition",
+      related_info: [],
+    }, undefined, fsOps),
+    /injected destination helper failure/,
+  );
+  assert.equal(readFileSync(source, "utf8"), sourceBefore);
+  assert.equal(existsSync(path.join(root, "active", `${retrospective.id}.md`)), false);
+  assert.equal(existsSync(retrospectiveLockPath(workspace, root)), false);
+  assert.equal(readFileSync(path.join(root, "index.json"), "utf8"), indexBefore);
+  assert.equal(readFileSync(path.join(root, "INDEX.md"), "utf8"), readableBefore);
+  rmSync(workspace, { recursive: true, force: true });
+});
+
+test("capture cleans a runtime lock when the actual PID write fails and remains recoverable", () => {
+  const workspace = freshDir();
+  const root = path.join(workspace, "retrospectives");
+  createRetrospectiveStore(workspace, root);
+  const lock = retrospectiveLockPath(workspace, root);
+  let failed = false;
+  const fsOps: RetrospectiveFsOps = {
+    writeSync: ((_fd: number, _buffer: ArrayBufferView | string, _offset?: number | null, _length?: number | null, _position?: number | null) => {
+      if (!failed) {
+        failed = true;
+        return 0;
+      }
+      return 0;
+    }) as NonNullable<RetrospectiveFsOps["writeSync"]>,
+  };
+  const retrospective = { ...validRetrospective(), id: "retro-helper-lock-failure" };
+
+  assert.throws(
+    () => captureRetrospective(workspace, root, retrospective, undefined, { fsOps }),
+    /PID write was incomplete/,
+  );
+  assert.equal(existsSync(lock), false);
+  assert.equal(existsSync(path.join(root, ".retrospective-capture.lock")), false);
+  const captured = captureRetrospective(workspace, root, retrospective);
+  assert.equal(captured.id, retrospective.id);
+  assert.equal(existsSync(lock), false);
+  rmSync(workspace, { recursive: true, force: true });
+});
+
+test("capture recovers an old empty runtime lock but preserves a live lock", () => {
+  const workspace = freshDir();
+  const root = path.join(workspace, "retrospectives");
+  createRetrospectiveStore(workspace, root);
+  const lock = retrospectiveLockPath(workspace, root);
+  mkdirSync(path.dirname(lock), { recursive: true });
+  writeFileSync(lock, "", "utf8");
+  const old = new Date(0);
+  utimesSync(lock, old, old);
+
+  const recovered = captureRetrospective(workspace, root, { ...validRetrospective(), id: "retro-empty-lock" });
+  assert.equal(recovered.id, "retro-empty-lock");
+  assert.equal(existsSync(lock), false);
+
+  writeFileSync(lock, `${process.pid}\n`, "utf8");
+  assert.throws(
+    () => captureRetrospective(workspace, root, { ...validRetrospective(), id: "retro-live-lock" }),
+    (error: unknown) => error instanceof RetrospectiveTargetError && /busy/i.test(error.message),
+  );
+  assert.equal(readFileSync(lock, "utf8"), `${process.pid}\n`);
   rmSync(workspace, { recursive: true, force: true });
 });
 
