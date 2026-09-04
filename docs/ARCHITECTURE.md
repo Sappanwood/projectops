@@ -76,6 +76,9 @@ src/
   plan/
     plan.ts               Plan domain：Plan@1 schema、校验与生命周期
     planFs.ts             filesystem adapter：Plan artifact 的列出、读写与解析
+  docs/
+    projectDocs.ts        Project Docs domain：固定角色和内置 Markdown 模板
+    projectDocsFs.ts      filesystem adapter：预检、canonical containment、no-clobber scaffold
   useCases/               每个 CLI 子命令一个 use case，编排 domain 与 adapters
 ```
 
@@ -94,12 +97,16 @@ src/
   无 ASCII slug 的标题使用 Unicode code point 的 `u<hex>` token。create 验证 plans descriptor 为精确 schema type，
   并在写入前验证 plans root 的 canonical 路径仍在 workspace 内；随后使用 `wx` no-clobber 写入。list/show 读取同一
   artifact；`plan materialize` 直接调用 Backlog application helper，按拓扑顺序创建同一 project 的条目，并在完整成功后更新 Plan。
+- Project Docs：`pops docs scaffold <project>` 为已登记 project 的四个固定路径生成内置 Git-friendly Markdown 模板：`README.md`、`AGENTS.md`、
+  `docs/PRODUCT_SPEC.md` 和 `docs/ARCHITECTURE.md`。模板内容由 Docs domain 持有；application use case 预检 project、docs parent 和全部目标，
+  通过 `wx` 创建缺失文件，已有普通文件跳过并在 JSON receipt 的 `created`/`skipped` 中返回。canonical 路径必须仍位于 project 和 workspace 内，
+  非普通目标或越界 parent 会在写入前失败。
 
 ## 当前 CLI 流程
 
 1. `src/cli.ts` 把参数、I/O adapter 和 cwd 交给 `runCli`。
-2. `src/app.ts` 路由到命令：`init`、`project add|list|doctor`、`backlog init|add|list|show|update`、`plan create|list|show|validate|approve|materialize`。
-3. 每个子命令对应 `src/useCases/` 下的一个 use case，编排 domain 逻辑与 filesystem adapter；Plan 的 create/list/show/validate/approve/materialize
+2. `src/app.ts` 路由到命令：`init`、`project add|list|doctor`、`docs scaffold`、`backlog init|add|list|show|update`、`plan create|list|show|validate|approve|materialize`。
+3. 每个子命令对应 `src/useCases/` 下的一个 use case，编排 domain 逻辑与 filesystem adapter；Docs scaffold 由 `docsScaffold.ts` 调用共享的 Docs domain 和 adapter；Plan 的 create/list/show/validate/approve/materialize
    共享同一 `plan/` domain 和 filesystem adapter，materialize 通过 `backlog/add.ts` 复用 Backlog item 创建规则，不启动内部 CLI subprocess。
 4. use case 以退出码表达成功、明确错误或 unknown 命令；错误信息写 stderr，机器可读结果经 `--json` 写 stdout。
 5. 后续 command 按纵向用例加入对应 domain module，不在入口文件堆叠存储逻辑。

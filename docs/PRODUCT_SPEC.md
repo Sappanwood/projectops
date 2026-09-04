@@ -30,7 +30,7 @@ Markdown/JSON artifact 为权威数据，通过统一 `pops` CLI 和 Local Web W
 | Backlog | Store bootstrap、CRUD、dependency、queue | 部分实现（init/add/list/show/update 与 depends_on 存储；queue 未实现） |
 | Plan | authoring、查询、validation、review、approval、materialization | authoring/query/validation/approval/materialization 已实现 |
 | Report | delivery evidence 生成和关联 | 未实现 |
-| Project Docs | roles、templates、scaffold、check | 未实现 |
+| Project Docs | roles、templates、scaffold、check | scaffold 已实现（check 未实现） |
 | Retrospective | inbox、triage、active、archive | 未实现 |
 | Workbench | 统一浏览和受控写入 | 未实现 |
 | CLI bootstrap | `pops --help`、`pops --version` | 已实现 |
@@ -46,6 +46,9 @@ Markdown/JSON artifact 为权威数据，通过统一 `pops` CLI 和 Local Web W
 - Workspace 是聚合父目录，project 必须是其子路径；workspace 根自身不可登记。
 - Workspace 可在非空目录初始化，但不得覆盖已有 manifest 或其他用户内容。
 - 登记不强求 git repo，任意目录均可登记；重复登记报错。
+- Project Docs scaffold 为每个已登记 project 提供固定的 README.md、AGENTS.md、docs/PRODUCT_SPEC.md 和 docs/ARCHITECTURE.md 模板；模板包含角色标题和待填写提示，不支持外部模板源或自定义变量。
+- scaffold 预检固定写入目标，已有普通文件保持字节不变并记入 `skipped`；新建文件记入 `created`，JSON receipt 不包含绝对路径。
+- scaffold 的写入目标限制在已登记 project 的 canonical 路径内；目标为非普通文件或 docs parent 越界时返回错误，不产生部分 scaffold。
 
 ## Alpha 产品约束
 
