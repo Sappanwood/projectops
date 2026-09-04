@@ -22,7 +22,7 @@ node dist/cli.js --version
 
 ## 当前能力
 
-首个纵向闭环已可用：从初始化 workspace、登记 project 到 Backlog item 全生命周期。
+当前已可完成 workspace、project、Backlog 与 Plan authoring/query 的基础工作流。
 
 ```bash
 # 1. 在目标目录初始化 workspace 壳（目录可以非空，生成 .pops/workspace.json）
@@ -44,13 +44,33 @@ pops backlog add my-app -T "First task" -c feature --priority P1 --body-file tas
 pops backlog list my-app --status todo
 pops backlog show my-app APP-001
 pops backlog update my-app APP-001 --status in_progress --expected-revision <revision>
+
+# 6. 从显式 JSON 草案创建并查询 Plan
+cat > release-plan.json <<'EOF'
+{
+  "title": "Release workflow",
+  "goal": "Publish a repeatable release.",
+  "items": [{
+    "key": "prepare",
+    "title": "Prepare release",
+    "item_type": "task",
+    "priority": "P1",
+    "body": "Update release notes."
+  }]
+}
+EOF
+pops plan create my-app --input release-plan.json --json
+pops plan list my-app --json
+pops plan show my-app plan-release-workflow --json
 ```
 
 - `pops --help`、`pops --version`
 - `pops init`：workspace 壳初始化（不登记 repo）
 - `pops project add/list/doctor`：显式登记、查询、拓扑校验
 - `pops backlog init/add/list/show/update`：store bootstrap、CRUD、状态流转与 revision 保护
-- 数据全部为可读文件：workspace manifest 是 JSON，backlog item 是 frontmatter + Markdown body
+- `pops plan create/list/show`：从 JSON 草案创建、列出与查看 `plan/Plan@1` artifact；Plan ID 由 title 稳定生成，
+  无 ASCII slug 的标题使用每个 Unicode code point 的 `u<hex>` token
+- 数据全部为可读文件：workspace manifest、Plan 是 JSON，backlog item 是 frontmatter + Markdown body
 - 单元测试、端到端 smoke、类型检查和构建
 
 产品范围见 [docs/PRODUCT_SPEC.md](docs/PRODUCT_SPEC.md)，架构边界见
@@ -62,4 +82,5 @@ pops backlog update my-app APP-001 --status in_progress --expected-revision <rev
 - 登记不要求 git repo，任意目录都可以作为 project
 - init 可用于没有 workspace manifest 的非空目录，并保留既有内容
 - 重复登记同一目录报错；init 和 backlog init 不静默覆盖已有文件
+- Plan create 不覆盖相同 title 所生成的已存在 Plan
 - backlog update 支持 `--expected-revision` 防止覆盖并发修改

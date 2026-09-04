@@ -7,6 +7,9 @@ import { backlogAdd } from "./useCases/backlogAdd.js";
 import { backlogList } from "./useCases/backlogList.js";
 import { backlogShow } from "./useCases/backlogShow.js";
 import { backlogUpdate } from "./useCases/backlogUpdate.js";
+import { planCreate } from "./useCases/planCreate.js";
+import { planList } from "./useCases/planList.js";
+import { planShow } from "./useCases/planShow.js";
 import type { CliIO } from "./io.js";
 
 export const VERSION = "0.0.0";
@@ -30,6 +33,9 @@ Commands:
   backlog list <project>  List backlog items (optional --status filter)
   backlog show <project> <item>  Show a full backlog item
   backlog update <project> <item>  Update item status (--status, --expected-revision)
+  plan create <project> --input <draft.json>  Create a Plan from a JSON draft
+  plan list <project>     List Plans for a project
+  plan show <project> <plan>  Show a complete Plan
 
 Project workflows will be added as vertical slices during the alpha phase.`;
 
@@ -88,6 +94,22 @@ export function runCli(args: readonly string[], io: CliIO, cwd = process.cwd()):
         return backlogUpdate(first, forwarded.find((arg) => !arg.startsWith("--")), forwarded, json, io, cwd);
       }
       io.stderr(`Unknown backlog command: ${sub ?? ""}`);
+      return 1;
+    }
+    case "plan": {
+      const [sub, first, ...subArgs] = rest;
+      const json = [first, ...subArgs].includes("--json");
+      const forwarded = subArgs.filter((arg) => arg !== "--json");
+      if (sub === "create") {
+        return planCreate(first, forwarded, json, io, cwd);
+      }
+      if (sub === "list") {
+        return planList(first, json, io, cwd);
+      }
+      if (sub === "show") {
+        return planShow(first, forwarded.find((arg) => !arg.startsWith("--")), json, io, cwd);
+      }
+      io.stderr(`Unknown plan command: ${sub ?? ""}`);
       return 1;
     }
     default:

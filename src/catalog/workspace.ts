@@ -11,7 +11,7 @@ export type ArtifactKey = "backlog" | "plans" | "reports" | "adr" | "research";
 
 export const ARTIFACT_TYPES: Record<ArtifactKey, string> = {
   backlog: "backlog/store@1",
-  plans: "markdown/plan@1",
+  plans: "plan/Plan@1",
   reports: "markdown/report@1",
   adr: "markdown/adr@1",
   research: "markdown/research@1",
