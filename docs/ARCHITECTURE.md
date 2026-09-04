@@ -26,8 +26,8 @@ flowchart TD
 ```
 
 当前 Repo 已落地 Workspace/Catalog、Backlog、Plan authoring/query/validation/approval/materialization、Project Docs
-scaffold/check，以及 Report@1 schema、Markdown filesystem adapter 与单 Plan Report 生成资格校验；Report CLI、
-Retrospective、Workbench 仍是目标域，上图是新增纵向能力时必须保持的目标依赖方向。
+scaffold/check，以及 Report@1 schema、Markdown filesystem adapter、单 Plan Report 生成资格校验和
+`pops report create/list/show`；Retrospective、Workbench 仍是目标域，上图是新增纵向能力时必须保持的目标依赖方向。
 
 ## 核心技术栈
 
@@ -88,6 +88,9 @@ src/
     docsCheck.ts          application：只读检查固定 Project Docs 文件
     reportContext.ts      application：解析已登记 project 的 typed reports root
     reportGenerate.ts     application：从持久化 materialized Plan 与同项目 Backlog 生成 Report
+    reportCreate.ts       application：`pops report create` 参数解析与 Report 生成入口
+    reportList.ts         application：`pops report list` 摘要查询
+    reportShow.ts         application：`pops report show` 完整查询
     ...                    每个 CLI 子命令一个 use case，编排 domain 与 adapters
 ```
 
@@ -120,10 +123,9 @@ src/
 ## 当前 CLI 流程
 
 1. `src/cli.ts` 把参数、I/O adapter 和 cwd 交给 `runCli`。
-2. `src/app.ts` 路由到命令：`init`、`project add|list|doctor`、`docs scaffold|check`、`backlog init|add|list|show|update`、`plan create|list|show|validate|approve|materialize`。
-3. 每个子命令对应 `src/useCases/` 下的一个 use case，编排 domain 逻辑与 filesystem adapter；Docs scaffold 由 `docsScaffold.ts` 调用共享的 Docs domain 和 adapter，Docs check 由 `docsCheck.ts` 调用同一 Docs adapter；Plan 的 create/list/show/validate/approve/materialize
-   共享同一 `plan/` domain 和 filesystem adapter，materialize 通过 `backlog/add.ts` 复用 Backlog item 创建规则，不启动内部 CLI subprocess。
-4. use case 以退出码表达成功、明确错误或 unknown 命令；错误信息写 stderr，机器可读结果经 `--json` 写 stdout。
+2. `src/app.ts` 路由到命令：`init`、`project add|list|doctor`、`docs scaffold|check`、`backlog init|add|list|show|update`、`plan create|list|show|validate|approve|materialize`、`report create|list|show`。
+3. 每个子命令对应 `src/useCases/` 下的一个 use case，编排 domain 逻辑与 filesystem adapter；Docs scaffold 由 `docsScaffold.ts` 调用共享的 Docs domain 和 adapter，Docs check 由 `docsCheck.ts` 调用同一 Docs adapter；Plan 的 create/list/show/validate/approve/materialize 共享同一 `plan/` domain 和 filesystem adapter，Report 的 create/list/show 共享同一 Report domain 和 filesystem adapter；Plan materialize 通过 `backlog/add.ts` 复用 Backlog item 创建规则，不启动内部 CLI subprocess。
+4. use case 以退出码表达成功、明确错误或 unknown 命令；非 JSON 错误信息写 stderr，机器可读结果经 `--json` 写 stdout（Report 命令的 JSON 失败结果也使用稳定 error envelope）。
 5. 后续 command 按纵向用例加入对应 domain module，不在入口文件堆叠存储逻辑。
 
 `project doctor` 校验 Manifest@1 的 typed artifact 声明以及 project/artifact root 的目录类型。结构损坏的

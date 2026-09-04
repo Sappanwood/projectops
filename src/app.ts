@@ -15,6 +15,9 @@ import { planApprove } from "./useCases/planApprove.js";
 import { planMaterialize } from "./useCases/planMaterialize.js";
 import { docsScaffold } from "./useCases/docsScaffold.js";
 import { docsCheck } from "./useCases/docsCheck.js";
+import { reportCreate } from "./useCases/reportCreate.js";
+import { reportList } from "./useCases/reportList.js";
+import { reportShow } from "./useCases/reportShow.js";
 import type { CliIO } from "./io.js";
 
 export const VERSION = "0.0.0";
@@ -46,6 +49,9 @@ Commands:
   plan materialize <project> <plan>  Materialize an approved Plan into Backlog
   docs scaffold <project>       Create the fixed Project Docs files
   docs check <project>          Check the fixed Project Docs files
+  report create <project> <plan> --verification <evidence>  Create a Delivery Report
+  report list <project>          List Delivery Reports
+  report show <project> <report> Show a complete Delivery Report
 
 Project workflows will be added as vertical slices during the alpha phase.`;
 
@@ -142,6 +148,23 @@ export function runCli(args: readonly string[], io: CliIO, cwd = process.cwd()):
         return docsCheck(first, json, io, cwd);
       }
       io.stderr(`Unknown docs command: ${sub ?? ""}`);
+      return 1;
+    }
+    case "report": {
+      const [sub, projectId, ...subArgs] = rest;
+      const json = [projectId, ...subArgs].includes("--json");
+      const forwarded = subArgs.filter((arg) => arg !== "--json");
+      if (sub === "create") {
+        const [planId, ...createArgs] = forwarded;
+        return reportCreate(projectId, planId, createArgs, json, io, cwd);
+      }
+      if (sub === "list") {
+        return reportList(projectId, json, io, cwd);
+      }
+      if (sub === "show") {
+        return reportShow(projectId, forwarded[0], json, io, cwd);
+      }
+      io.stderr(`Unknown report command: ${sub ?? ""}`);
       return 1;
     }
     default:

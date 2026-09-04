@@ -24,7 +24,7 @@ pops --version
 
 ## 当前能力
 
-当前已可完成 workspace、project、Backlog 与 Plan 审批到 materialize 的基础工作流。
+当前已可完成 workspace、project、Backlog、Plan 审批到 materialize，以及 Delivery Report 生成与查询的基础工作流。
 
 ```bash
 # 1. 在目标目录初始化 workspace 壳（目录可以非空，生成 .pops/workspace.json）
@@ -84,6 +84,7 @@ pops backlog list my-app --json
 - `pops backlog init/add/list/show/update`：store bootstrap、CRUD、状态流转与 revision 保护
 - `pops plan create/list/show/validate/approve/materialize`：从 JSON 草案创建、列出、查看、校验、批准并将已批准的 `plan/Plan@1` artifact 写入 Backlog；Plan ID 由 title 稳定生成，
   无 ASCII slug 的标题使用每个 Unicode code point 的 `u<hex>` token
+- `pops report create/list/show`：从已批准且 materialized 的 Plan 生成 completed 或显式 partial Delivery Report，并查询已生成的 Report；create 需要至少一条 `--verification`
 - 数据全部为可读文件：workspace manifest、Plan 是 JSON，backlog item 是 frontmatter + Markdown body
 - 单元测试、端到端 smoke、类型检查和构建
 
@@ -102,3 +103,4 @@ pops backlog list my-app --json
 - 只有校验通过的 draft Plan 才能通过 approve 记录一次批准，批准需要非空 review note
 - 只有 approved Plan 才能 materialize；Plan 会保存每个局部 key 到 Backlog ID 的 `materialization.mapping`，重复执行完整 materialize 返回 `no_op`
 - backlog update 支持 `--expected-revision` 防止覆盖并发修改
+- Report create 从 materialized Plan 和同一 project 的 Backlog 读取实际状态；未完成 task 必须提供非空 `--partial-acceptance`，Report 文件不会覆盖既有文件
