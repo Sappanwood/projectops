@@ -110,6 +110,20 @@ test("project add rejects two different paths with the same basename", () => {
   assert.match(stderr.join("\n"), /already/i);
 });
 
+test("project add rejects directory names that cannot produce a project id", () => {
+  const ws = freshDir();
+  initWorkspace(ws);
+  mkdirSync(path.join(ws, "___"));
+  const before = readManifest(ws);
+
+  const { code, stderr } = run(["project", "add", "___"], ws);
+
+  assert.equal(code, 1);
+  assert.match(stderr.join("\n"), /project id/i);
+  assert.deepEqual(readManifest(ws), before);
+  assert.equal(existsSync(path.join(ws, "ops")), false);
+});
+
 test("project add requires a workspace", () => {
   const outside = freshDir();
   mkdirSync(path.join(outside, "repo-a"));

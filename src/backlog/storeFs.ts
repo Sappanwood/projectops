@@ -1,6 +1,6 @@
 // Filesystem adapter for the backlog domain.
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmdirSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import {
@@ -33,10 +33,31 @@ export class StoreParseError extends Error {
 export function createStore(storeRoot: string, manifest: BacklogStoreManifest): void {
   mkdirSync(storeRoot, { recursive: true });
   const manifestFile = path.join(storeRoot, STORE_MANIFEST_FILE);
-  if (existsSync(manifestFile)) throw new StoreAlreadyExistsError(storeRoot);
-  writeFileSync(manifestFile, `${JSON.stringify(manifest, null, 2)}\n`);
-  mkdirSync(path.join(storeRoot, ITEMS_DIR), { recursive: true });
-  writeFileSync(path.join(storeRoot, INDEX_FILE), initialIndex());
+  const itemsDir = path.join(storeRoot, ITEMS_DIR);
+  const indexFile = path.join(storeRoot, INDEX_FILE);
+  if ([manifestFile, itemsDir, indexFile].some((entry) => existsSync(entry))) {
+    throw new StoreAlreadyExistsError(storeRoot);
+  }
+
+  let manifestCreated = false;
+  let itemsCreated = false;
+  let indexCreated = false;
+  try {
+    writeFileSync(manifestFile, `${JSON.stringify(manifest, null, 2)}\n`, { flag: "wx" });
+    manifestCreated = true;
+    mkdirSync(itemsDir);
+    itemsCreated = true;
+    writeFileSync(indexFile, initialIndex(), { flag: "wx" });
+    indexCreated = true;
+  } catch (cause) {
+    if (indexCreated) unlinkSync(indexFile);
+    if (itemsCreated) rmdirSync(itemsDir);
+    if (manifestCreated) unlinkSync(manifestFile);
+    if ((cause as NodeJS.ErrnoException).code === "EEXIST") {
+      throw new StoreAlreadyExistsError(storeRoot);
+    }
+    throw cause;
+  }
 }
 
 export function loadStore(storeRoot: string): BacklogStoreManifest {
@@ -52,7 +73,11 @@ export function loadStore(storeRoot: string): BacklogStoreManifest {
   if (
     typeof manifest !== "object" ||
     manifest === null ||
-    manifest.schema !== STORE_SCHEMA
+    manifest.schema !== STORE_SCHEMA ||
+    typeof manifest.project_id !== "string" ||
+    manifest.project_id === "" ||
+    typeof manifest.id_prefix !== "string" ||
+    !/^[A-Z0-9]+$/.test(manifest.id_prefix)
   ) {
     throw new StoreParseError(storeRoot, "unexpected schema");
   }

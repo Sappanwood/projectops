@@ -29,6 +29,10 @@ export function registerProject(pathArg: string, json: boolean, io: CliIO, cwd: 
     return 1;
   }
   const id = slugifyProjectId(path.basename(target));
+  if (id === "") {
+    io.stderr(`Error: directory name cannot produce a valid project id: ${path.basename(target)}`);
+    return 1;
+  }
   const rel = toPosixPath(path.relative(root, target));
   if (manifest.projects[id] !== undefined) {
     io.stderr(`Error: project "${id}" is already registered`);

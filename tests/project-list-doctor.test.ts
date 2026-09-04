@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -116,10 +116,62 @@ test("project doctor detects a missing project directory", () => {
   assert.ok(result.problems.some((p) => p.project === "repo-b"));
 });
 
+test("project doctor detects typed artifact mismatches", () => {
+  const ws = setupWorkspace();
+  const manifestFile = path.join(ws, ".pops", "workspace.json");
+  const manifest = JSON.parse(readFileSync(manifestFile, "utf8")) as {
+    artifact_layout: { roots: Record<string, string> };
+  };
+  manifest.artifact_layout.roots.backlog = "wrong/type@1";
+  delete manifest.artifact_layout.roots.reports;
+  writeFileSync(manifestFile, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+
+  const { code, stdout } = run(["project", "doctor", "--json"], ws);
+
+  assert.equal(code, 1);
+  const result = JSON.parse(stdout[0] ?? "null") as {
+    ok: boolean;
+    problems: { project: string; issue: string }[];
+  };
+  assert.equal(result.ok, false);
+  assert.ok(result.problems.some((problem) => /backlog.*type/i.test(problem.issue)));
+  assert.ok(result.problems.some((problem) => /reports.*type/i.test(problem.issue)));
+});
+
+test("project doctor rejects artifact files in place of directories", () => {
+  const ws = setupWorkspace();
+  const backlogRoot = path.join(ws, "ops", "repo-a", "backlog");
+  rmSync(backlogRoot, { recursive: true, force: true });
+  writeFileSync(backlogRoot, "not a directory", "utf8");
+
+  const { code, stdout } = run(["project", "doctor", "--json"], ws);
+
+  assert.equal(code, 1);
+  const result = JSON.parse(stdout[0] ?? "null") as {
+    problems: { project: string; issue: string }[];
+  };
+  assert.ok(result.problems.some((problem) => /backlog.*not a directory/i.test(problem.issue)));
+});
+
 test("project list fails clearly on a broken manifest", () => {
   const ws = freshDir();
   assert.equal(run(["init"], ws).code, 0);
   writeFileSync(path.join(ws, ".pops", "workspace.json"), "{not json", "utf8");
+
+  const { code, stderr } = run(["project", "list"], ws);
+
+  assert.equal(code, 1);
+  assert.match(stderr.join("\n"), /manifest/i);
+});
+
+test("project list fails clearly on a structurally incomplete manifest", () => {
+  const ws = freshDir();
+  assert.equal(run(["init"], ws).code, 0);
+  writeFileSync(
+    path.join(ws, ".pops", "workspace.json"),
+    `${JSON.stringify({ schema: "workspace/Manifest@1", name: "broken" })}\n`,
+    "utf8",
+  );
 
   const { code, stderr } = run(["project", "list"], ws);
 

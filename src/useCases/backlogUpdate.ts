@@ -6,10 +6,11 @@ import type { CliIO } from "../io.js";
 import {
   ITEM_STATUSES,
   computeRevision,
+  isItemIdForPrefix,
   type BacklogItem,
   type ItemStatus,
 } from "../backlog/item.js";
-import { ItemNotFoundError, readItemFile, updateItemFile } from "../backlog/itemFs.js";
+import { ItemNotFoundError, readItemFile, rebuildIndex, updateItemFile } from "../backlog/itemFs.js";
 import { resolveStoreRoot } from "./backlogContext.js";
 
 type UpdateOptions = {
@@ -33,6 +34,10 @@ export function backlogUpdate(
   }
   const store = resolveStoreRoot(projectId, io, cwd);
   if (store === null) return 1;
+  if (!isItemIdForPrefix(itemId, store.manifest.id_prefix)) {
+    io.stderr(`Error: invalid item id: ${itemId}`);
+    return 1;
+  }
 
   let values: UpdateOptions;
   try {
@@ -50,7 +55,6 @@ export function backlogUpdate(
     io.stderr("Error: invalid arguments");
     return 1;
   }
-
   if (values.status === undefined || !ITEM_STATUSES.includes(values.status as ItemStatus)) {
     io.stderr(`Error: --status must be one of: ${ITEM_STATUSES.join(", ")}`);
     return 1;
@@ -67,12 +71,26 @@ export function backlogUpdate(
     }
     throw error;
   }
+  if (before.id !== itemId) {
+    io.stderr(`Error: item id mismatch: expected ${itemId}, got ${before.id}`);
+    return 1;
+  }
 
   if (values["expected-revision"] !== undefined && values["expected-revision"] !== before.revision) {
     io.stderr(
       `Error: revision mismatch for ${itemId}: expected ${values["expected-revision"]}, current ${before.revision}`,
     );
     return 1;
+  }
+
+  if (newStatus === before.status) {
+    const receipt = buildReceipt(before, before, []);
+    if (json) {
+      io.stdout(JSON.stringify(receipt));
+    } else {
+      io.stdout(`No changes (${itemId})`);
+    }
+    return 0;
   }
 
   const today = new Date().toISOString().slice(0, 10);
@@ -97,6 +115,7 @@ export function backlogUpdate(
   }
 
   updateItemFile(store.root, result);
+  rebuildIndex(store.root);
   const receipt = buildReceipt(before, result, changedFields);
   if (json) {
     io.stdout(JSON.stringify(receipt));

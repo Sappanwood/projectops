@@ -42,6 +42,7 @@ Markdown/JSON artifact 为权威数据，通过统一 `pops` CLI 和 Local Web W
 - 跨领域关联使用稳定 logical URI，不把机器绝对路径写入 artifact。
 - 派生索引和未来 UI preference 不得成为业务 authority。
 - Workspace 是聚合父目录，project 必须是其子路径；workspace 根自身不可登记。
+- Workspace 可在非空目录初始化，但不得覆盖已有 manifest 或其他用户内容。
 - 登记不强求 git repo，任意目录均可登记；重复登记报错。
 
 ## Alpha 产品约束
@@ -59,4 +60,3 @@ Markdown/JSON artifact 为权威数据，通过统一 `pops` CLI 和 Local Web W
 3. Report 与 Retrospective 闭环。
 4. Local Web Workbench。
 5. 安装发行、升级和按真实需求补充 hardening。
-

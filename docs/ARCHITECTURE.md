@@ -83,6 +83,7 @@ src/
   project_id 与 id_prefix）、`items/` 与 `INDEX.md`。
 - backlog item：`items/<ID>.md`，YAML 风格 frontmatter + Markdown body；`revision` 是其余内容的
   sha256 前 8 位，用于 `update --expected-revision` 的冲突保护。
+- `INDEX.md` 是从 item 文件重建的可读 projection；add 和真实状态变更后同步刷新，no-op 不改写。
 
 ## 当前 CLI 流程
 
@@ -92,6 +93,9 @@ src/
 4. use case 以退出码表达成功、明确错误或 unknown 命令；错误信息写 stderr，机器可读结果经 `--json` 写 stdout。
 5. 后续 command 按纵向用例加入对应 domain module，不在入口文件堆叠存储逻辑。
 
+`project doctor` 校验 Manifest@1 的 typed artifact 声明以及 project/artifact root 的目录类型。结构损坏的
+manifest 在进入 use case 前作为明确错误拒绝；doctor 只报告问题，不自动修复。
+
 ## 数据与运行时边界
 
 - 业务数据使用 versioned Markdown/JSON schema。
@@ -100,6 +104,7 @@ src/
 - 当前威胁模型是受信任本地用户与 workspace。
 - Alpha 不承诺恶意 symlink、ancestor-swap、复杂并发、crash consistency 或跨平台原子性。
 - 写入仍必须限制在命令明确选择的 workspace 内，且默认不覆盖已有用户文件。
+- backlog item 文件名只接受当前 store prefix 加数字序号，CLI 参数不能通过路径片段访问 store 外文件。
 
 ## 关键架构约束
 
@@ -108,4 +113,3 @@ src/
 - 各领域拥有独立 schema 与 lifecycle。
 - Workbench 是 application API 的交互入口，不拥有第二套业务实现。
 - 现有 Workspace Control 不属于运行时依赖，也不在核心实现中加入兼容或迁移代码。
-

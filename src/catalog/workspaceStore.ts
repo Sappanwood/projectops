@@ -54,11 +54,38 @@ export function loadWorkspace(startDir: string): {
   } catch (cause) {
     throw new ManifestParseError(root, cause);
   }
-  const manifest = parsed as WorkspaceManifest;
-  if (typeof manifest !== "object" || manifest === null || manifest.schema !== WORKSPACE_SCHEMA) {
-    throw new ManifestParseError(root, "unexpected schema");
+  const problem = validateManifest(parsed);
+  if (problem !== null) throw new ManifestParseError(root, problem);
+  return { root, manifest: parsed as WorkspaceManifest };
+}
+
+function validateManifest(value: unknown): string | null {
+  if (!isRecord(value) || value.schema !== WORKSPACE_SCHEMA) return "unexpected schema";
+  if (typeof value.name !== "string" || value.name === "") return "invalid name";
+  if (!isRecord(value.artifact_layout)) return "invalid artifact_layout";
+  if (!isSafeRelativePath(value.artifact_layout.ops_root)) return "invalid artifact_layout.ops_root";
+  if (!isRecord(value.artifact_layout.roots)) return "invalid artifact_layout.roots";
+  for (const [key, type] of Object.entries(value.artifact_layout.roots)) {
+    if (typeof type !== "string") return `invalid artifact type for ${key}`;
   }
-  return { root, manifest };
+  if (!isRecord(value.projects)) return "invalid projects";
+  for (const [id, registration] of Object.entries(value.projects)) {
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) return `invalid project id: ${id}`;
+    if (!isRecord(registration) || !isSafeRelativePath(registration.path)) {
+      return `invalid project registration: ${id}`;
+    }
+  }
+  return null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isSafeRelativePath(value: unknown): value is string {
+  if (typeof value !== "string" || value === "" || value.includes("\\")) return false;
+  const parts = value.split("/");
+  return !value.startsWith("/") && parts.every((part) => part !== "" && part !== "." && part !== "..");
 }
 
 export function serializeManifest(manifest: WorkspaceManifest): string {

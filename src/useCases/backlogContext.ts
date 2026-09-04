@@ -1,7 +1,7 @@
 // Shared helper: resolve the backlog store of a registered project.
 
 import type { CliIO } from "../io.js";
-import { loadStore, StoreNotFoundError } from "../backlog/storeFs.js";
+import { loadStore, StoreNotFoundError, StoreParseError } from "../backlog/storeFs.js";
 import type { BacklogStoreManifest } from "../backlog/store.js";
 import { projectArtifactRoots } from "../catalog/workspace.js";
 import { loadOrReport } from "./workspaceContext.js";
@@ -25,6 +25,10 @@ export function resolveStoreRoot(
   } catch (error) {
     if (error instanceof StoreNotFoundError) {
       io.stderr(`Error: ${error.message}. Run "pops backlog init ${projectId}" first.`);
+      return null;
+    }
+    if (error instanceof StoreParseError) {
+      io.stderr(`Error: ${error.message}`);
       return null;
     }
     throw error;

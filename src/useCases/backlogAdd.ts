@@ -9,13 +9,20 @@ import {
   ITEM_TYPES,
   PRIORITIES,
   computeRevision,
+  isItemIdForPrefix,
   nextItemId,
   type BacklogItem,
   type Category,
   type ItemType,
   type Priority,
 } from "../backlog/item.js";
-import { ItemNotFoundError, listItemIds, readItemFile, writeItemFile } from "../backlog/itemFs.js";
+import {
+  ItemNotFoundError,
+  listItemIds,
+  readItemFile,
+  rebuildIndex,
+  writeItemFile,
+} from "../backlog/itemFs.js";
 import { resolveStoreRoot } from "./backlogContext.js";
 
 type AddOptions = {
@@ -93,6 +100,10 @@ export function backlogAdd(
       io.stderr("Error: an epic cannot have a parent");
       return 1;
     }
+    if (!isItemIdForPrefix(parentId, store.manifest.id_prefix)) {
+      io.stderr(`Error: invalid item id: ${parentId}`);
+      return 1;
+    }
     try {
       const parent = readItemFile(store.root, parentId);
       if (parent.item_type !== "epic") {
@@ -110,6 +121,10 @@ export function backlogAdd(
 
   const dependsOn = values["depends-on"] === undefined ? [] : values["depends-on"].split(",");
   for (const depId of dependsOn) {
+    if (!isItemIdForPrefix(depId, store.manifest.id_prefix)) {
+      io.stderr(`Error: invalid item id: ${depId}`);
+      return 1;
+    }
     if (!listItemIds(store.root).includes(depId)) {
       io.stderr(`Error: dependency item not found: ${depId}`);
       return 1;
@@ -153,6 +168,7 @@ export function backlogAdd(
   };
   item.revision = computeRevision(item);
   writeItemFile(store.root, item);
+  rebuildIndex(store.root);
 
   if (json) {
     io.stdout(JSON.stringify({ ok: true, item }));

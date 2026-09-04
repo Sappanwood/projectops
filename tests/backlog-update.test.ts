@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -116,6 +116,50 @@ test("backlog update reports no_op for a redundant transition", () => {
   assert.equal(code, 0);
   const receipt = JSON.parse(stdout[0] ?? "null") as { no_op: boolean };
   assert.equal(receipt.no_op, true);
+});
+
+test("backlog update reports no_op for an item last updated on an earlier day", () => {
+  const { ws, revision } = setupItem();
+  const file = itemFile(ws, "REP-001");
+  const aged = readFileSync(file, "utf8").replace(/updated: \d{4}-\d{2}-\d{2}/, "updated: 2000-01-01");
+  writeFileSync(file, aged, "utf8");
+
+  const { code, stdout } = run(
+    ["backlog", "update", "repo-a", "REP-001", "--status", "todo", "--expected-revision", revision, "--json"],
+    ws,
+  );
+
+  assert.equal(code, 0);
+  const receipt = JSON.parse(stdout[0] ?? "null") as { no_op: boolean };
+  assert.equal(receipt.no_op, true);
+  assert.equal(readFileSync(file, "utf8"), aged);
+});
+
+test("backlog update rebuilds the index after a real transition", () => {
+  const { ws, revision } = setupItem();
+
+  const { code } = run(
+    ["backlog", "update", "repo-a", "REP-001", "--status", "done", "--expected-revision", revision],
+    ws,
+  );
+
+  assert.equal(code, 0);
+  const index = readFileSync(path.join(ws, "ops", "repo-a", "backlog", "INDEX.md"), "utf8");
+  assert.match(index, /> Total items: 1/);
+  assert.match(index, /- todo: 0/);
+  assert.match(index, /- done: 1/);
+});
+
+test("backlog update rejects item ids that can escape the store", () => {
+  const { ws } = setupItem();
+
+  const { code, stderr } = run(
+    ["backlog", "update", "repo-a", "../../outside", "--status", "done"],
+    ws,
+  );
+
+  assert.equal(code, 1);
+  assert.match(stderr.join("\n"), /invalid item id/i);
 });
 
 test("backlog update marks done items with a fixed date", () => {

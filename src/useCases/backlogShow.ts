@@ -1,6 +1,7 @@
 // Application use case: show a full backlog item.
 
 import type { CliIO } from "../io.js";
+import { isItemIdForPrefix } from "../backlog/item.js";
 import { ItemNotFoundError, readItemFile } from "../backlog/itemFs.js";
 import { resolveStoreRoot } from "./backlogContext.js";
 
@@ -17,6 +18,10 @@ export function backlogShow(
   }
   const store = resolveStoreRoot(projectId, io, cwd);
   if (store === null) return 1;
+  if (!isItemIdForPrefix(itemId, store.manifest.id_prefix)) {
+    io.stderr(`Error: invalid item id: ${itemId}`);
+    return 1;
+  }
 
   let item;
   try {
@@ -27,6 +32,10 @@ export function backlogShow(
       return 1;
     }
     throw error;
+  }
+  if (item.id !== itemId) {
+    io.stderr(`Error: item id mismatch: expected ${itemId}, got ${item.id}`);
+    return 1;
   }
 
   if (json) {

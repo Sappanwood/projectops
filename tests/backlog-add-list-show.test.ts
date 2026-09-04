@@ -68,6 +68,17 @@ test("backlog add assigns sequential ids", () => {
   assert.ok(existsSync(path.join(ws, "ops", "repo-a", "backlog", "items", "REP-002.md")));
 });
 
+test("backlog add rebuilds the readable index", () => {
+  const ws = setupStore();
+
+  assert.equal(run([...ADD_BASE, "-T", "Indexed", "-c", "feature", "--priority", "P1"], ws).code, 0);
+
+  const index = readFileSync(path.join(ws, "ops", "repo-a", "backlog", "INDEX.md"), "utf8");
+  assert.match(index, /> Total items: 1/);
+  assert.match(index, /- todo: 1/);
+  assert.match(index, /- done: 0/);
+});
+
 test("backlog add reads a multi-line body from a file", () => {
   const ws = setupStore();
   const bodyFile = path.join(ws, "body.md");
@@ -249,6 +260,24 @@ test("backlog show fails clearly for a missing item", () => {
 
   assert.equal(code, 1);
   assert.match(stderr.join("\n"), /REP-099/);
+});
+
+test("backlog show rejects item ids that can escape the store", () => {
+  const ws = setupStore();
+
+  const { code, stderr } = run(["backlog", "show", "repo-a", "../../outside"], ws);
+
+  assert.equal(code, 1);
+  assert.match(stderr.join("\n"), /invalid item id/i);
+});
+
+test("backlog show rejects item ids from another prefix", () => {
+  const ws = setupStore();
+
+  const { code, stderr } = run(["backlog", "show", "repo-a", "OTHER-001"], ws);
+
+  assert.equal(code, 1);
+  assert.match(stderr.join("\n"), /invalid item id/i);
 });
 
 test("backlog add fails clearly when the store is not initialized", () => {

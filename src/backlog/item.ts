@@ -191,3 +191,7 @@ export function nextItemId(prefix: string, existingIds: readonly string[]): stri
     seq += 1;
   }
 }
+
+export function isItemIdForPrefix(id: string, prefix: string): boolean {
+  return id.startsWith(`${prefix}-`) && /^[A-Z0-9]+-\d{3,}$/.test(id);
+}

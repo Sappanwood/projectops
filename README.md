@@ -25,7 +25,7 @@ node dist/cli.js --version
 首个纵向闭环已可用：从初始化 workspace、登记 project 到 Backlog item 全生命周期。
 
 ```bash
-# 1. 在空目录初始化 workspace 壳（生成 .pops/workspace.json）
+# 1. 在目标目录初始化 workspace 壳（目录可以非空，生成 .pops/workspace.json）
 pops init ~/my-workspace
 
 # 2. 显式登记一个目录为 project（workspace 的子路径，任意目录均可）
@@ -60,5 +60,6 @@ pops backlog update my-app APP-001 --status in_progress --expected-revision <rev
 
 - workspace 是聚合父目录，project 必须是其子路径；workspace 根自身不可登记
 - 登记不要求 git repo，任意目录都可以作为 project
+- init 可用于没有 workspace manifest 的非空目录，并保留既有内容
 - 重复登记同一目录报错；init 和 backlog init 不静默覆盖已有文件
 - backlog update 支持 `--expected-revision` 防止覆盖并发修改

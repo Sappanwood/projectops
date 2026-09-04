@@ -9,6 +9,16 @@ export const OPS_ROOT = "ops";
 
 export type ArtifactKey = "backlog" | "plans" | "reports" | "adr" | "research";
 
+export const ARTIFACT_TYPES: Record<ArtifactKey, string> = {
+  backlog: "backlog/store@1",
+  plans: "markdown/plan@1",
+  reports: "markdown/report@1",
+  adr: "markdown/adr@1",
+  research: "markdown/research@1",
+};
+
+export const ARTIFACT_KEYS = Object.keys(ARTIFACT_TYPES) as ArtifactKey[];
+
 export type ArtifactLayout = {
   ops_root: string;
   roots: Record<ArtifactKey, string>;
@@ -31,13 +41,7 @@ export function newWorkspaceManifest(name: string): WorkspaceManifest {
     name,
     artifact_layout: {
       ops_root: OPS_ROOT,
-      roots: {
-        backlog: "backlog/store@1",
-        plans: "markdown/plan@1",
-        reports: "markdown/report@1",
-        adr: "markdown/adr@1",
-        research: "markdown/research@1",
-      },
+      roots: { ...ARTIFACT_TYPES },
     },
     projects: {},
   };
@@ -57,7 +61,7 @@ export function projectArtifactRoots(
   layout: ArtifactLayout,
 ): Record<ArtifactKey, string> {
   const base = projectOpsRoot(workspaceRoot, projectId, layout);
-  const entries = (Object.keys(layout.roots) as ArtifactKey[]).map((key) => [
+  const entries = ARTIFACT_KEYS.map((key) => [
     key,
     path.join(base, key),
   ]);

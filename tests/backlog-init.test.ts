@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -65,6 +65,34 @@ test("backlog init refuses to rebuild an existing store", () => {
   assert.equal(code, 1);
   assert.match(stderr.join("\n"), /already/i);
   assert.equal(readFileSync(path.join(storeDir(ws), "backlog.json"), "utf8"), before);
+});
+
+test("backlog init does not overwrite a pre-existing index", () => {
+  const ws = setupWorkspaceWithProject();
+  const indexFile = path.join(storeDir(ws), "INDEX.md");
+  writeFileSync(indexFile, "# User content\n", "utf8");
+
+  const { code, stderr } = run(["backlog", "init", "repo-a"], ws);
+
+  assert.equal(code, 1);
+  assert.match(stderr.join("\n"), /already|not empty/i);
+  assert.equal(readFileSync(indexFile, "utf8"), "# User content\n");
+  assert.equal(existsSync(path.join(storeDir(ws), "backlog.json")), false);
+  assert.equal(existsSync(path.join(storeDir(ws), "items")), false);
+});
+
+test("backlog init does not adopt a pre-existing items directory", () => {
+  const ws = setupWorkspaceWithProject();
+  const itemsDir = path.join(storeDir(ws), "items");
+  mkdirSync(itemsDir);
+  writeFileSync(path.join(itemsDir, "notes.md"), "user content\n", "utf8");
+
+  const { code } = run(["backlog", "init", "repo-a"], ws);
+
+  assert.equal(code, 1);
+  assert.equal(readFileSync(path.join(itemsDir, "notes.md"), "utf8"), "user content\n");
+  assert.equal(existsSync(path.join(storeDir(ws), "backlog.json")), false);
+  assert.equal(existsSync(path.join(storeDir(ws), "INDEX.md")), false);
 });
 
 test("backlog init rejects an unregistered project", () => {
