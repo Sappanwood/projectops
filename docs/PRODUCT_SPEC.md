@@ -29,7 +29,7 @@ Markdown/JSON artifact 为权威数据，通过统一 `pops` CLI 和 Local Web W
 | Workspace/Catalog | 初始化、项目注册、typed roots、doctor | 已实现（init、project add/list/doctor） |
 | Backlog | Store bootstrap、CRUD、dependency、queue | 部分实现（init/add/list/show/update 与 depends_on 存储；queue 未实现） |
 | Plan | authoring、查询、validation、review、approval、materialization | authoring/query/validation/approval/materialization 已实现 |
-| Report | delivery evidence 生成和关联 | 部分实现（Report@1 schema/storage、单 Plan 生成资格校验与 `pops report create/list/show`） |
+| Report | delivery evidence 生成和关联 | 部分实现（Report@1 schema/storage、单 Plan 生成资格校验与 `pops report create/list/show`；已覆盖 completed/partial/no-clobber CLI smoke） |
 | Project Docs | roles、templates、scaffold、check | scaffold/check 已实现 |
 | Retrospective | inbox、triage、active、archive | 未实现 |
 | Workbench | 统一浏览和受控写入 | 未实现 |

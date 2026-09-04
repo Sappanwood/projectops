@@ -74,6 +74,13 @@ pops plan validate my-app plan-release-workflow --json
 pops plan approve my-app plan-release-workflow --review-note "Reviewed for release." --json
 pops plan materialize my-app plan-release-workflow --json
 pops backlog list my-app --json
+
+# 8. 完成 materialized task 并生成 Delivery Report
+plan_item_revision="$(node -e 'const { readFileSync } = require("node:fs"); const text = readFileSync("ops/my-app/backlog/items/MYA-002.md", "utf8"); const match = /^revision: ([0-9a-f]+)$/m.exec(text); if (!match) process.exit(1); process.stdout.write(match[1]);')"
+pops backlog update my-app MYA-002 --status done --expected-revision "$plan_item_revision"
+pops report create my-app plan-release-workflow --verification "npm test" --repo-doc "project-ops:repo/README.md" --json
+pops report list my-app --json
+pops report show my-app report-release-workflow --json
 ```
 
 - `pops --help`、`pops --version`

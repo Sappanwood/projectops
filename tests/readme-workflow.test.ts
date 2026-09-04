@@ -29,6 +29,9 @@ test("README workflow is executable for my-app and its MYA backlog", () => {
   assert.match(README, /MYA-001/);
   assert.match(README, /--body[ =]"First task body\."/);
   assert.match(README, /node -e/);
+  assert.match(README, /pops report create my-app plan-release-workflow/);
+  assert.match(README, /pops report list my-app --json/);
+  assert.match(README, /pops report show my-app report-release-workflow --json/);
 
   const parent = mkdtempSync(path.join(tmpdir(), "pops-readme-"));
   const workspace = path.join(parent, "my-workspace");
@@ -122,8 +125,70 @@ test("README workflow is executable for my-app and its MYA backlog", () => {
 
     const planItem = JSON.parse(pops(workspace, ["backlog", "show", PROJECT_ID, "MYA-002", "--json"]).stdout) as {
       body: string;
+      revision: string;
     };
     assert.equal(planItem.body, "Publish the package.\n");
+
+    expectOk(pops(workspace, [
+      "backlog", "update", PROJECT_ID, "MYA-002",
+      "--status", "done", "--expected-revision", planItem.revision,
+    ]));
+
+    const reportCreated = pops(workspace, [
+      "report", "create", PROJECT_ID, "plan-release-workflow",
+      "--verification", "npm test",
+      "--repo-doc", "project-ops:repo/README.md",
+      "--json",
+    ]);
+    expectOk(reportCreated);
+    const report = JSON.parse(reportCreated.stdout) as {
+      ok: boolean;
+      report: {
+        outcome: string;
+        plan: string;
+        verification: string[];
+        repo_docs: string[];
+        backlog: { id: string; status: string; revision?: string; uri: string }[];
+      };
+    };
+    assert.equal(report.ok, true);
+    assert.equal(report.report.outcome, "completed");
+    assert.equal(report.report.plan, "project-ops:plans/plan-release-workflow.json");
+    assert.deepEqual(report.report.verification, ["npm test"]);
+    assert.deepEqual(report.report.repo_docs, ["project-ops:repo/README.md"]);
+    assert.deepEqual(report.report.backlog, [{
+      id: "MYA-002",
+      status: "done",
+      revision: report.report.backlog[0]?.revision,
+      uri: "project-ops:backlog/items/MYA-002.md",
+    }]);
+
+    const reportList = pops(workspace, ["report", "list", PROJECT_ID, "--json"]);
+    expectOk(reportList);
+    const listed = JSON.parse(reportList.stdout) as { ok: boolean; reports: { id: string; outcome: string; plan: string }[] };
+    assert.equal(listed.ok, true);
+    assert.deepEqual(listed.reports.map(({ id, outcome, plan }) => ({ id, outcome, plan })), [{
+      id: "report-release-workflow",
+      outcome: "completed",
+      plan: "project-ops:plans/plan-release-workflow.json",
+    }]);
+
+    const reportShown = pops(workspace, ["report", "show", PROJECT_ID, "report-release-workflow", "--json"]);
+    expectOk(reportShown);
+    const shown = JSON.parse(reportShown.stdout) as {
+      id: string;
+      outcome: string;
+      plan: string;
+      verification: string[];
+      repo_docs: string[];
+      backlog: { id: string; status: string; revision?: string; uri: string }[];
+    };
+    assert.equal(shown.id, "report-release-workflow");
+    assert.equal(shown.outcome, report.report.outcome);
+    assert.equal(shown.plan, report.report.plan);
+    assert.deepEqual(shown.verification, report.report.verification);
+    assert.deepEqual(shown.repo_docs, report.report.repo_docs);
+    assert.deepEqual(shown.backlog, report.report.backlog);
   } finally {
     rmSync(parent, { recursive: true, force: true });
   }
