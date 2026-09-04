@@ -18,6 +18,9 @@ import { docsCheck } from "./useCases/docsCheck.js";
 import { reportCreate } from "./useCases/reportCreate.js";
 import { reportList } from "./useCases/reportList.js";
 import { reportShow } from "./useCases/reportShow.js";
+import { retrospectiveCapture } from "./useCases/retrospectiveCapture.js";
+import { retrospectiveList } from "./useCases/retrospectiveList.js";
+import { retrospectiveShow } from "./useCases/retrospectiveShow.js";
 import type { CliIO } from "./io.js";
 
 export const VERSION = "0.0.0";
@@ -52,6 +55,9 @@ Commands:
   report create <project> <plan> --verification <evidence>  Create a Delivery Report
   report list <project>          List Delivery Reports
   report show <project> <report> Show a complete Delivery Report
+  retrospective capture       Capture a workflow retrospective in inbox
+  retrospective list          List workflow retrospectives
+  retrospective show <id>     Show a complete workflow retrospective
 
 Project workflows will be added as vertical slices during the alpha phase.`;
 
@@ -165,6 +171,16 @@ export function runCli(args: readonly string[], io: CliIO, cwd = process.cwd()):
         return reportShow(projectId, forwarded[0], json, io, cwd);
       }
       io.stderr(`Unknown report command: ${sub ?? ""}`);
+      return 1;
+    }
+    case "retrospective": {
+      const [sub, ...subArgs] = rest;
+      const json = subArgs.includes("--json");
+      const forwarded = subArgs.filter((arg) => arg !== "--json");
+      if (sub === "capture") return retrospectiveCapture(forwarded, json, io, cwd);
+      if (sub === "list") return retrospectiveList(forwarded, json, io, cwd);
+      if (sub === "show") return retrospectiveShow(forwarded.find((arg) => !arg.startsWith("--")), json, io, cwd);
+      io.stderr(`Unknown retrospective command: ${sub ?? ""}`);
       return 1;
     }
     default:

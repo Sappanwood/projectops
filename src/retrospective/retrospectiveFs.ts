@@ -11,6 +11,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
+import { createHash } from "node:crypto";
 import path from "node:path";
 
 import {
@@ -22,8 +23,10 @@ import {
   parseRetrospective,
   serializeRetrospective,
   type Retrospective,
+  type RetrospectiveDiagnostic,
   type RetrospectiveIndex,
   type RetrospectiveIndexRecord,
+  type RetrospectiveRecord,
   type RetrospectiveStatus,
   type RetrospectiveStoreManifest,
 } from "./retrospective.js";
@@ -166,6 +169,155 @@ export function writeRetrospective(workspaceRoot: string, storeRoot: string, ret
   }
 }
 
+/**
+ * Capture a new inbox record and refresh derived indexes as one application operation.
+ * The record file and index snapshots are restored when publication fails.
+ */
+export function captureRetrospective(
+  workspaceRoot: string,
+  storeRoot: string,
+  retrospective: Retrospective,
+  observeWrite?: (target: string, content: Buffer) => void,
+): RetrospectiveRecord {
+  const root = validateStoreLocation(workspaceRoot, storeRoot, false);
+  loadRetrospectiveStore(root, workspaceRoot);
+  const release = acquireCaptureLock(root);
+  try {
+    return captureRetrospectiveLocked(workspaceRoot, root, retrospective, observeWrite);
+  } finally {
+    release();
+  }
+}
+
+function captureRetrospectiveLocked(
+  workspaceRoot: string,
+  root: string,
+  retrospective: Retrospective,
+  observeWrite?: (target: string, content: Buffer) => void,
+): RetrospectiveRecord {
+  const parsed = parseRetrospective(retrospective);
+  if (typeof parsed === "string") throw new RetrospectiveParseError(retrospective.id, parsed);
+  if (parsed.status !== "inbox") throw new RetrospectiveParseError(parsed.id, "capture records must use inbox status");
+
+  const file = retrospectivePath(root, "inbox", parsed.id);
+  if (targetExists(file)) {
+    ensureRegular(file, file);
+    throw new RetrospectiveAlreadyExistsError(parsed.id);
+  }
+  const indexFiles = [RETROSPECTIVE_INDEX_FILE, RETROSPECTIVE_READABLE_INDEX_FILE].map((name) => {
+    const target = path.join(root, name);
+    ensureRegular(target, target);
+    return { target, content: readFileSync(target) };
+  });
+  const content = serializeRetrospective(parsed);
+  const intendedIndexes = new Map<string, Buffer>();
+  let fileCreated = false;
+  try {
+    writeFileSync(file, content, { encoding: "utf8", flag: "wx" });
+    fileCreated = true;
+    rebuildRetrospectiveIndexes(workspaceRoot, root, (target, intended) => {
+      intendedIndexes.set(target, intended);
+      observeWrite?.(target, intended);
+    });
+  } catch (error) {
+    if (!fileCreated) {
+      if (isErrno(error, "EEXIST")) throw new RetrospectiveAlreadyExistsError(parsed.id);
+      throw error;
+    }
+    try {
+      unlinkSync(file);
+    } catch {
+      // Best-effort rollback for the trusted local Alpha store.
+    }
+    for (const snapshot of indexFiles) {
+      restoreDerivedSnapshot(snapshot.target, snapshot.content, intendedIndexes.get(snapshot.target));
+    }
+    throw error;
+  }
+
+  return {
+    ...parsed,
+    path: `inbox/${parsed.id}.md`,
+    revision: revisionOf(content),
+  };
+}
+
+export type RetrospectiveReadResult = {
+  records: RetrospectiveRecord[];
+  diagnostics: RetrospectiveDiagnostic[];
+};
+
+/** Read all Markdown records without allowing one malformed file to crash the read model. */
+export function listRetrospectiveRecords(
+  workspaceRoot: string,
+  storeRoot: string,
+  status?: RetrospectiveStatus,
+): RetrospectiveReadResult {
+  const root = validateStoreLocation(workspaceRoot, storeRoot, false);
+  loadRetrospectiveStore(root, workspaceRoot);
+  const statuses = status === undefined ? RETROSPECTIVE_STATUSES : [status];
+  const records: RetrospectiveRecord[] = [];
+  const diagnostics: RetrospectiveDiagnostic[] = [];
+  for (const currentStatus of statuses) {
+    const directory = path.join(root, currentStatus);
+    let entries: string[];
+    try {
+      entries = readdirSync(directory).sort();
+    } catch (error) {
+      throw new RetrospectiveRootError(directory, `cannot list directory: ${formatFsError(error)}`);
+    }
+    for (const entry of entries) {
+      if (!entry.endsWith(".md")) continue;
+      const id = entry.slice(0, -3);
+      const relativePath = `${currentStatus}/${entry}`;
+      const file = path.join(directory, entry);
+      try {
+        ensureRegular(file, file);
+        const content = readFileSync(file, "utf8");
+        const parsed = parseRetrospective(content);
+        if (typeof parsed === "string") {
+          diagnostics.push({ id, path: relativePath, message: parsed });
+          continue;
+        }
+        if (parsed.id !== id || parsed.status !== currentStatus) {
+          diagnostics.push({ id, path: relativePath, message: "record id or status does not match its path" });
+          continue;
+        }
+        records.push({ ...parsed, path: relativePath, revision: revisionOf(content) });
+      } catch (error) {
+        diagnostics.push({ id, path: relativePath, message: error instanceof Error ? error.message : String(error) });
+      }
+    }
+  }
+  records.sort((left, right) => left.path.localeCompare(right.path));
+  diagnostics.sort((left, right) => left.path.localeCompare(right.path));
+  return { records, diagnostics };
+}
+
+export function showRetrospectiveRecord(
+  workspaceRoot: string,
+  storeRoot: string,
+  reference: string,
+): RetrospectiveRecord {
+  const normalized = reference.endsWith(".md") ? reference : `${reference}.md`;
+  const pathParts = normalized.split("/");
+  let status: RetrospectiveStatus | undefined;
+  let id: string | undefined;
+  if (pathParts.length === 2 && RETROSPECTIVE_STATUSES.includes(pathParts[0] as RetrospectiveStatus)) {
+    status = pathParts[0] as RetrospectiveStatus;
+    id = pathParts[1]?.slice(0, -3);
+  } else if (pathParts.length === 1) {
+    id = pathParts[0]?.slice(0, -3);
+  }
+  if (id === undefined || !isRetrospectiveId(id)) throw new RetrospectiveNotFoundError(reference);
+  const result = listRetrospectiveRecords(workspaceRoot, storeRoot, status);
+  const record = result.records.find((candidate) => candidate.id === id && (status === undefined || candidate.status === status));
+  if (record !== undefined) return record;
+  const diagnostic = result.diagnostics.find((candidate) => candidate.id === id);
+  if (diagnostic !== undefined) throw new RetrospectiveParseError(id, diagnostic.message);
+  throw new RetrospectiveNotFoundError(reference);
+}
+
 export function listRetrospectiveIds(
   workspaceRoot: string,
   storeRoot: string,
@@ -205,7 +357,11 @@ export function readRetrospective(
   return parsed;
 }
 
-export function rebuildRetrospectiveIndexes(workspaceRoot: string, storeRoot: string): RetrospectiveIndex {
+export function rebuildRetrospectiveIndexes(
+  workspaceRoot: string,
+  storeRoot: string,
+  observeWrite?: (target: string, content: Buffer) => void,
+): RetrospectiveIndex {
   const root = validateStoreLocation(workspaceRoot, storeRoot, false);
   loadRetrospectiveStore(root, workspaceRoot);
   const records: RetrospectiveIndexRecord[] = [];
@@ -226,8 +382,8 @@ export function rebuildRetrospectiveIndexes(workspaceRoot: string, storeRoot: st
     }
   }
   const index: RetrospectiveIndex = { schema: RETROSPECTIVE_INDEX_SCHEMA, records };
-  writeDerived(root, RETROSPECTIVE_INDEX_FILE, `${JSON.stringify(index, null, 2)}\n`);
-  writeDerived(root, RETROSPECTIVE_READABLE_INDEX_FILE, renderReadableIndex(index));
+  writeDerived(root, RETROSPECTIVE_INDEX_FILE, `${JSON.stringify(index, null, 2)}\n`, observeWrite);
+  writeDerived(root, RETROSPECTIVE_READABLE_INDEX_FILE, renderReadableIndex(index), observeWrite);
   return index;
 }
 
@@ -314,10 +470,51 @@ function writeFileNoClobber(file: string, content: string): void {
   writeFileSync(file, content, { encoding: "utf8", flag: "wx" });
 }
 
-function writeDerived(root: string, name: string, content: string): void {
+function writeDerived(
+  root: string,
+  name: string,
+  content: string,
+  observeWrite?: (target: string, content: Buffer) => void,
+): void {
   const file = path.join(root, name);
   if (targetExists(file)) ensureRegular(file, file);
-  writeFileSync(file, content, { encoding: "utf8" });
+  const bytes = Buffer.from(content, "utf8");
+  observeWrite?.(file, bytes);
+  writeFileSync(file, bytes);
+}
+
+/** Restore a derived file only when it still contains this operation's output. */
+function restoreDerivedSnapshot(target: string, snapshot: Buffer, intended: Buffer | undefined): void {
+  try {
+    ensureRegular(target, target);
+    const current = readFileSync(target);
+    if (current.equals(snapshot) || intended === undefined || !current.equals(intended)) return;
+    writeFileSync(target, snapshot);
+  } catch {
+    // Preserve the original failure; check/rebuild can diagnose the store.
+  }
+}
+
+/** Serialize capture and derived-index publication across concurrent local processes. */
+function acquireCaptureLock(root: string): () => void {
+  const target = path.join(root, ".retrospective-capture.lock");
+  for (let attempt = 0; attempt < 500; attempt += 1) {
+    try {
+      writeFileSync(target, `${process.pid}\n`, { encoding: "utf8", flag: "wx" });
+      return () => {
+        try {
+          ensureRegular(target, target);
+          unlinkSync(target);
+        } catch {
+          // Preserve the operation result; a stale lock is diagnosable by the caller.
+        }
+      };
+    } catch (error) {
+      if (!isErrno(error, "EEXIST")) throw new RetrospectiveTargetError(target, formatFsError(error));
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+    }
+  }
+  throw new RetrospectiveTargetError(target, "capture lock is busy");
 }
 
 function targetExists(file: string): boolean {
@@ -371,6 +568,10 @@ function isErrno(error: unknown, code: string): boolean {
 
 function formatFsError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function revisionOf(content: string): string {
+  return createHash("sha256").update(content, "utf8").digest("hex");
 }
 
 function createDirectoryTree(root: string): string[] {

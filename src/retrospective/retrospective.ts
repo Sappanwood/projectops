@@ -39,6 +39,17 @@ export type RetrospectiveIndex = {
   records: RetrospectiveIndexRecord[];
 };
 
+export type RetrospectiveRecord = Retrospective & {
+  path: string;
+  revision: string;
+};
+
+export type RetrospectiveDiagnostic = {
+  id: string;
+  path: string;
+  message: string;
+};
+
 export class RetrospectiveValidationError extends Error {
   constructor(public readonly problem: string) {
     super(`Invalid retrospective: ${problem}`);

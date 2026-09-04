@@ -24,7 +24,7 @@ pops --version
 
 ## 当前能力
 
-当前已可完成 workspace、project、Backlog、Plan 审批到 materialize，以及 Delivery Report 生成与查询的基础工作流。
+当前已可完成 workspace、project、Backlog、Plan 审批到 materialize、Delivery Report 生成与查询，以及 Workflow Retrospective 捕获与查询的基础工作流。
 
 ```bash
 # 1. 在目标目录初始化 workspace 壳（目录可以非空，生成 .pops/workspace.json）
@@ -81,7 +81,16 @@ pops backlog update my-app MYA-002 --status done --expected-revision "$plan_item
 pops report create my-app plan-release-workflow --verification "npm test" --repo-doc "project-ops:repo/README.md" --json
 pops report list my-app --json
 pops report show my-app report-release-workflow --json
+
+# 9. 捕获和查询 Workflow Retrospective（记录只进入 workspace 级 inbox）
+pops retrospective capture --trigger workflow-friction --harness codex-app --model null \
+  --project my-app --task MYA-002 --body-file retrospective.md --json
+pops retrospective list --status inbox --project my-app --json
+pops retrospective show <retrospective-id> --json
 ```
+
+`retrospective.md` 的正文必须包含三个非空 Markdown section（heading 可使用 1 至 6 级）：
+`Hidden friction encountered`、`Workarounds used` 和 `Improvement candidates`。
 
 - `pops --help`、`pops --version`
 - `pops init`：workspace 壳初始化（不登记 repo）
@@ -92,6 +101,7 @@ pops report show my-app report-release-workflow --json
 - `pops plan create/list/show/validate/approve/materialize`：从 JSON 草案创建、列出、查看、校验、批准并将已批准的 `plan/Plan@1` artifact 写入 Backlog；Plan ID 由 title 稳定生成，
   无 ASCII slug 的标题使用每个 Unicode code point 的 `u<hex>` token
 - `pops report create/list/show`：从已批准且 materialized 的 Plan 生成 completed 或显式 partial Delivery Report，并查询已生成的 Report；create 需要至少一条 `--verification`
+- `pops retrospective capture/list/show`：将调用方提供的 trigger、harness、model、project/task provenance 和 Markdown 证据捕获到 workspace 级 inbox，并按 status/project/task 查询；capture 不自动分类或流转
 - 数据全部为可读文件：workspace manifest、Plan 是 JSON，backlog item 是 frontmatter + Markdown body
 - 单元测试、端到端 smoke、类型检查和构建
 
