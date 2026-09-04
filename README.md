@@ -10,14 +10,16 @@ Workflow Retrospective。
 
 ```bash
 npm install
-npm run dev -- --help
+npm run build
+npm link
+pops --help
 npm test
 npm run typecheck
-npm run build
-node dist/cli.js --version
+pops --version
 ```
 
-最终 CLI 名称为 `pops`。初始 npm package 保持 `private`，因为 npm registry 已存在同名的
+这里的 `npm link` 会把当前仓库刚构建的 `dist/cli.js` 注册为本机的 `pops` 命令；开发时也可以直接使用
+`npm run dev -- --help`。初始 npm package 保持 `private`，因为 npm registry 已存在同名的
 `projectops` 和 `pops` package；公开发行名将在发布阶段另行决定。
 
 ## 当前能力
@@ -26,10 +28,10 @@ node dist/cli.js --version
 
 ```bash
 # 1. 在目标目录初始化 workspace 壳（目录可以非空，生成 .pops/workspace.json）
-pops init ~/my-workspace
+pops init "$HOME/my-workspace"
 
 # 2. 显式登记一个目录为 project（workspace 的子路径，任意目录均可）
-cd ~/my-workspace
+cd "$HOME/my-workspace"
 mkdir my-app
 pops project add my-app
 
@@ -45,10 +47,11 @@ pops docs check my-app --json
 pops backlog init my-app
 
 # 6. 创建与推进 backlog item
-pops backlog add my-app -T "First task" -c feature --priority P1 --body-file task.md
+pops backlog add my-app -T "First task" -c feature --priority P1 --body "First task body."
 pops backlog list my-app --status todo
-pops backlog show my-app APP-001
-pops backlog update my-app APP-001 --status in_progress --expected-revision <revision>
+pops backlog show my-app MYA-001
+revision="$(node -e 'const { readFileSync } = require("node:fs"); const text = readFileSync("ops/my-app/backlog/items/MYA-001.md", "utf8"); const match = /^revision: ([0-9a-f]+)$/m.exec(text); if (!match) process.exit(1); process.stdout.write(match[1]);')"
+pops backlog update my-app MYA-001 --status in_progress --expected-revision "$revision"
 
 # 7. 从显式 JSON 草案创建并查询 Plan
 cat > release-plan.json <<'EOF'

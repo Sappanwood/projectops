@@ -116,6 +116,22 @@ export function serializePlan(plan: Plan): string {
   return `${JSON.stringify(plan, null, 2)}\n`;
 }
 
+export function materializationOrder(items: PlanItem[]): PlanItem[] | string {
+  const pending = new Map(items.map((item) => [item.key, item]));
+  const ordered: PlanItem[] = [];
+  const available = new Set<string>();
+  while (pending.size > 0) {
+    const next = items.find((item) => pending.has(item.key) &&
+      (item.parent === undefined || available.has(item.parent)) &&
+      (item.depends_on ?? []).every((dependency) => available.has(dependency)));
+    if (next === undefined) return "plan item parent or dependency graph cannot be materialized";
+    pending.delete(next.key);
+    available.add(next.key);
+    ordered.push(next);
+  }
+  return ordered;
+}
+
 function validateDraft(value: unknown): string | null {
   if (!isRecord(value)) return "plan input must be an object";
   if (typeof value.title !== "string" || value.title === "") return "plan title must be a non-empty string";
@@ -139,6 +155,8 @@ function validateDraft(value: unknown): string | null {
       if (!keys.has(dependency)) return `plan item dependency not found: ${dependency}`;
     }
   }
+  const order = materializationOrder(value.items as PlanItem[]);
+  if (typeof order === "string") return order;
   return null;
 }
 

@@ -134,6 +134,52 @@ test("plan validate reports duplicate keys and missing dependencies", () => {
   assert.match(missingResult.stderr.join("\n"), /dependency not found: missing/i);
 });
 
+test("plan validate and approve reject dependency cycles without writing", () => {
+  const cases = [
+    {
+      name: "self-cycle",
+      plan: (() => {
+        const plan = validPlan();
+        (plan.items as Record<string, unknown>[])[0]!.depends_on = ["prepare"];
+        return plan;
+      })(),
+    },
+    {
+      name: "multi-item cycle",
+      plan: (() => {
+        const plan = validPlan();
+        const items = plan.items as Record<string, unknown>[];
+        items[0]!.depends_on = ["publish"];
+        items[1]!.depends_on = ["prepare"];
+        return plan;
+      })(),
+    },
+  ];
+
+  for (const candidate of cases) {
+    const ws = setupWorkspace();
+    const planPath = writePlan(ws, candidate.plan);
+    const original = readFileSync(planPath, "utf8");
+
+    const validated = run(["plan", "validate", "repo-a", "plan-release-workflow"], ws);
+    assert.equal(validated.code, 1, candidate.name);
+    assert.match(validated.stderr.join("\n"), /cannot be materialized/i);
+    assert.equal(readFileSync(planPath, "utf8"), original);
+
+    const approved = run([
+      "plan",
+      "approve",
+      "repo-a",
+      "plan-release-workflow",
+      "--review-note",
+      "Approved.",
+    ], ws);
+    assert.equal(approved.code, 1, candidate.name);
+    assert.match(approved.stderr.join("\n"), /cannot be materialized/i);
+    assert.equal(readFileSync(planPath, "utf8"), original);
+  }
+});
+
 test("plan approve rejects invalid plans, blank notes, and re-approval without writing", () => {
   const ws = setupWorkspace();
   const planPath = writePlan(ws, { ...validPlan(), status: "draft" });

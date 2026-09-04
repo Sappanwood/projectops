@@ -5,7 +5,7 @@ import path from "node:path";
 
 import { addBacklogItem, BacklogAddError } from "../backlog/add.js";
 import { INDEX_FILE, ITEMS_DIR } from "../backlog/store.js";
-import type { Plan, PlanItem } from "../plan/plan.js";
+import { materializationOrder, type Plan } from "../plan/plan.js";
 import { PlanNotFoundError, PlanParseError, planPath, readPlan, updatePlan } from "../plan/planFs.js";
 import { isWithinWorkspace } from "../catalog/workspace.js";
 import type { CliIO } from "../io.js";
@@ -112,22 +112,6 @@ export function planMaterialize(
   if (json) io.stdout(JSON.stringify(receipt));
   else io.stdout(`Materialized ${plan.id}`);
   return 0;
-}
-
-function materializationOrder(items: PlanItem[]): PlanItem[] | string {
-  const pending = new Map(items.map((item) => [item.key, item]));
-  const ordered: PlanItem[] = [];
-  const available = new Set<string>();
-  while (pending.size > 0) {
-    const next = items.find((item) => pending.has(item.key) &&
-      (item.parent === undefined || available.has(item.parent)) &&
-      item.depends_on.every((dependency) => available.has(dependency)));
-    if (next === undefined) return "plan item parent or dependency graph cannot be materialized";
-    pending.delete(next.key);
-    available.add(next.key);
-    ordered.push(next);
-  }
-  return ordered;
 }
 
 function buildReceipt(
