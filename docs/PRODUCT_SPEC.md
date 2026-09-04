@@ -28,7 +28,7 @@ Markdown/JSON artifact 为权威数据，通过统一 `pops` CLI 和 Local Web W
 |---|---|---|
 | Workspace/Catalog | 初始化、项目注册、typed roots、doctor | 已实现（init、project add/list/doctor） |
 | Backlog | Store bootstrap、CRUD、dependency、queue | 部分实现（init/add/list/show/update 与 depends_on 存储；queue 未实现） |
-| Plan | authoring、查询、validation、review、approval、materialization | authoring/query 已实现；其余未实现 |
+| Plan | authoring、查询、validation、review、approval、materialization | authoring/query/validation/approval 已实现；materialization 未实现 |
 | Report | delivery evidence 生成和关联 | 未实现 |
 | Project Docs | roles、templates、scaffold、check | 未实现 |
 | Retrospective | inbox、triage、active、archive | 未实现 |
@@ -40,7 +40,7 @@ Markdown/JSON artifact 为权威数据，通过统一 `pops` CLI 和 Local Web W
 - Workspace topology、Backlog、Plan、Report、Docs 和 Retrospective 使用独立 versioned schema。
 - 不建立覆盖所有 artifact 的通用 schema 或生命周期。
 - 跨领域关联使用稳定 logical URI，不把机器绝对路径写入 artifact。
-- Plan 使用 `plan/Plan@1` JSON artifact：包含稳定 ID、标题、目标及以局部 key 关联的 Backlog item 草案；当前仅 authoring/query，不写入 Backlog。
+- Plan 使用 `plan/Plan@1` JSON artifact：包含稳定 ID、标题、目标及以局部 key 关联的 Backlog item 草案，并以 `status: draft|approved` 表示生命周期；批准 Plan 额外包含一次 `approval` 记录（`approved_at` 与 `review_note`）；当前不写入 Backlog。
 - 派生索引和未来 UI preference 不得成为业务 authority。
 - Workspace 是聚合父目录，project 必须是其子路径；workspace 根自身不可登记。
 - Workspace 可在非空目录初始化，但不得覆盖已有 manifest 或其他用户内容。

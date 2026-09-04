@@ -3,9 +3,16 @@
 export const PLAN_SCHEMA = "plan/Plan@1";
 export const PLAN_ITEM_TYPES = ["task", "epic"] as const;
 export const PLAN_PRIORITIES = ["P0", "P1", "P2", "P3"] as const;
+export const PLAN_STATUSES = ["draft", "approved"] as const;
 
 export type PlanItemType = (typeof PLAN_ITEM_TYPES)[number];
 export type PlanPriority = (typeof PLAN_PRIORITIES)[number];
+export type PlanStatus = (typeof PLAN_STATUSES)[number];
+
+export type PlanApproval = {
+  approved_at: string;
+  review_note: string;
+};
 
 export type PlanItem = {
   key: string;
@@ -22,6 +29,8 @@ export type Plan = {
   title: string;
   goal: string;
   items: PlanItem[];
+  status: PlanStatus;
+  approval?: PlanApproval;
 };
 
 export type PlanDraft = {
@@ -46,7 +55,7 @@ export function createPlan(draft: PlanDraft): Plan | string {
   const normalized = normalizeDraft(draft);
   const id = planIdForTitle(normalized.title);
   if (id === null) return "plan title must be a non-empty string";
-  return { schema: PLAN_SCHEMA, id, ...normalized };
+  return { schema: PLAN_SCHEMA, id, ...normalized, status: "draft" };
 }
 
 export function parsePlanDraft(value: unknown): PlanDraft | string {
@@ -64,7 +73,20 @@ export function parsePlan(value: unknown): Plan | string {
     items: value.items,
   });
   if (typeof draft === "string") return draft;
-  return { schema: PLAN_SCHEMA, id: value.id, ...draft };
+  const statusValue = value.status === undefined ? "draft" : value.status;
+  if (!PLAN_STATUSES.includes(statusValue as PlanStatus)) {
+    return `plan status must be one of: ${PLAN_STATUSES.join(", ")}`;
+  }
+  const status = statusValue as PlanStatus;
+  if (status === "draft" && value.approval !== undefined) {
+    return "draft plan must not have an approval record";
+  }
+  if (status === "approved") {
+    const approval = parseApproval(value.approval);
+    if (typeof approval === "string") return approval;
+    return { schema: PLAN_SCHEMA, id: value.id, ...draft, status, approval };
+  }
+  return { schema: PLAN_SCHEMA, id: value.id, ...draft, status };
 }
 
 export function isPlanId(value: string): boolean {
@@ -128,6 +150,17 @@ function validateItem(value: unknown, keys: Set<string>): string | null {
     return `plan item ${value.key} depends_on must be an array of keys`;
   }
   return null;
+}
+
+function parseApproval(value: unknown): PlanApproval | string {
+  if (!isRecord(value)) return "approved plan must have an approval record";
+  if (typeof value.approved_at !== "string" || value.approved_at.trim() === "") {
+    return "plan approval approved_at must be a non-empty string";
+  }
+  if (typeof value.review_note !== "string" || value.review_note.trim() === "") {
+    return "plan approval review_note must be a non-empty string";
+  }
+  return { approved_at: value.approved_at, review_note: value.review_note };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

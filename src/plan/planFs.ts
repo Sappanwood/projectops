@@ -23,7 +23,7 @@ export class PlanParseError extends Error {
   }
 }
 
-function planPath(root: string, id: string): string {
+export function planPath(root: string, id: string): string {
   if (!isPlanId(id)) throw new PlanNotFoundError(id);
   return path.join(root, `${id}.json`);
 }
@@ -60,4 +60,8 @@ export function writePlan(root: string, plan: Plan): void {
     }
     throw error;
   }
+}
+
+export function updatePlan(root: string, plan: Plan): void {
+  writeFileSync(planPath(root, plan.id), serializePlan(plan));
 }

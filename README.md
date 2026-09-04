@@ -62,13 +62,15 @@ EOF
 pops plan create my-app --input release-plan.json --json
 pops plan list my-app --json
 pops plan show my-app plan-release-workflow --json
+pops plan validate my-app plan-release-workflow --json
+pops plan approve my-app plan-release-workflow --review-note "Reviewed for release." --json
 ```
 
 - `pops --help`、`pops --version`
 - `pops init`：workspace 壳初始化（不登记 repo）
 - `pops project add/list/doctor`：显式登记、查询、拓扑校验
 - `pops backlog init/add/list/show/update`：store bootstrap、CRUD、状态流转与 revision 保护
-- `pops plan create/list/show`：从 JSON 草案创建、列出与查看 `plan/Plan@1` artifact；Plan ID 由 title 稳定生成，
+- `pops plan create/list/show/validate/approve`：从 JSON 草案创建、列出、查看、校验与批准 `plan/Plan@1` artifact；Plan ID 由 title 稳定生成，
   无 ASCII slug 的标题使用每个 Unicode code point 的 `u<hex>` token
 - 数据全部为可读文件：workspace manifest、Plan 是 JSON，backlog item 是 frontmatter + Markdown body
 - 单元测试、端到端 smoke、类型检查和构建
@@ -83,4 +85,5 @@ pops plan show my-app plan-release-workflow --json
 - init 可用于没有 workspace manifest 的非空目录，并保留既有内容
 - 重复登记同一目录报错；init 和 backlog init 不静默覆盖已有文件
 - Plan create 不覆盖相同 title 所生成的已存在 Plan
+- 只有校验通过的 draft Plan 才能通过 approve 记录一次批准，批准需要非空 review note
 - backlog update 支持 `--expected-revision` 防止覆盖并发修改

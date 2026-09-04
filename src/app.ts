@@ -10,6 +10,8 @@ import { backlogUpdate } from "./useCases/backlogUpdate.js";
 import { planCreate } from "./useCases/planCreate.js";
 import { planList } from "./useCases/planList.js";
 import { planShow } from "./useCases/planShow.js";
+import { planValidate } from "./useCases/planValidate.js";
+import { planApprove } from "./useCases/planApprove.js";
 import type { CliIO } from "./io.js";
 
 export const VERSION = "0.0.0";
@@ -36,6 +38,8 @@ Commands:
   plan create <project> --input <draft.json>  Create a Plan from a JSON draft
   plan list <project>     List Plans for a project
   plan show <project> <plan>  Show a complete Plan
+  plan validate <project> <plan>  Validate a Plan
+  plan approve <project> <plan> --review-note <note>  Approve a validated Plan
 
 Project workflows will be added as vertical slices during the alpha phase.`;
 
@@ -108,6 +112,13 @@ export function runCli(args: readonly string[], io: CliIO, cwd = process.cwd()):
       }
       if (sub === "show") {
         return planShow(first, forwarded.find((arg) => !arg.startsWith("--")), json, io, cwd);
+      }
+      if (sub === "validate") {
+        return planValidate(first, forwarded.find((arg) => !arg.startsWith("--")), json, io, cwd);
+      }
+      if (sub === "approve") {
+        const [planId, ...approveArgs] = forwarded;
+        return planApprove(first, planId, approveArgs, json, io, cwd);
       }
       io.stderr(`Unknown plan command: ${sub ?? ""}`);
       return 1;
