@@ -205,6 +205,161 @@ test("retrospective capture failure leaves no file or index drift", () => {
   }
 });
 
+test("retrospective triage and archive CLI transitions use revision protection", () => {
+  const workspace = setupWorkspace();
+  try {
+    const captured = capture(workspace, "retro-lifecycle", "projectops", "POP-031");
+    assert.equal(captured.code, 0, captured.stderr.join("\n"));
+    const captureReceipt = JSON.parse(captured.stdout[0] ?? "null") as { retrospective: { revision: string } };
+
+    const triaged = run([
+      "retrospective", "triage", "retro-lifecycle",
+      "--to", "active", "--expected-revision", captureReceipt.retrospective.revision,
+      "--disposition", "actionable", "--owner-scope", "projectops",
+      "--category", "tooling", "--category", "docs",
+      "--next-action", "update docs", "--related-info", "project-ops:backlog/POP-031", "--json",
+    ], workspace);
+    assert.equal(triaged.code, 0, triaged.stderr.join("\n"));
+    const triageReceipt = JSON.parse(triaged.stdout[0] ?? "null") as {
+      ok: boolean;
+      retrospective: { status: string; path: string; revision: string; categories: string[]; owner_scope: string };
+    };
+    assert.equal(triageReceipt.ok, true);
+    assert.equal(triageReceipt.retrospective.status, "active");
+    assert.equal(triageReceipt.retrospective.path, "active/retro-lifecycle.md");
+    assert.deepEqual(triageReceipt.retrospective.categories, ["tooling", "docs"]);
+    assert.equal(triageReceipt.retrospective.owner_scope, "projectops");
+
+    const archived = run([
+      "retrospective", "archive", "retro-lifecycle",
+      "--expected-revision", triageReceipt.retrospective.revision,
+      "--action-disposition", "resolved", "--backlog", "project-ops:backlog/POP-031",
+      "--resolution-note", "Documentation updated.", "--json",
+    ], workspace);
+    assert.equal(archived.code, 0, archived.stderr.join("\n"));
+    const archiveReceipt = JSON.parse(archived.stdout[0] ?? "null") as {
+      ok: boolean;
+      retrospective: { status: string; path: string; action_disposition: string; resolution_note: string; next_action: string };
+    };
+    assert.equal(archiveReceipt.ok, true);
+    assert.equal(archiveReceipt.retrospective.status, "archive");
+    assert.equal(archiveReceipt.retrospective.path, "archive/retro-lifecycle.md");
+    assert.equal(archiveReceipt.retrospective.action_disposition, "resolved");
+    assert.equal(archiveReceipt.retrospective.resolution_note, "Documentation updated.");
+    assert.equal(archiveReceipt.retrospective.next_action, "update docs");
+
+    const invalid = run([
+      "retrospective", "archive", "retro-lifecycle",
+      "--expected-revision", "stale", "--action-disposition", "resolved",
+      "--resolution-note", "already archived", "--json",
+    ], workspace);
+    assert.equal(invalid.code, 1);
+    assert.match(invalid.stdout[0] ?? "", /already exists|not found|transition|revision/i);
+  } finally {
+    rmSync(workspace, { recursive: true, force: true });
+  }
+});
+
+test("retrospective transition CLI requires explicit destinations and next actions", () => {
+  const workspace = setupWorkspace();
+  try {
+    const captured = capture(workspace, "retro-required-flags", "projectops", "POP-031");
+    assert.equal(captured.code, 0, captured.stderr.join("\n"));
+    const revision = (JSON.parse(captured.stdout[0] ?? "null") as { retrospective: { revision: string } }).retrospective.revision;
+    const common = [
+      "retrospective", "triage", "retro-required-flags",
+      "--expected-revision", revision, "--disposition", "actionable", "--owner-scope", "projectops", "--json",
+    ];
+
+    const missingDestination = run(common, workspace);
+    assert.equal(missingDestination.code, 1);
+    assert.match(missingDestination.stdout[0] ?? "", /--to is required/i);
+
+    const missingActiveNextAction = run([...common, "--to", "active"], workspace);
+    assert.equal(missingActiveNextAction.code, 1);
+    assert.match(missingActiveNextAction.stdout[0] ?? "", /--next-action is required/i);
+
+    const missingArchiveNextAction = run([...common, "--to", "archive"], workspace);
+    assert.equal(missingArchiveNextAction.code, 1);
+    assert.match(missingArchiveNextAction.stdout[0] ?? "", /--next-action is required/i);
+
+    const active = run([...common, "--to", "active", "--next-action", "Follow up."], workspace);
+    assert.equal(active.code, 0, active.stderr.join("\n"));
+    const activeRevision = (JSON.parse(active.stdout[0] ?? "null") as { retrospective: { revision: string } }).retrospective.revision;
+    const archived = run([
+      "retrospective", "archive", "retro-required-flags", "--expected-revision", activeRevision,
+      "--action-disposition", "resolved", "--resolution-note", "Handled.", "--json",
+    ], workspace);
+    assert.equal(archived.code, 0, archived.stderr.join("\n"));
+    assert.equal((JSON.parse(archived.stdout[0] ?? "null") as { retrospective: { next_action: string } }).retrospective.next_action, "Follow up.");
+  } finally {
+    rmSync(workspace, { recursive: true, force: true });
+  }
+});
+
+test("retrospective triage and archive JSON resolution failures use a stable envelope", () => {
+  const missingWorkspace = freshDir();
+  try {
+    for (const subcommand of ["triage", "archive"] as const) {
+      const result = run(["retrospective", subcommand, "retro-missing-workspace", "--json"], missingWorkspace);
+      assert.equal(result.code, 1);
+      assert.deepEqual(result.stderr, []);
+      assert.deepEqual(JSON.parse(result.stdout[0] ?? "null"), {
+        ok: false,
+        error: `No workspace found at or above ${missingWorkspace}`,
+      });
+    }
+  } finally {
+    rmSync(missingWorkspace, { recursive: true, force: true });
+  }
+
+  const missingRoot = setupWorkspace();
+  try {
+    rmSync(path.join(missingRoot, "retrospectives"), { recursive: true, force: true });
+    for (const subcommand of ["triage", "archive"] as const) {
+      const result = run(["retrospective", subcommand, "retro-missing-root", "--json"], missingRoot);
+      assert.equal(result.code, 1);
+      assert.deepEqual(result.stderr, []);
+      const envelope = JSON.parse(result.stdout[0] ?? "null") as { ok: boolean; error: string };
+      assert.equal(envelope.ok, false);
+      assert.match(envelope.error, /retrospectives root does not exist/i);
+    }
+  } finally {
+    rmSync(missingRoot, { recursive: true, force: true });
+  }
+});
+
+test("built CLI completes a bounded retrospective transition smoke", async () => {
+  const workspace = setupWorkspace();
+  try {
+    const captured = await runBuilt([
+      "retrospective", "capture", "--id", "retro-built-lifecycle",
+      "--trigger", "workflow-friction", "--harness", "codex-app", "--model", "null",
+      "--body", CAPTURE_BODY, "--json",
+    ], workspace);
+    assert.equal(captured.code, 0, captured.stderr);
+    const captureReceipt = JSON.parse(captured.stdout) as { retrospective: { revision: string } };
+    const triaged = await runBuilt([
+      "retrospective", "triage", "retro-built-lifecycle", "--to", "active",
+      "--expected-revision", captureReceipt.retrospective.revision,
+      "--disposition", "actionable", "--owner-scope", "workspace",
+      "--category", "testing", "--next-action", "Keep the smoke bounded.", "--json",
+    ], workspace);
+    assert.equal(triaged.code, 0, triaged.stderr);
+    const triageReceipt = JSON.parse(triaged.stdout) as { retrospective: { revision: string; status: string } };
+    assert.equal(triageReceipt.retrospective.status, "active");
+    const archived = await runBuilt([
+      "retrospective", "archive", "retro-built-lifecycle",
+      "--expected-revision", triageReceipt.retrospective.revision,
+      "--action-disposition", "resolved", "--resolution-note", "Smoke passed.", "--json",
+    ], workspace);
+    assert.equal(archived.code, 0, archived.stderr);
+    assert.equal((JSON.parse(archived.stdout) as { retrospective: { status: string } }).retrospective.status, "archive");
+  } finally {
+    rmSync(workspace, { recursive: true, force: true });
+  }
+});
+
 test("retrospective capture rolls back after a post-create index refresh failure", () => {
   const workspace = setupWorkspace();
   try {

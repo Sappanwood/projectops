@@ -83,6 +83,37 @@ export class RetrospectiveParseError extends Error {
   }
 }
 
+export class RetrospectiveRevisionConflictError extends Error {
+  constructor(public readonly id: string, public readonly expected: string, public readonly actual: string) {
+    super(`Retrospective revision conflict for ${id}: expected ${expected}, current ${actual}`);
+  }
+}
+
+export class RetrospectiveTransitionError extends Error {
+  constructor(public readonly id: string, problem: string) {
+    super(`Invalid retrospective transition for ${id}: ${problem}`);
+  }
+}
+
+export type RetrospectiveTriageOptions = {
+  destination: Extract<RetrospectiveStatus, "active" | "archive">;
+  disposition: string;
+  owner_scope: string;
+  categories: string[];
+  next_action: string;
+  related_info: string[];
+  canonical?: string;
+};
+
+export type RetrospectiveArchiveOptions = {
+  action_disposition: string;
+  actioned_at: string;
+  backlog: string[];
+  resolution_note: string;
+};
+
+export type RetrospectiveObserveWrite = (target: string, content: Buffer) => void;
+
 export function newRetrospectiveStoreManifest(): RetrospectiveStoreManifest {
   return {
     schema: RETROSPECTIVE_STORE_SCHEMA,
@@ -242,6 +273,210 @@ function captureRetrospectiveLocked(
   };
 }
 
+/** Move an inbox record to active or archive with revision-protected triage metadata. */
+export function triageRetrospective(
+  workspaceRoot: string,
+  storeRoot: string,
+  id: string,
+  expectedRevision: string,
+  options: RetrospectiveTriageOptions,
+  observeWrite?: RetrospectiveObserveWrite,
+): RetrospectiveRecord {
+  if (options.destination !== "active" && options.destination !== "archive") {
+    throw new RetrospectiveTransitionError(id, "triage destination must be active or archive");
+  }
+  validateTriageOptions(id, options);
+  return transitionRetrospective(
+    workspaceRoot,
+    storeRoot,
+    id,
+    "inbox",
+    options.destination,
+    expectedRevision,
+    (record) => ({
+      ...record,
+      status: options.destination,
+      disposition: options.disposition,
+      owner_scope: options.owner_scope,
+      categories: [...options.categories],
+      next_action: options.next_action,
+      related_info: [...options.related_info],
+      ...(options.canonical === undefined ? {} : { canonical: options.canonical }),
+    }),
+    observeWrite,
+  );
+}
+
+/** Move an active record to archive with revision-protected resolution metadata. */
+export function archiveRetrospective(
+  workspaceRoot: string,
+  storeRoot: string,
+  id: string,
+  expectedRevision: string,
+  options: RetrospectiveArchiveOptions,
+  observeWrite?: RetrospectiveObserveWrite,
+): RetrospectiveRecord {
+  validateArchiveOptions(id, options);
+  return transitionRetrospective(
+    workspaceRoot,
+    storeRoot,
+    id,
+    "active",
+    "archive",
+    expectedRevision,
+    (record) => ({
+      ...record,
+      status: "archive",
+      action_disposition: options.action_disposition,
+      actioned_at: options.actioned_at,
+      backlog: [...options.backlog],
+      resolution_note: options.resolution_note,
+    }),
+    observeWrite,
+  );
+}
+
+function transitionRetrospective(
+  workspaceRoot: string,
+  storeRoot: string,
+  id: string,
+  sourceStatus: Extract<RetrospectiveStatus, "inbox" | "active">,
+  destination: Extract<RetrospectiveStatus, "active" | "archive">,
+  expectedRevision: string,
+  transform: (record: Retrospective) => Retrospective,
+  observeWrite?: RetrospectiveObserveWrite,
+): RetrospectiveRecord {
+  const root = validateStoreLocation(workspaceRoot, storeRoot, false);
+  loadRetrospectiveStore(root, workspaceRoot);
+  const release = acquireCaptureLock(root);
+  try {
+    loadRetrospectiveStore(root, workspaceRoot);
+    const sourceFile = retrospectivePath(root, sourceStatus, id);
+    const destinationFile = retrospectivePath(root, destination, id);
+    for (const status of RETROSPECTIVE_STATUSES) {
+      if (status === sourceStatus) continue;
+      const existingFile = retrospectivePath(root, status, id);
+      if (!targetExists(existingFile)) continue;
+      ensureRegular(existingFile, existingFile);
+      if (status === destination) throw new RetrospectiveAlreadyExistsError(id);
+      throw new RetrospectiveTransitionError(id, `records in ${status} cannot transition via this operation`);
+    }
+    if (!targetExists(sourceFile)) {
+      throw new RetrospectiveNotFoundError(id);
+    }
+    const source = readRecordFile(sourceFile, sourceStatus, id);
+    if (source.revision !== expectedRevision) {
+      throw new RetrospectiveRevisionConflictError(id, expectedRevision, source.revision);
+    }
+    if (targetExists(destinationFile)) {
+      ensureRegular(destinationFile, destinationFile);
+      throw new RetrospectiveAlreadyExistsError(id);
+    }
+
+    const indexSnapshots = [RETROSPECTIVE_INDEX_FILE, RETROSPECTIVE_READABLE_INDEX_FILE].map((name) => {
+      const target = path.join(root, name);
+      ensureRegular(target, target);
+      return { target, content: readFileSync(target) };
+    });
+    const next = parseRetrospective(transform(source.record));
+    if (typeof next === "string") throw new RetrospectiveParseError(id, next);
+    const destinationContent = Buffer.from(serializeRetrospective(next), "utf8");
+    const intendedIndexes = new Map<string, Buffer>();
+    let destinationCreated = false;
+    let sourceRemoved = false;
+    try {
+      writeFileSync(destinationFile, destinationContent, { encoding: "utf8", flag: "wx" });
+      destinationCreated = true;
+      unlinkSync(sourceFile);
+      sourceRemoved = true;
+      rebuildRetrospectiveIndexes(workspaceRoot, root, (target, intended) => {
+        intendedIndexes.set(target, intended);
+        observeWrite?.(target, intended);
+      });
+    } catch (error) {
+      try {
+        if (sourceRemoved) restoreSourceFile(sourceFile, source.content);
+      } catch {
+        // Preserve the original transition error; the source can be repaired by a later rebuild.
+      }
+      try {
+        if (destinationCreated) removeCreatedDestination(destinationFile, destinationContent);
+      } catch {
+        // Preserve the original transition error; the target can be diagnosed by the caller.
+      }
+      for (const snapshot of indexSnapshots) {
+        restoreDerivedSnapshot(snapshot.target, snapshot.content, intendedIndexes.get(snapshot.target));
+      }
+      throw error;
+    }
+
+    return {
+      ...next,
+      path: `${destination}/${id}.md`,
+      revision: revisionOf(destinationContent.toString("utf8")),
+    };
+  } finally {
+    release();
+  }
+}
+
+function readRecordFile(file: string, status: RetrospectiveStatus, id: string): { record: Retrospective; content: string; revision: string } {
+  ensureRegular(file, file);
+  let content: string;
+  try {
+    content = readFileSync(file, "utf8");
+  } catch (error) {
+    throw new RetrospectiveParseError(id, `cannot read file: ${formatFsError(error)}`);
+  }
+  const parsed = parseRetrospective(content);
+  if (typeof parsed === "string") throw new RetrospectiveParseError(id, parsed);
+  if (parsed.id !== id || parsed.status !== status) {
+    throw new RetrospectiveParseError(id, "record id or status does not match its path");
+  }
+  return { record: parsed, content, revision: revisionOf(content) };
+}
+
+function validateTriageOptions(id: string, options: RetrospectiveTriageOptions): void {
+  validateNonEmpty(id, "disposition", options.disposition);
+  validateNonEmpty(id, "owner_scope", options.owner_scope);
+  validateNonEmpty(id, "next_action", options.next_action);
+  validateStringList(id, "categories", options.categories);
+  validateStringList(id, "related_info", options.related_info);
+}
+
+function validateArchiveOptions(id: string, options: RetrospectiveArchiveOptions): void {
+  validateNonEmpty(id, "action_disposition", options.action_disposition);
+  validateNonEmpty(id, "actioned_at", options.actioned_at);
+  validateNonEmpty(id, "resolution_note", options.resolution_note);
+  validateStringList(id, "backlog", options.backlog);
+}
+
+function validateNonEmpty(id: string, field: string, value: string): void {
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new RetrospectiveParseError(id, `${field} must be a non-empty string`);
+  }
+}
+
+function validateStringList(id: string, field: string, values: string[]): void {
+  if (!Array.isArray(values) || values.some((value) => typeof value !== "string" || value.trim() === "")) {
+    throw new RetrospectiveParseError(id, `${field} must be an array of non-empty strings`);
+  }
+}
+
+function restoreSourceFile(file: string, content: string): void {
+  if (targetExists(file)) return;
+  writeFileSync(file, content, { encoding: "utf8", flag: "wx" });
+}
+
+function removeCreatedDestination(file: string, intended: Buffer): void {
+  try {
+    ensureRegular(file, file);
+    if (readFileSync(file).equals(intended)) unlinkSync(file);
+  } catch {
+    // Preserve the original transition error; check/rebuild can diagnose leftovers.
+  }
+}
+
 export type RetrospectiveReadResult = {
   records: RetrospectiveRecord[];
   diagnostics: RetrospectiveDiagnostic[];
@@ -368,7 +603,7 @@ export function rebuildRetrospectiveIndexes(
   for (const status of RETROSPECTIVE_STATUSES) {
     for (const id of listRetrospectiveIds(workspaceRoot, root, status)) {
       const record = readRetrospective(workspaceRoot, root, status, id);
-      records.push({
+      const indexRecord: RetrospectiveIndexRecord = {
         id: record.id,
         created_at: record.created_at,
         project: record.project,
@@ -378,7 +613,11 @@ export function rebuildRetrospectiveIndexes(
         harness: record.harness,
         model: record.model,
         path: `${status}/${id}.md`,
-      });
+      };
+      for (const field of ["disposition", "owner_scope", "categories", "next_action", "related_info", "canonical", "action_disposition", "actioned_at", "backlog", "resolution_note"] as const) {
+        if (record[field] !== undefined) (indexRecord as Record<string, unknown>)[field] = record[field];
+      }
+      records.push(indexRecord);
     }
   }
   const index: RetrospectiveIndex = { schema: RETROSPECTIVE_INDEX_SCHEMA, records };

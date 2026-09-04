@@ -10,6 +10,21 @@ export function retrospectiveFailure(io: CliIO, json: boolean, message: string):
   return 1;
 }
 
+export function resolveRetrospectiveInput<T>(
+  io: CliIO,
+  json: boolean,
+  resolve: (captured: CliIO) => T | null,
+): T | null {
+  let diagnostic: string | undefined;
+  const captured: CliIO = {
+    stdout: io.stdout,
+    stderr: (message) => { diagnostic = message; },
+  };
+  const result = resolve(captured);
+  if (result === null) retrospectiveFailure(io, json, diagnostic ?? "unable to resolve retrospective input");
+  return result;
+}
+
 export function formatRetrospectiveError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }

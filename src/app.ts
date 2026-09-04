@@ -21,6 +21,8 @@ import { reportShow } from "./useCases/reportShow.js";
 import { retrospectiveCapture } from "./useCases/retrospectiveCapture.js";
 import { retrospectiveList } from "./useCases/retrospectiveList.js";
 import { retrospectiveShow } from "./useCases/retrospectiveShow.js";
+import { retrospectiveTriage } from "./useCases/retrospectiveTriage.js";
+import { retrospectiveArchive } from "./useCases/retrospectiveArchive.js";
 import type { CliIO } from "./io.js";
 
 export const VERSION = "0.0.0";
@@ -58,6 +60,8 @@ Commands:
   retrospective capture       Capture a workflow retrospective in inbox
   retrospective list          List workflow retrospectives
   retrospective show <id>     Show a complete workflow retrospective
+  retrospective triage <id>   Classify an inbox retrospective into active or archive
+  retrospective archive <id>  Close an active retrospective into archive
 
 Project workflows will be added as vertical slices during the alpha phase.`;
 
@@ -180,6 +184,8 @@ export function runCli(args: readonly string[], io: CliIO, cwd = process.cwd()):
       if (sub === "capture") return retrospectiveCapture(forwarded, json, io, cwd);
       if (sub === "list") return retrospectiveList(forwarded, json, io, cwd);
       if (sub === "show") return retrospectiveShow(forwarded.find((arg) => !arg.startsWith("--")), json, io, cwd);
+      if (sub === "triage") return retrospectiveTriage(forwarded, json, io, cwd);
+      if (sub === "archive") return retrospectiveArchive(forwarded, json, io, cwd);
       io.stderr(`Unknown retrospective command: ${sub ?? ""}`);
       return 1;
     }

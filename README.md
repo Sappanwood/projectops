@@ -87,6 +87,11 @@ pops retrospective capture --trigger workflow-friction --harness codex-app --mod
   --project my-app --task MYA-002 --body-file retrospective.md --json
 pops retrospective list --status inbox --project my-app --json
 pops retrospective show <retrospective-id> --json
+pops retrospective triage <retrospective-id> --to active --expected-revision <revision> \
+  --disposition actionable --owner-scope project --category tooling \
+  --next-action "Improve the workflow." --json
+pops retrospective archive <retrospective-id> --expected-revision <revision> \
+  --action-disposition resolved --resolution-note "Handled." --json
 ```
 
 `retrospective.md` 的正文必须包含三个非空 Markdown section（heading 可使用 1 至 6 级）：
@@ -102,6 +107,8 @@ pops retrospective show <retrospective-id> --json
   无 ASCII slug 的标题使用每个 Unicode code point 的 `u<hex>` token
 - `pops report create/list/show`：从已批准且 materialized 的 Plan 生成 completed 或显式 partial Delivery Report，并查询已生成的 Report；create 需要至少一条 `--verification`
 - `pops retrospective capture/list/show`：将调用方提供的 trigger、harness、model、project/task provenance 和 Markdown 证据捕获到 workspace 级 inbox，并按 status/project/task 查询；capture 不自动分类或流转
+- `pops retrospective triage <id>`：使用 `--expected-revision` 将 inbox 记录分类到 active 或直接 archive，并保存 disposition、owner scope、categories、next action 和 related info
+- `pops retrospective archive <id>`：使用 `--expected-revision` 将 active 记录结案到 archive，并保存 action disposition、actioned_at、backlog links 和 resolution note；两类流转均不覆盖既有目标，成功后重建派生索引
 - 数据全部为可读文件：workspace manifest、Plan 是 JSON，backlog item 是 frontmatter + Markdown body
 - 单元测试、端到端 smoke、类型检查和构建
 
