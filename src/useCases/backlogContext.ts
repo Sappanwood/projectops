@@ -10,7 +10,7 @@ export function resolveStoreRoot(
   projectId: string,
   io: CliIO,
   cwd: string,
-): { root: string; manifest: BacklogStoreManifest } | null {
+): { root: string; manifest: BacklogStoreManifest; workspaceRoot: string } | null {
   const workspace = loadOrReport(cwd, io);
   if (workspace === null) return null;
   const { root, manifest } = workspace;
@@ -21,7 +21,7 @@ export function resolveStoreRoot(
   const roots = projectArtifactRoots(root, projectId, manifest.artifact_layout);
   const storeRoot = roots.backlog;
   try {
-    return { root: storeRoot, manifest: loadStore(storeRoot) };
+    return { root: storeRoot, manifest: loadStore(storeRoot), workspaceRoot: root };
   } catch (error) {
     if (error instanceof StoreNotFoundError) {
       io.stderr(`Error: ${error.message}. Run "pops backlog init ${projectId}" first.`);

@@ -20,7 +20,13 @@ export type PlanItem = {
   item_type: PlanItemType;
   priority: PlanPriority;
   body: string;
+  parent?: string;
   depends_on: string[];
+};
+
+export type PlanMaterialization = {
+  materialized_at: string;
+  mapping: Record<string, string>;
 };
 
 export type Plan = {
@@ -31,6 +37,7 @@ export type Plan = {
   items: PlanItem[];
   status: PlanStatus;
   approval?: PlanApproval;
+  materialization?: PlanMaterialization;
 };
 
 export type PlanDraft = {
@@ -81,10 +88,22 @@ export function parsePlan(value: unknown): Plan | string {
   if (status === "draft" && value.approval !== undefined) {
     return "draft plan must not have an approval record";
   }
+  if (status === "draft" && value.materialization !== undefined) {
+    return "draft plan must not have a materialization record";
+  }
   if (status === "approved") {
     const approval = parseApproval(value.approval);
     if (typeof approval === "string") return approval;
-    return { schema: PLAN_SCHEMA, id: value.id, ...draft, status, approval };
+    const materialization = parseMaterialization(value.materialization, draft.items);
+    if (typeof materialization === "string") return materialization;
+    return {
+      schema: PLAN_SCHEMA,
+      id: value.id,
+      ...draft,
+      status,
+      approval,
+      ...(materialization === undefined ? {} : { materialization }),
+    };
   }
   return { schema: PLAN_SCHEMA, id: value.id, ...draft, status };
 }
@@ -109,7 +128,13 @@ function validateDraft(value: unknown): string | null {
     if (problem !== null) return problem;
     keys.add(item.key);
   }
+  const itemsByKey = new Map(value.items.map((item) => [item.key, item]));
   for (const item of value.items) {
+    if (item.parent !== undefined) {
+      if (!keys.has(item.parent)) return `plan item parent not found: ${item.parent}`;
+      if (item.item_type === "epic") return `plan item ${item.key} cannot have a parent`;
+      if (itemsByKey.get(item.parent)?.item_type !== "epic") return `plan item parent must be an epic: ${item.parent}`;
+    }
     for (const dependency of item.depends_on ?? []) {
       if (!keys.has(dependency)) return `plan item dependency not found: ${dependency}`;
     }
@@ -127,6 +152,7 @@ function normalizeDraft(draft: PlanDraft): PlanDraft {
       item_type: item.item_type,
       priority: item.priority,
       body: item.body,
+      ...(item.parent === undefined ? {} : { parent: item.parent }),
       depends_on: item.depends_on ?? [],
     })),
   };
@@ -146,10 +172,34 @@ function validateItem(value: unknown, keys: Set<string>): string | null {
     return `plan item ${value.key} priority must be one of: ${PLAN_PRIORITIES.join(", ")}`;
   }
   if (typeof value.body !== "string") return `plan item ${value.key} body must be a string`;
+  if (value.parent !== undefined && (typeof value.parent !== "string" || !/^[a-z][a-z0-9-]*$/.test(value.parent))) {
+    return `plan item ${value.key} parent must be a local key`;
+  }
   if (value.depends_on !== undefined && (!Array.isArray(value.depends_on) || !value.depends_on.every((dependency) => typeof dependency === "string"))) {
     return `plan item ${value.key} depends_on must be an array of keys`;
   }
   return null;
+}
+
+function parseMaterialization(value: unknown, items: PlanItem[]): PlanMaterialization | string | undefined {
+  if (value === undefined) return undefined;
+  if (!isRecord(value) || typeof value.materialized_at !== "string" || value.materialized_at.trim() === "") {
+    return "plan materialization must have a timestamp";
+  }
+  if (!isRecord(value.mapping)) return "plan materialization mapping must be an object";
+  const keys = new Set(items.map((item) => item.key));
+  const mapping: Record<string, string> = {};
+  for (const [key, id] of Object.entries(value.mapping)) {
+    if (!keys.has(key)) return `plan materialization mapping has unknown key: ${key}`;
+    if (typeof id !== "string" || !/^[A-Z0-9]+-\d{3,}$/.test(id)) {
+      return `plan materialization mapping has invalid backlog id for ${key}`;
+    }
+    mapping[key] = id;
+  }
+  if (Object.keys(mapping).length !== items.length) {
+    return "plan materialization mapping must include every plan item";
+  }
+  return { materialized_at: value.materialized_at, mapping };
 }
 
 function parseApproval(value: unknown): PlanApproval | string {

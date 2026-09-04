@@ -12,6 +12,7 @@ import { planList } from "./useCases/planList.js";
 import { planShow } from "./useCases/planShow.js";
 import { planValidate } from "./useCases/planValidate.js";
 import { planApprove } from "./useCases/planApprove.js";
+import { planMaterialize } from "./useCases/planMaterialize.js";
 import type { CliIO } from "./io.js";
 
 export const VERSION = "0.0.0";
@@ -40,6 +41,7 @@ Commands:
   plan show <project> <plan>  Show a complete Plan
   plan validate <project> <plan>  Validate a Plan
   plan approve <project> <plan> --review-note <note>  Approve a validated Plan
+  plan materialize <project> <plan>  Materialize an approved Plan into Backlog
 
 Project workflows will be added as vertical slices during the alpha phase.`;
 
@@ -119,6 +121,9 @@ export function runCli(args: readonly string[], io: CliIO, cwd = process.cwd()):
       if (sub === "approve") {
         const [planId, ...approveArgs] = forwarded;
         return planApprove(first, planId, approveArgs, json, io, cwd);
+      }
+      if (sub === "materialize") {
+        return planMaterialize(first, forwarded.find((arg) => !arg.startsWith("--")), json, io, cwd);
       }
       io.stderr(`Unknown plan command: ${sub ?? ""}`);
       return 1;

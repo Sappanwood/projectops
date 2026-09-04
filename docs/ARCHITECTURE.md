@@ -25,8 +25,8 @@ flowchart TD
     ReadModel --> Web
 ```
 
-当前 Repo 已落地 Workspace/Catalog、Backlog 与 Plan authoring/query/validation/approval 纵向切片；Plan
-materialization，以及 Report、Docs、Retrospective、Workbench 仍是目标域，上图是新增纵向能力时必须保持的目标依赖方向。
+当前 Repo 已落地 Workspace/Catalog、Backlog 与 Plan authoring/query/validation/approval/materialization
+纵向切片；Report、Docs、Retrospective、Workbench 仍是目标域，上图是新增纵向能力时必须保持的目标依赖方向。
 
 ## 核心技术栈
 
@@ -69,6 +69,7 @@ src/
     workspaceStore.ts     filesystem adapter：发现、读写 workspace manifest
   backlog/
     store.ts              Backlog domain：store manifest schema
+    add.ts                Backlog application helper：CLI 与 Plan materialization 共享 item 创建规则
     item.ts               Backlog domain：item schema、frontmatter 序列化、revision
     storeFs.ts            filesystem adapter：store 创建与读取
     itemFs.ts             filesystem adapter：item 文件读写
@@ -84,18 +85,19 @@ src/
 - backlog item：`items/<ID>.md`，YAML 风格 frontmatter + Markdown body；`revision` 是其余内容的
   sha256 前 8 位，用于 `update --expected-revision` 的冲突保护。
 - `INDEX.md` 是从 item 文件重建的可读 projection；add 和真实状态变更后同步刷新，no-op 不改写。
-- Plan：`plans/plan-<title-slug>.json`，schema 为 `plan/Plan@1`；包含标题、目标与带局部 key/依赖的 item 草案，
-  以及 `status: draft|approved`；批准 Plan 以单个 `approval` 对象记录 `approved_at` 和 `review_note`。
+- Plan：`plans/plan-<title-slug>.json`，schema 为 `plan/Plan@1`；包含标题、目标与带局部 key、parent/依赖的 item 草案，
+  以及 `status: draft|approved`；批准 Plan 以单个 `approval` 对象记录 `approved_at` 和 `review_note`，materialize 后以
+  `materialization.mapping` 记录局部 key 到 Backlog ID 的映射以及 `materialized_at`。
   无 ASCII slug 的标题使用 Unicode code point 的 `u<hex>` token。create 验证 plans descriptor 为精确 schema type，
   并在写入前验证 plans root 的 canonical 路径仍在 workspace 内；随后使用 `wx` no-clobber 写入。list/show 读取同一
-  artifact；当前不 materialize Backlog。
+  artifact；`plan materialize` 直接调用 Backlog application helper，按拓扑顺序创建同一 project 的条目，并在完整成功后更新 Plan。
 
 ## 当前 CLI 流程
 
 1. `src/cli.ts` 把参数、I/O adapter 和 cwd 交给 `runCli`。
-2. `src/app.ts` 路由到命令：`init`、`project add|list|doctor`、`backlog init|add|list|show|update`、`plan create|list|show|validate|approve`。
-3. 每个子命令对应 `src/useCases/` 下的一个 use case，编排 domain 逻辑与 filesystem adapter；Plan 的 create/list/show/validate/approve
-   共享同一 `plan/` domain 和 filesystem adapter，approve 只在读取校验通过的 draft 后写入批准记录。
+2. `src/app.ts` 路由到命令：`init`、`project add|list|doctor`、`backlog init|add|list|show|update`、`plan create|list|show|validate|approve|materialize`。
+3. 每个子命令对应 `src/useCases/` 下的一个 use case，编排 domain 逻辑与 filesystem adapter；Plan 的 create/list/show/validate/approve/materialize
+   共享同一 `plan/` domain 和 filesystem adapter，materialize 通过 `backlog/add.ts` 复用 Backlog item 创建规则，不启动内部 CLI subprocess。
 4. use case 以退出码表达成功、明确错误或 unknown 命令；错误信息写 stderr，机器可读结果经 `--json` 写 stdout。
 5. 后续 command 按纵向用例加入对应 domain module，不在入口文件堆叠存储逻辑。
 

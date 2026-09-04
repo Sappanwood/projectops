@@ -4,25 +4,8 @@ import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 
 import type { CliIO } from "../io.js";
-import {
-  CATEGORIES,
-  ITEM_TYPES,
-  PRIORITIES,
-  computeRevision,
-  isItemIdForPrefix,
-  nextItemId,
-  type BacklogItem,
-  type Category,
-  type ItemType,
-  type Priority,
-} from "../backlog/item.js";
-import {
-  ItemNotFoundError,
-  listItemIds,
-  readItemFile,
-  rebuildIndex,
-  writeItemFile,
-} from "../backlog/itemFs.js";
+import { addBacklogItem, BacklogAddError } from "../backlog/add.js";
+import { CATEGORIES, ITEM_TYPES, PRIORITIES, type Category, type ItemType, type Priority } from "../backlog/item.js";
 import { resolveStoreRoot } from "./backlogContext.js";
 
 type AddOptions = {
@@ -94,42 +77,7 @@ export function backlogAdd(
     return 1;
   }
 
-  const parentId = values["parent-id"] ?? null;
-  if (parentId !== null) {
-    if (itemType === "epic") {
-      io.stderr("Error: an epic cannot have a parent");
-      return 1;
-    }
-    if (!isItemIdForPrefix(parentId, store.manifest.id_prefix)) {
-      io.stderr(`Error: invalid item id: ${parentId}`);
-      return 1;
-    }
-    try {
-      const parent = readItemFile(store.root, parentId);
-      if (parent.item_type !== "epic") {
-        io.stderr(`Error: parent ${parentId} is not an epic`);
-        return 1;
-      }
-    } catch (error) {
-      if (error instanceof ItemNotFoundError) {
-        io.stderr(`Error: parent item not found: ${parentId}`);
-        return 1;
-      }
-      throw error;
-    }
-  }
-
   const dependsOn = values["depends-on"] === undefined ? [] : values["depends-on"].split(",");
-  for (const depId of dependsOn) {
-    if (!isItemIdForPrefix(depId, store.manifest.id_prefix)) {
-      io.stderr(`Error: invalid item id: ${depId}`);
-      return 1;
-    }
-    if (!listItemIds(store.root).includes(depId)) {
-      io.stderr(`Error: dependency item not found: ${depId}`);
-      return 1;
-    }
-  }
 
   let body = values.body ?? "";
   if (values["body-file"] !== undefined) {
@@ -143,37 +91,29 @@ export function backlogAdd(
     body = io.stdin?.() ?? "";
   }
 
-  const today = new Date().toISOString().slice(0, 10);
-  const id = nextItemId(store.manifest.id_prefix, listItemIds(store.root));
-  const item: BacklogItem = {
-    id,
-    project: store.manifest.project_id,
-    title,
-    item_type: itemType,
-    parent_id: parentId,
-    category: values.category as Category,
-    priority: values.priority as Priority,
-    effort: "M",
-    impact: "medium",
-    status: "todo",
-    source: "",
-    fixed_at: null,
-    tags: [],
-    depends_on: dependsOn,
-    related_docs: [],
-    created: today,
-    updated: today,
-    revision: "",
-    body,
-  };
-  item.revision = computeRevision(item);
-  writeItemFile(store.root, item);
-  rebuildIndex(store.root);
+  let item;
+  try {
+    item = addBacklogItem(store.root, store.manifest, {
+      title,
+      category: values.category as Category,
+      priority: values.priority as Priority,
+      item_type: itemType,
+      parent_id: values["parent-id"] ?? null,
+      depends_on: dependsOn,
+      body,
+    });
+  } catch (error) {
+    if (error instanceof BacklogAddError) {
+      io.stderr(`Error: ${error.message}`);
+      return 1;
+    }
+    throw error;
+  }
 
   if (json) {
     io.stdout(JSON.stringify({ ok: true, item }));
   } else {
-    io.stdout(`Added ${id}: ${title}`);
+    io.stdout(`Added ${item.id}: ${title}`);
   }
   return 0;
 }
