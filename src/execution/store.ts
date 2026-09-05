@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, writeFi
 import path from 'node:path';
 import { loadWorkspace } from '../catalog/workspaceStore.js';
 import { isWithinWorkspace, projectArtifactRoots, resolveProjectPath } from '../catalog/workspace.js';
+import { readNodeWorkspace } from '../planRun/worktrees.js';
 import { EXECUTION_SCHEMA, type ExecutionAttempt } from './attempt.js';
 export class ExecutionError extends Error {
     constructor(public code: 'EXECUTION_INVALID' | 'EXECUTION_NOT_FOUND' | 'EXECUTION_CONFLICT' | 'RUNNER_UNAVAILABLE' | 'REVISION_MISMATCH', message: string) { super(message); }
@@ -50,6 +51,8 @@ export function readAttempt(root: string, attemptId: string, projectId?: string)
         a.verifications.some(v => !v || !['passed','failed'].includes(v.outcome) || typeof v.command !== 'string' ||
           typeof v.evidence_ref !== 'string' || typeof v.evidence_digest !== 'string' || !/^[a-f0-9]{64}$/.test(v.evidence_digest) || !v.snapshot?.digest))
         throw new ExecutionError('EXECUTION_INVALID', 'Execution scope or lifecycle data is invalid.');
+    if (a.checkout !== undefined && (!a.checkout || !/^run-[a-f0-9-]{36}$/.test(a.checkout.run_id) || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,80}$/.test(a.checkout.node_id)))
+        throw new ExecutionError('EXECUTION_INVALID', 'Execution checkout reference is invalid.');
     if (a.progress !== undefined && (!a.progress || !Array.isArray(a.progress.events) ||
         (a.progress.session_id !== undefined && typeof a.progress.session_id !== 'string') ||
         a.progress.events.some(e => !e || !['text', 'tool', 'status', 'session'].includes(e.type) ||
@@ -103,4 +106,8 @@ export function validateAcceptanceTargets(c: ReturnType<typeof context>, itemId:
         !isWithinWorkspace(items, item) || !isWithinWorkspace(backlog, index)) {
         throw new ExecutionError('EXECUTION_INVALID', 'Acceptance targets resolve outside their declared backlog store.');
     }
+}
+
+export function executionRepo(c: ReturnType<typeof context>, a: Pick<ExecutionAttempt, 'checkout'>): string {
+    return a.checkout ? readNodeWorkspace(c.workspace, c.repo, a.checkout.run_id, a.checkout.node_id).node.dir : c.repo;
 }

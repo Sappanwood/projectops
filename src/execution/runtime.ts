@@ -1,7 +1,7 @@
 import { createExecution, executionResult, finishExecution, listExecutions, mutateExecution, showExecution, type AttemptMutation, type CreateExecutionRequest, type ExecutionQuery, type AttemptDetail } from '../application/executionApi.js';
 import { applicationFailure, applicationSuccess, type ApplicationResult } from '../application/result.js';
 import { activeStates, type ExecutionAttempt, type ExecutionEvent } from './attempt.js';
-import { context, ExecutionError, saveProgress } from './store.js';
+import { context, executionRepo, ExecutionError, saveProgress } from './store.js';
 export type RunnerResult = {
     outcome: 'succeeded' | 'failed' | 'stopped';
     summary: string;
@@ -25,13 +25,18 @@ export class ExecutionRuntime {
     }>();
     constructor(private runner?: Runner) { }
     get available() { return this.runner !== undefined; }
-    start(q: CreateExecutionRequest): ApplicationResult<AttemptDetail> {
+    start(q: CreateExecutionRequest): ApplicationResult<AttemptDetail> { return this.launch(q); }
+    startManaged(q: CreateExecutionRequest, checkout: NonNullable<ExecutionAttempt['checkout']>): ApplicationResult<AttemptDetail> { return this.launch(q, checkout); }
+    private launch(q: CreateExecutionRequest, checkout?: ExecutionAttempt['checkout']): ApplicationResult<AttemptDetail> {
         const listed = listExecutions({ workspaceDir: q.workspaceDir, projectId: q.projectId });
         if (!listed.ok)
             return listed;
-        const active = listed.data.attempts.find(a => activeStates.includes(a.state));
+        const allActive = listed.data.attempts.filter(a => activeStates.includes(a.state));
+        const active = checkout ? allActive.find(a => a.item_id === q.itemId) : allActive[0];
+        if (checkout && (allActive.some(a => a.state === 'unknown' || a.checkout?.run_id !== checkout.run_id) || (!active && allActive.length >= 2)))
+            return applicationFailure('EXECUTION_CONFLICT', 'Managed execution capacity or ownership is occupied.');
         if (active) {
-            if (active.state === 'unknown' || active.item_id !== q.itemId)
+            if (active.state === 'unknown' || active.item_id !== q.itemId || (checkout && active.checkout?.node_id !== checkout.node_id))
                 return applicationFailure('EXECUTION_CONFLICT', 'Existing work is awaiting manual confirmation.');
             return applicationSuccess({ attempt: active, diagnostics: [] });
         }
@@ -39,12 +44,14 @@ export class ExecutionRuntime {
             return applicationFailure('RUNNER_UNAVAILABLE', 'No runner is configured. Record externally executed work through the CLI.');
         const resolved = executionResult(() => context(q.workspaceDir, q.projectId));
         if (!resolved.ok) return resolved;
-        const created = createExecution({ ...q, origin: 'runtime' });
+        const target = executionResult(() => executionRepo(resolved.data, checkout ? { checkout } : {}));
+        if (!target.ok) return target;
+        const created = createExecution({ ...q, origin: 'runtime' }, checkout);
         if (!created.ok)
             return created;
         const a = created.data.attempt;
         try {
-            const handle = this.runner.start(structuredClone(a), { repo: resolved.data.repo, workspaceDir: resolved.data.workspace, emit: event => this.append(q, a.id, event) });
+            const handle = this.runner.start(structuredClone(a), { repo: target.data, workspaceDir: resolved.data.workspace, emit: event => this.append(q, a.id, event) });
             this.handles.set(a.id, handle);
             void handle.completion.then(result => this.complete(q, a.id, result), () => this.complete(q, a.id, { outcome: 'failed', summary: 'Runner failed.' }));
         }

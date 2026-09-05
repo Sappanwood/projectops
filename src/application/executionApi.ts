@@ -1,9 +1,10 @@
+import { execFileSync } from 'node:child_process';
 import { computePlanRevision } from './planRevision.js';
 import { readPlan } from '../plan/planFs.js';
 import { showBacklogItem } from './backlogApi.js';
 import { applicationFailure, applicationSuccess, type ApplicationResult } from './result.js';
 import { activeStates, EXECUTION_SCHEMA, type ExecutionAttempt } from '../execution/attempt.js';
-import { context, evidence, evidenceDigest, evidenceReadable, ExecutionError, id, listAttempts, readAttempt, saveAttempt, validateAcceptanceTargets } from '../execution/store.js';
+import { context, executionRepo, evidence, evidenceDigest, evidenceReadable, ExecutionError, id, listAttempts, readAttempt, saveAttempt, validateAcceptanceTargets } from '../execution/store.js';
 import { captureSnapshot } from '../execution/snapshot.js';
 import { computeRevision } from '../backlog/item.js';
 import { rebuildIndex, updateItemFile } from '../backlog/itemFs.js';
@@ -39,9 +40,10 @@ function detail(root: string, attempt: ExecutionAttempt): AttemptDetail { return
 export function listExecutions(q: ExecutionQuery) { return executionResult(() => { const c = context(q.workspaceDir, q.projectId); return { attempts: listAttempts(c.root, q.projectId).filter(a => !q.itemId || a.item_id === q.itemId) }; }); }
 export function showExecution(q: AttemptQuery) { return executionResult(() => { const c = context(q.workspaceDir, q.projectId); const a = readAttempt(c.root, q.attemptId, q.projectId); if (q.itemId && a.item_id !== q.itemId)
     throw new ExecutionError('EXECUTION_NOT_FOUND', 'Attempt does not belong to this task.'); return detail(c.root, a); }); }
-export function createExecution(q: CreateExecutionRequest) {
+export function createExecution(q: CreateExecutionRequest, checkout?: ExecutionAttempt['checkout']) {
     return executionResult(() => {
         const c = context(q.workspaceDir, q.projectId);
+        if (checkout) executionRepo(c, { checkout });
         const shown = showBacklogItem({ ...q, itemId: q.itemId });
         if (!shown.ok)
             throw new ExecutionError('EXECUTION_INVALID', shown.error.message);
@@ -61,13 +63,14 @@ export function createExecution(q: CreateExecutionRequest) {
         if (item.status === 'done' || item.status === 'cancelled')
             throw new ExecutionError('EXECUTION_CONFLICT', 'Completed or cancelled task cannot start work.');
         const previous = q.retryOf ? readAttempt(c.root, q.retryOf, q.projectId) : undefined;
-        if (previous && (previous.item_id !== q.itemId || activeStates.includes(previous.state) || previous.acceptance?.decision === 'accepted'))
+        if (previous && (previous.item_id !== q.itemId || activeStates.includes(previous.state) || (previous.acceptance?.decision === 'accepted' && !(checkout && previous.checkout))))
             throw new ExecutionError('EXECUTION_CONFLICT', 'Retry requires an ended, unaccepted attempt of this task.');
         if (attempts.length && !previous)
             throw new ExecutionError('EXECUTION_CONFLICT', 'Existing history requires an explicit retryOf attempt.');
         if (previous && attempts.some(a => a.retry_of === previous.id))
             throw new ExecutionError('EXECUTION_CONFLICT', 'This attempt already has a retry.');
         const attempt: ExecutionAttempt = { schema: EXECUTION_SCHEMA, id: id(), execution_id: previous?.execution_id ?? id(), retry_of: previous?.id ?? null, project_id: q.projectId, item_id: q.itemId, task_ref: `project-ops:backlog/items/${q.itemId}.md`, revision: '', origin: q.origin ?? 'external', input: { item: structuredClone(item), instructions: q.instructions ?? '', plan }, started_at: new Date().toISOString(), ended_at: null, state: 'running', summary: '', snapshot: null, verifications: [], acceptance: null };
+        if (checkout) attempt.checkout = structuredClone(checkout);
         return detail(c.root, saveAttempt(c.root, attempt, true));
     });
 }
@@ -95,7 +98,7 @@ export function finishExecution(q: AttemptMutation & {
         a.state = q.outcome;
         a.ended_at = new Date().toISOString();
         a.summary = q.summary;
-        a.snapshot = captureSnapshot(c.repo);
+        a.snapshot = captureSnapshot(executionRepo(c, a));
     });
 }
 export function verifyExecution(q: AttemptMutation & {
@@ -106,7 +109,7 @@ export function verifyExecution(q: AttemptMutation & {
     return mutateExecution(q, (a, c) => {
         if (activeStates.includes(a.state) || a.acceptance || !q.command?.trim() || !q.evidence?.trim() || !['passed', 'failed'].includes(q.outcome))
             throw new ExecutionError('EXECUTION_INVALID', 'Verification requires an ended, undecided attempt, command and durable evidence.');
-        const snapshot = captureSnapshot(c.repo);
+        const snapshot = captureSnapshot(executionRepo(c, a));
         a.snapshot = snapshot;
         a.verifications.push({ command: q.command, outcome: q.outcome, at: new Date().toISOString(), snapshot, evidence_ref: evidence(c.root, a.id, q.evidence), evidence_digest: evidenceDigest(q.evidence) });
     });
@@ -132,7 +135,10 @@ export function decideExecution(q: AttemptMutation & {
                 throw new ExecutionError('EXECUTION_CONFLICT', 'All current verification commands must pass with readable evidence.');
             if (a.state !== 'succeeded' || !v || v.outcome !== 'passed' || !evidenceReadable(c.root, v.evidence_ref, v.evidence_digest))
                 throw new ExecutionError('EXECUTION_CONFLICT', 'Acceptance requires successful execution and readable passing evidence.');
-            if (captureSnapshot(c.repo).digest !== v.snapshot.digest)
+            const repo = executionRepo(c, a);
+            if (a.checkout && execFileSync('git', ['status', '--porcelain'], { cwd: repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim())
+                throw new ExecutionError('EXECUTION_CONFLICT', 'Managed work must be committed before acceptance; submit the changes, then verify that commit.');
+            if (captureSnapshot(repo).digest !== v.snapshot.digest)
                 throw new ExecutionError('EXECUTION_CONFLICT', 'Code changed since verification; verify again.');
             if (shown.data.item.revision !== a.input.item.revision)
                 throw new ExecutionError('EXECUTION_CONFLICT', 'Task input changed; create a new attempt for the current task.');

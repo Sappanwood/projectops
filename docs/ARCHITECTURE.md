@@ -389,3 +389,12 @@ Pi 0.85.0 发布包的根入口静态引用 pi-server，但未声明依赖；项
 运行状态为 ready/running/paused/completed/stopped，节点为 pending/running/awaiting_acceptance/accepted/failed/unknown。生命周期观察在输入漂移时仍更新，输入和基线验证控制是否继续派发。纯查询不派发，创建 ready 不自动启动；容量一的调度在用户显式启动后进行。
 已验收节点可使用其历史快照证据，run 当前 baseline 必须等于当前 Repo；未开始节点仍核对冻结 revision。完成复用需要当前有效 accepted attempt、完整验证证据和人工 reuse note。
 Report 写入先按当前 Plan/Backlog 规则派生，再核对最新 matching run 的实际输入、基线和证据；未确认的 run 即使 Backlog 手动 done 也不能生成 completed。
+
+
+## 并行 runtime 与 Git 工作区
+
+`planRun/parallelRun.ts` 定义 `execution/ParallelRun@1` 快照和容量/资源就绪选择；`application/parallelRunApi.ts` 负责输入核对、派发、验收观察、显式控制与串行落地。串行和并行 runtime 复用 `ExecutionRuntime`，managed checkout 由 ownership 解析，不接受浏览器路径。
+
+并行记录保存于 execution root 的 `parallel-runs/`；`planRun/worktrees.ts` 在 workspace runtime 下为 run 建专用 integration、节点和候选 worktree。Git expected-ref 更新约束正常并发，metadata 和静态 containment 防止误用其他目录。受支持边界是受信任本地 Linux workspace、静态 symlink 检查和正常并发 no-clobber；不承诺同用户恶意 ancestor-swap resistance，不依赖 native helper。
+
+每次落地先重验节点当前快照和接受证据，再从当前 integration head 创建独立候选，执行固定 argv 验证命令并保存 verification/landing JSON。只有验证成功、integration checkout 仍 clean/detached 且 ref CAS 成功时推进 head。失败候选、旧接受记录与新返工尝试分别保留。Report 发布再次校验实际 run/evidence/ref，不依赖 UI 状态推断完成。

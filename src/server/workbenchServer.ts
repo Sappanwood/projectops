@@ -1,3 +1,6 @@
+import { DEFAULT_PARALLEL_COMMANDS } from '../planRun/commands.js';
+import { handleParallelRunRoute } from './parallelRunRoutes.js';
+import { listParallelRuns, ParallelRunRuntime } from '../application/parallelRunApi.js';
 import { handlePlanRunRoute } from './planRunRoutes.js';
 import { listPlanRuns, PlanRunRuntime } from '../application/planRunApi.js';
 import { getExecutionEvidence } from '../application/executionEvidence.js';
@@ -55,6 +58,7 @@ export type StartWorkbenchServerOptions = {
   port?: number;
   staticDir?: string;
   runner?: Runner;
+  parallelCommands?: string[][];
 };
 
 export type WorkbenchServer = {
@@ -71,6 +75,8 @@ type RequestContext = {
   staticRoot?: string;
   runtime: ExecutionRuntime;
   planRuns: PlanRunRuntime;
+  parallelRuns: ParallelRunRuntime;
+  parallelCommands: string[][];
 };
 
 type HttpErrorCode =
@@ -140,9 +146,13 @@ export async function startWorkbenchServer(
     runtime.recover({ workspaceDir: options.workspaceDir, projectId: project.id });
   }
   const planRuns = new PlanRunRuntime(runtime);
+  const parallelRuns = new ParallelRunRuntime(runtime);
   const timer = setInterval(() => {
     for (const project of workspace.data.projects) {
       const q = { workspaceDir: options.workspaceDir, projectId: project.id };
+      const parallel = listParallelRuns(q);
+      if (parallel.ok) for (const run of parallel.data.runs) if (run.state === "running" || run.state === "paused" || (run.state === "ready" && run.controls.at(-1)?.action === "resume"))
+        parallelRuns.advance({ ...q, runId: run.id, expectedRevision: run.revision });
       const listed = listPlanRuns(q);
       if (!listed.ok) continue;
       for (const run of listed.data.runs) if (run.state === "running" || run.state === "paused" || (run.state === "ready" && run.controls.at(-1)?.action === "resume"))
@@ -152,6 +162,8 @@ export async function startWorkbenchServer(
   timer.unref();
   context = {
     planRuns,
+    parallelRuns,
+    parallelCommands: options.parallelCommands ?? DEFAULT_PARALLEL_COMMANDS,
     workspaceDir: options.workspaceDir,
     origin,
     runtime,
@@ -293,6 +305,14 @@ async function handleRequest(
       else sendApplicationResult(response, showDocument({...input, path: documentPath}));
       return;
     }
+
+    if (await handleParallelRunRoute(segments, request.method, context.workspaceDir, context.parallelRuns, context.parallelCommands, {
+      method: expected => requireMethod(request, expected), noQuery: () => requireNoQuery(url),
+      query: name => singleQueryValue(url, name),
+      body: async keys => { requireAllowedOrigin(request, context.origin); requireJsonContentType(request); return readJsonRecord(request, keys); },
+      send: result => sendApplicationResult(response, result),
+      invalid: message => { throw new HttpError(400, "INVALID_REQUEST", message); },
+    })) return;
 
     if (await handlePlanRunRoute(segments, request.method, context.workspaceDir, context.planRuns, {
       method: expected => requireMethod(request, expected), noQuery: () => requireNoQuery(url),

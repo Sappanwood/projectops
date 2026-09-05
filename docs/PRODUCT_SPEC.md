@@ -234,3 +234,12 @@ Pi 任务按登记 Repo 执行，同项目已有其他 running/stop_requested/un
 失败暂停整个 run；暂停不会自动中止当前任务，停止当前会请求中止并暂停派发。刷新重读持久状态；服务重启后未知工作须先核对停止，不能自动重派。
 旧 Plan 修订不会改写 run 快照，输入变更会暂停并显示原因；可确认旧工作停止后终止 run，再创建新范围，保留历史 attempt 的 retry_of。当前服务仅支持一个执行 owner。
 Plan 页面展示最近运行、节点依赖与尝试链接、原始快照、运行控制和人工说明；Report 必须通过运行证据资格，未确认不能宣称完成。
+
+
+## 有限并行执行与交付
+
+Repo 内最多两个节点并行，许可来自 Plan 的 `execution_policy.max_parallel=2` 和节点 `parallel/resources`，缺省串行。每次执行固定 Plan/任务快照、依赖、资源与验证命令。上游已接受但尚未落地不解锁下游；同资源节点互斥。
+
+节点在各自 worktree 工作，宿主提交成果、验证和验收后，系统串行构造最新 integration head 上的合并候选。验证通过且 expected-ref 未变才推进专用 integration ref。冲突、检查失败和 ref 漂移均保留证据并暂停派发；未知工作需要人工核对。返工产生新尝试与 checkout，不覆盖已接受的历史。
+
+并行范围完成表示所有节点已验证、验收、落地，实际 ref 与落地证据仍匹配。交付显示最终 ref/head，不自动修改用户 checkout、合并用户分支或 push。仅 Backlog 状态不能代替执行证据生成完成 Report。

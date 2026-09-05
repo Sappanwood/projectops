@@ -1,0 +1,25 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import {mkdtempSync,mkdirSync,writeFileSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import path from 'node:path';
+import {execFileSync} from 'node:child_process';
+import {runCli} from '../src/app.js';
+import {readPlan} from '../src/plan/planFs.js';
+import {computePlanRevision} from '../src/application/planRevision.js';
+import {createPlanRun} from '../src/application/planRunApi.js';
+import {createParallelRun} from '../src/application/parallelRunApi.js';
+import {writeGeneratedReport} from '../src/useCases/reportGenerate.js';
+test('a ready parallel run blocks a competing serial owner before either dispatches',()=>{
+ const workspaceDir=mkdtempSync(path.join(tmpdir(),'run-modes-'));const cli=(args:string[])=>assert.equal(runCli(args,{stdout(){},stderr(){}},workspaceDir),0);
+ cli(['init']);const repo=path.join(workspaceDir,'repo');mkdirSync(repo);execFileSync('git',['init'],{cwd:repo,stdio:'ignore'});
+ execFileSync('git',['-c','user.name=Fixture','-c','user.email=fixture@example.test','commit','--allow-empty','-m','base'],{cwd:repo,stdio:'ignore'});
+ cli(['project','add','repo']);cli(['backlog','init','repo']);const root=path.join(workspaceDir,'ops/repo/plans');
+ writeFileSync(path.join(root,'plan-owner.json'),JSON.stringify({schema:'plan/Plan@1',id:'plan-owner',title:'Owner',goal:'One owner',status:'approved',approval:{approved_at:new Date().toISOString(),review_note:'fixture'},execution_policy:{max_parallel:2},items:[{key:'a',title:'A',item_type:'task',priority:'P1',body:'A',parallel:true,depends_on:[]}]}));
+ cli(['plan','materialize','repo','plan-owner']);const q={workspaceDir,projectId:'repo',planId:'plan-owner',expectedRevision:computePlanRevision(readPlan(root,'plan-owner'))};
+ const parallel=createParallelRun({...q,baseCommit:execFileSync('git',['rev-parse','HEAD'],{cwd:repo,encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim(),commands:[['true']]});assert.equal(parallel.ok,true,JSON.stringify(parallel));
+ assert.equal(createPlanRun(q).ok,false);
+ cli(['backlog','update','repo','REP-001','--status','done']);
+ const input={workspaceRoot:workspaceDir,plansRoot:root,backlogRoot:path.join(workspaceDir,'ops/repo/backlog'),reportsRoot:path.join(workspaceDir,'ops/repo/reports'),projectId:'repo',planId:'plan-owner',verification:['fixture']};
+ assert.throws(()=>writeGeneratedReport(input),/parallel|run|运行/i);
+});

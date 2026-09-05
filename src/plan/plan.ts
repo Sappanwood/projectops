@@ -22,6 +22,8 @@ export type PlanItem = {
   body: string;
   parent?: string;
   depends_on: string[];
+  parallel?: boolean;
+  resources?: string[];
 };
 
 export type PlanMaterialization = {
@@ -38,12 +40,14 @@ export type Plan = {
   status: PlanStatus;
   approval?: PlanApproval;
   materialization?: PlanMaterialization;
+  execution_policy?: { max_parallel: 2 };
 };
 
 export type PlanDraft = {
   title: string;
   goal: string;
   items: PlanItem[];
+  execution_policy?: { max_parallel: 2 };
 };
 
 export function planIdForTitle(title: string): string | null {
@@ -78,6 +82,7 @@ export function parsePlan(value: unknown): Plan | string {
     title: value.title,
     goal: value.goal,
     items: value.items,
+    ...(value.execution_policy === undefined ? {} : { execution_policy: value.execution_policy }),
   });
   if (typeof draft === "string") return draft;
   const statusValue = value.status === undefined ? "draft" : value.status;
@@ -137,6 +142,7 @@ function validateDraft(value: unknown): string | null {
   if (typeof value.title !== "string" || value.title === "") return "plan title must be a non-empty string";
   if (typeof value.goal !== "string" || value.goal === "") return "plan goal must be a non-empty string";
   if (!Array.isArray(value.items)) return "plan items must be an array";
+  if (value.execution_policy !== undefined && (!isRecord(value.execution_policy) || value.execution_policy.max_parallel !== 2)) return "execution_policy.max_parallel must be 2 when parallel execution is explicitly enabled";
 
   const keys = new Set<string>();
   for (const item of value.items) {
@@ -164,6 +170,7 @@ function normalizeDraft(draft: PlanDraft): PlanDraft {
   return {
     title: draft.title,
     goal: draft.goal,
+    ...(draft.execution_policy === undefined ? {} : { execution_policy: { max_parallel: 2 as const } }),
     items: draft.items.map((item) => ({
       key: item.key,
       title: item.title,
@@ -172,6 +179,8 @@ function normalizeDraft(draft: PlanDraft): PlanDraft {
       body: item.body,
       ...(item.parent === undefined ? {} : { parent: item.parent }),
       depends_on: item.depends_on ?? [],
+      ...(item.parallel === undefined ? {} : { parallel: item.parallel }),
+      ...(item.resources === undefined ? {} : { resources: [...item.resources] }),
     })),
   };
 }
@@ -190,6 +199,8 @@ function validateItem(value: unknown, keys: Set<string>): string | null {
     return `plan item ${value.key} priority must be one of: ${PLAN_PRIORITIES.join(", ")}`;
   }
   if (typeof value.body !== "string") return `plan item ${value.key} body must be a string`;
+  if (value.parallel !== undefined && typeof value.parallel !== 'boolean') return `plan item ${value.key} parallel must be boolean`;
+  if (value.resources !== undefined && (!Array.isArray(value.resources) || !value.resources.every(resource => typeof resource === 'string' && /^[a-z][a-z0-9-]*$/.test(resource)) || new Set(value.resources).size !== value.resources.length)) return `plan item ${value.key} resources must contain unique resource names`;
   if (value.parent !== undefined && (typeof value.parent !== "string" || !/^[a-z][a-z0-9-]*$/.test(value.parent))) {
     return `plan item ${value.key} parent must be a local key`;
   }

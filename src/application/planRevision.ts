@@ -42,16 +42,18 @@ export function revisePlan(request: PlanRevisionRequest): ApplicationResult<Plan
   const draft = parsePlanDraft(request.draft);
   if (typeof draft === "string") return applicationFailure("PLAN_INVALID", draft);
   const plan: Plan = {...before, ...draft};
+  if (draft.execution_policy === undefined) delete plan.execution_policy;
   const changes: PlanRevisionReceipt["changes"] = [];
   const pending: BacklogItem[] = [];
   const affected: BacklogItem[] = [];
+  if (JSON.stringify(before.execution_policy) !== JSON.stringify(plan.execution_policy)) changes.push({key:'$plan',fields:['execution_policy']});
   if (before.title !== plan.title || before.goal !== plan.goal) changes.push({key: "$plan", fields: ["title", "goal"].filter(key => before[key as "title" | "goal"] !== plan[key as "title" | "goal"])});
   if (JSON.stringify(before.items.map(item => item.key)) !== JSON.stringify(plan.items.map(item => item.key))) changes.push({key: "$plan", fields: ["item_order"]});
   const mapping = before.materialization?.mapping;
   if (mapping && (before.items.length !== draft.items.length || draft.items.some(item => !Object.hasOwn(mapping, item.key)))) return applicationFailure("PLAN_INVALID", "UNSUPPORTED_PLAN_CHANGE: Materialized plans cannot add, remove, or rename keys. Create a separate follow-up plan; existing mapping is preserved.");
   for (const key of new Set([...before.items.map(i=>i.key), ...draft.items.map(i=>i.key)])) {
     const old = before.items.find(i=>i.key===key); const next = draft.items.find(i=>i.key===key);
-    const fields = old && next ? ["title","body","priority","item_type","parent","depends_on"].filter(field => JSON.stringify(old[field as keyof typeof old]) !== JSON.stringify(next[field as keyof typeof next])) : [old ? "removed" : "added"];
+    const fields = old && next ? ["title","body","priority","item_type","parent","depends_on","parallel","resources"].filter(field => JSON.stringify(old[field as keyof typeof old]) !== JSON.stringify(next[field as keyof typeof next])) : [old ? "removed" : "added"];
     if (!fields.length) continue;
     const id = mapping?.[key]; changes.push({key,fields,...(id ? {item_id:id}: {})});
     if (!id || !next || !old) continue;

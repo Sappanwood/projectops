@@ -1,3 +1,4 @@
+import { createParallelRunUi } from "./parallelRunUi.js";
 import { createPlanRunUi } from "./planRunUi.js";
 import { createExecutionUi } from "./executionUi.js";
 import { createFoundationUi } from "./foundationUi.js";
@@ -54,6 +55,7 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
     render();
   });
 
+  const parallelRuns = createParallelRunUi(container, apiClient, () => state);
   const planRuns = createPlanRunUi(container, apiClient, () => state);
   const executions = createExecutionUi(container, apiClient, () => state, refresh);
   const foundation = createFoundationUi(container, apiClient, () => state, refresh);
@@ -80,6 +82,7 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
     foundation.render();
     executions.render();
     planRuns.render();
+    parallelRuns.render();
     renderedProject = state.selectedProjectId;
     for (const detail of container.querySelectorAll?.<HTMLDetailsElement>("details[data-reading-key]") ?? []) {
       const open = readingDetails.get(`${renderedProject}:${detail.dataset.readingKey}`);
@@ -442,6 +445,7 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
       foundation.destroy();
       executions.destroy();
       planRuns.destroy();
+      parallelRuns.destroy();
       container.removeEventListener("submit", handleSubmit);
       container.removeEventListener("click", handleClick);
       container.removeEventListener("change", handleChange);

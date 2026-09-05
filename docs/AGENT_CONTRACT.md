@@ -341,3 +341,16 @@ CLI 不创建短命 Pi 进程来冒充持续调度；Workbench 的同一 runtime
 
 完成前必须核对实际 run/node/attempt、验证与验收证据；Backlog done 或已有 Report 不替代依赖满足事实。unknown 必须先核实旧工作停止再确认中断。
 同项目旧 run 未终止时不新建，不能以删记录或复制计划绕过。输入修订导致旧 run 无法继续时，保留旧快照并终止，再以新版本建 run。
+
+
+## 有限并行 Plan run
+
+Plan 的可选 `execution_policy` 目前仅接受 `{ "max_parallel": 2 }`；item 可声明 `parallel: true` 与唯一资源键数组 `resources`。未声明不能推定并行许可。该策略属于 Plan revision，修订采用已有 preview/apply 流程。
+
+`pops parallel-run create <project> <plan> --expected-revision <plan-revision> [--base-commit <commit>] [--commands-file <JSON-file>] --json` 只冻结并准备，不派发。commands-file 为非空 argv 数组的数组；默认候选验证包含 npm ci、test、typecheck、build。`list [--plan <plan>]`、`show` 返回原生 receipt。`pause`、`resume --note [--integration-head <inspected-head>]`、`close-stopped --note`、`rework --node <key> --note` 使用最新 run revision。运行与落地由 Workbench 同一 runtime 持有。
+
+受管节点执行记录携带 checkout ownership；快照、diff、verify、accept 均解析该 checkout。节点成果必须先在自己的 worktree 提交，再执行 verify 与 accept；dirty checkout 不允许接受。不要在原 Repo 提交节点成果，也不要改写受管 integration ref。接受后仍须落地边界复验；下游只认已落地的上游。落地失败后如需改代码，使用 parallel-run rework，保留旧验收、失败证据，创建新 checkout/attempt。
+
+HTTP 集合入口 `/api/projects/<project>/parallel-runs`，详情与控制在 `/<run>`；集合 POST 创建，详情下 POST `advance`、`pause`、`resume`、`close-stopped`、`land`、`rework` 控制运行。浏览器不能提交执行命令、base commit 或工作目录，配置来自服务端。单任务、串行 run 和并行 run 共享活动/unknown 排他边界，不用新 run 绕过未结束工作。
+
+并行完成 Report 校验最新 run、Plan/任务输入、节点接受及完整证据、landing 证据、实际 integration ref/head 与祖先关系；仅 Backlog done 不足以声明 completed。结束范围不会删除失败 worktree 或历史，用户自行决定最终目标分支合入。

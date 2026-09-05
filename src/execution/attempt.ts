@@ -21,6 +21,7 @@ export type ExecutionEvent = {
     text: string;
 };
 export type ExecutionAttempt = {
+    checkout?: { run_id: string; node_id: string };
     progress?: { events: ExecutionEvent[]; session_id?: string };
     schema: typeof EXECUTION_SCHEMA;
     id: string;

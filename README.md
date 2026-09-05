@@ -270,3 +270,21 @@ pops plan-run close-stopped projectops <run-id> --note '旧工作已停止，终
 ```
 
 CLI 保存控制意图，自动派发由启用 Pi 的 Workbench 服务负责；不要为同一数据 workspace 启动多个执行服务。
+
+
+### Repo 内有限并行
+
+Plan 显式声明 `execution_policy: {"max_parallel": 2}` 后，可在“并行计划执行”区域创建 run。节点只有声明 `parallel: true` 且 `resources` 不相交时才共同运行；缺省节点独占容量，依赖仅在上游落地后满足。
+每次 run 从选定 commit 建立专用 integration ref，每个节点使用独立受管 worktree。Pi 完成修改后，由宿主在该节点 worktree 提交，记录实际验证并接受，再点击落地。落地在最新 integration head 上合并候选并验证，通过后才推进专用 ref；原始 checkout 与用户分支不自动更新，也不 push。
+
+默认候选验证依次执行 `npm ci --ignore-scripts`、`npm test`、`npm run typecheck`、`npm run build`；依赖安装须有可用 registry。服务端可配置结构化命令数组；浏览器不能提交任意命令或 worktree 路径。
+落地失败保留候选与证据，可重新核对后重试；需要修改已接受成果时，使用“重新工作”创建新尝试并重新验证验收，旧证据保留。暂停停止新派发，unknown 须先核对旧工作停止。
+
+```bash
+pops parallel-run create projectops <plan-id> --expected-revision <plan-revision> --json
+pops parallel-run show projectops <run-id> --json
+pops parallel-run pause projectops <run-id> --expected-revision <run-revision> --json
+pops parallel-run resume projectops <run-id> --note '已核对失败原因' --expected-revision <run-revision> --json
+```
+
+最终交付提供 integration ref、head 与每次落地的证据；是否合并到用户目标分支由用户另行决定。

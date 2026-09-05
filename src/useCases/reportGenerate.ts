@@ -8,6 +8,7 @@ import { loadStore, StoreNotFoundError, StoreParseError } from "../backlog/store
 import { PLAN_SCHEMA, type Plan } from "../plan/plan.js";
 import { PlanNotFoundError, PlanParseError, readPlan } from "../plan/planFs.js";
 import { listPlanRuns, validatePlanRunCompletion } from '../application/planRunApi.js';
+import { listParallelRuns, validateParallelRunCompletion } from '../application/parallelRunApi.js';
 
 export type ReportGenerationInput = {
   projectId: string;
@@ -150,6 +151,18 @@ export function writeGeneratedReport(input: GeneratedReportInput): Report {
       report.deviations.push(input.partialAcceptance.trim(), `Run ${latest.id}: ${validation.error.message}`);
     }
     report.verification.push(`Plan run: ${latest.id}; state: ${latest.state}`);
+  }
+  const parallel = listParallelRuns({ workspaceDir: input.workspaceRoot, projectId: input.projectId, planId: input.planId });
+  if (!parallel.ok) throw new ReportGenerationError(`Parallel run records are unavailable: ${parallel.error.message}`);
+  const latestParallel = parallel.data.runs.toSorted((a,b)=>b.created_at.localeCompare(a.created_at))[0];
+  if (latestParallel) {
+    const validation = validateParallelRunCompletion({ workspaceDir: input.workspaceRoot, projectId: input.projectId, runId: latestParallel.id });
+    if (!validation.ok) {
+      if (!input.partialAcceptance?.trim()) throw new ReportGenerationError(`Parallel run is not verified complete: ${validation.error.message}`);
+      report.outcome = 'partial';
+      report.deviations.push(input.partialAcceptance.trim(), `Parallel run ${latestParallel.id}: ${validation.error.message}`);
+    }
+    report.verification.push(`Parallel run: ${latestParallel.id}; integration ref: ${latestParallel.workspace.integrationRef}; head: ${latestParallel.integration_head}`);
   }
   writeReport(input.workspaceRoot, input.reportsRoot, report);
   return report;

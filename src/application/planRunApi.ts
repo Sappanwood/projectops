@@ -9,6 +9,7 @@ import { context, evidenceReadable, ExecutionError, listAttempts, readAttempt } 
 import { readPlan } from '../plan/planFs.js';
 import { nextReadyNode, PLAN_RUN_SCHEMA, sameTaskInput, type PlanRun, type PlanRunNode, type PlanRunReuse } from '../planRun/planRun.js';
 import { listStoredPlanRuns, newPlanRunId, planRunRoot, readPlanRun, savePlanRun } from '../planRun/store.js';
+import { listStoredParallelRuns, parallelRoot } from '../planRun/parallelRun.js';
 
 export type PlanRunQuery = { workspaceDir: string; projectId: string };
 export type PlanRunDetailQuery = PlanRunQuery & { runId: string };
@@ -46,7 +47,7 @@ export function createPlanRun(q: PlanRunQuery & { planId: string; expectedRevisi
     if (q.expectedRevision !== revision) throw new ExecutionError('REVISION_MISMATCH', 'Plan revision changed before creating its run.');
     if (plan.status !== 'approved' || !plan.materialization) throw new ExecutionError('EXECUTION_CONFLICT', 'Plan run requires an approved, materialized Plan.');
     const root = planRunRoot(c.root);
-    if (listStoredPlanRuns(root, q.projectId).some(run => !['completed', 'stopped'].includes(run.state)))
+    if (listStoredPlanRuns(root, q.projectId).some(run => !['completed', 'stopped'].includes(run.state)) || listStoredParallelRuns(parallelRoot(c.root), q.projectId).some(run => !['completed','stopped'].includes(run.state)))
       throw new ExecutionError('EXECUTION_CONFLICT', 'This project already has an unfinished Plan run.');
     const attempts = listAttempts(c.root, q.projectId);
     if (attempts.some(attempt => activeStates.includes(attempt.state))) throw new ExecutionError('EXECUTION_CONFLICT', 'Existing active or unknown work must be resolved first.');
