@@ -98,11 +98,23 @@ function renderPlan(plan: WorkbenchPlan, projectId: string): string {
   const titleFor = (key: string) => plan.items.find((item) => item.key === key)?.title ?? key;
   return `<details class="plan-card" data-plan-id="${e(plan.id)}" data-reading-key="${e(plan.id)}"><summary class="plan-summary">
     <span class="plan-title">${e(plan.title)}</span><span class="plan-summary-meta"><span class="badge badge-${e(plan.status)}">${plan.status === "draft" ? "草案" : plan.status === "done" ? "已完成" : "已批准"}</span><span>${plan.items.length} 项任务</span></span></summary>
-    <div class="plan-intro"><p class="eyebrow">计划目标</p>${plan.goal.length > 220 ? `<details class="goal-toggle" data-reading-key="goal-${e(plan.id)}"><summary><span class="show-source">展开完整目标</span><span class="show-reading">收起目标</span></summary></details>` : ""}<p class="plan-goal">${e(plan.goal)}</p></div>
+    <nav class="plan-section-nav" aria-label="计划区块">${[
+      ["goal", "目标"],
+      ["progress", "进度"],
+      ["work", "执行与控制"],
+      ["tasks", "任务正文"],
+    ]
+      .map(
+        ([key, label]) =>
+          `<button type="button" class="btn btn-secondary" data-plan-target="${e(plan.id)}--section-${key}">${label}</button>`,
+      )
+      .join("")}</nav>
+    <div class="plan-intro" id="${e(plan.id)}--section-goal"><p class="eyebrow">计划目标</p>${plan.goal.length > 220 ? `<details class="goal-toggle" data-reading-key="goal-${e(plan.id)}"><summary><span class="show-source">展开完整目标</span><span class="show-reading">收起目标</span></summary></details>` : ""}<p class="plan-goal">${e(plan.goal)}</p></div>
     ${renderExecution(plan.execution, projectId, plan.id)}
+    <section class="plan-workspace" id="${e(plan.id)}--section-work" aria-label="执行工作区"><header><h3>执行工作区</h3><p class="form-help">选择运行方式，查看当前执行与需要处理的任务。串行与并行记录分别保留。</p></header><div data-plan-run-host></div></section>
     ${renderNextTasks(plan.next_tasks, projectId, plan.id)}
     ${renderDeliveryReports(plan, projectId)}
-    <div class="plan-reading-layout"><nav class="plan-toc" aria-label="任务目录"><h3>任务目录</h3><ol>${plan.items.map((item, i) => `<li><button class="plan-toc-button" data-plan-target="${e(taskId(item.key))}" aria-controls="${e(taskId(item.key))}"><span class="task-number">${i + 1}</span><span>${e(item.title)}<small>${item.depends_on.length ? `依赖：${item.depends_on.map((key) => e(titleFor(key))).join("、")}` : "无前置依赖"}</small></span></button></li>`).join("")}</ol></nav>
+    <div class="plan-reading-layout" id="${e(plan.id)}--section-tasks"><nav class="plan-toc" aria-label="任务目录"><h3>任务目录</h3><ol>${plan.items.map((item, i) => `<li><button class="plan-toc-button" data-plan-target="${e(taskId(item.key))}" aria-controls="${e(taskId(item.key))}"><span class="task-number">${i + 1}</span><span>${e(item.title)}<small>${item.depends_on.length ? `依赖：${item.depends_on.map((key) => e(titleFor(key))).join("、")}` : "无前置依赖"}</small></span></button></li>`).join("")}</ol></nav>
     <div class="plan-items">${
       plan.items.length === 0
         ? empty("items")
@@ -132,7 +144,7 @@ function renderPlan(plan: WorkbenchPlan, projectId: string): string {
 }
 function renderExecution(execution: PlanExecution, projectId: string, planId: string): string {
   if (!execution.materialized)
-    return '<section class="plan-execution" aria-label="执行进度"><h3>执行进度</h3><p>未开始执行 · 尚未生成 Backlog 条目。</p></section>';
+    return `<section class="plan-execution" id="${e(planId)}--section-progress" aria-label="执行进度"><h3>执行进度</h3><p>未开始执行 · 尚未生成 Backlog 条目。</p></section>`;
   const { counts } = execution;
   const labels = {
     todo: "待开始",
@@ -142,7 +154,7 @@ function renderExecution(execution: PlanExecution, projectId: string, planId: st
     cancelled: "已取消",
     unreadable: "无法读取",
   };
-  return `<section class="plan-execution" aria-label="执行进度"><h3>执行进度</h3>
+  return `<section class="plan-execution" id="${e(planId)}--section-progress" aria-label="执行进度"><h3>执行进度</h3>
     ${
       counts.total === 0
         ? "<p>无可执行任务</p>"

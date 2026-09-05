@@ -160,6 +160,8 @@ test("two independent tasks use isolated checkouts and explicit acceptance plus 
 
       await node.getByRole("button", { name: `验证并落地 Parallel task ${index + 1}` }).click();
       await expect(node).toContainText("已落地", { timeout: 7000 });
+      const historyDetail = panel.locator('.run-history[data-parallel-details^="record-"]');
+      if (await historyDetail.count()) await historyDetail.locator(":scope > summary").click();
       await node.getByText(/落地结果 landed/).click();
       await expect(node).toContainText("landing checks passed");
     }

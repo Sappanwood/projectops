@@ -84,6 +84,7 @@ src/
     index.html            Workbench HTML 骨架与挂载点
     theme.css             深色主题变量、基础元素、全局内容链接及焦点样式
     style.css             导入 theme.css，承载组件样式、页面布局与响应式规则
+    planLayout.css        Plan 阅读区块、执行工作区与局部滚动布局
     types.ts              前端 AppState、ViewType 与只读模型契约
     router.ts             URL Hash 路由解析、格式化与状态恢复
     apiClient.ts          HTTP API 客户端与网络/格式错误收敛
@@ -341,7 +342,9 @@ Docs HTTP 测试覆盖正常阅读、缺失、非 Markdown、路径越界和 sym
 新页面的内容链接默认复用基础层，避免逐页补充颜色。新增主题颜色集中到 theme.css，以语义变量引用；
 阅读区域复用 bg-reading、text-reading、reading-measure、reading-line-height。Overview 使用两列响应式网格与
 独立内容高度，条目标题、元信息和 ID 纵向排列，相关样式限定在 overview-card 下，避免影响详情布局。
-不引入 CSS framework 或完整设计系统。
+不引入 CSS framework 或完整设计系统。共用控件和页面例外见 [前端规范](FRONTEND_GUIDELINES.md)。
+
+Plan 的 `readPagesView.ts` 输出执行工作区 host；`planRunUi.ts` 与 `parallelRunUi.ts` 将各自面板挂到该 host，保持各自领域数据和控制逻辑。当前活动记录与终态历史仅在展示层分组，不修改业务资格或状态机。运行面板轮询重绘保留输入草稿、焦点、局部 details 展开状态和页面滚动位置。`planLayout.css` 由页面显式加载，复用主题与按钮，只负责 Plan 布局。
 
 
 ## 修订与执行基础

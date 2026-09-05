@@ -503,9 +503,11 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
         taskLink.dataset.planTarget!,
       ) as HTMLDetailsElement | null;
       if (detail && container.contains(detail)) {
-        detail.open = true;
+        if (detail.tagName === "DETAILS") detail.open = true;
         detail.scrollIntoView({ block: "start" });
-        detail.querySelector("summary")?.focus({ preventScroll: true });
+        const focusTarget = detail.tagName === "DETAILS" ? detail.querySelector("summary") : detail;
+        if (focusTarget === detail) detail.tabIndex = -1;
+        focusTarget?.focus({ preventScroll: true });
       }
       return;
     }

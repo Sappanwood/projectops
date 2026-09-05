@@ -66,7 +66,11 @@ export function createParallelRunUi(
     if (destroyed || request !== value.request) return;
     if (result.ok) {
       value.runs = result.data.runs.toSorted((a, b) => b.created_at.localeCompare(a.created_at));
-      if (!value.selected) value.selected = value.runs[0]?.id ?? "";
+      if (!value.selected)
+        value.selected =
+          value.runs.find((run) => !["completed", "stopped"].includes(run.state))?.id ??
+          value.runs[0]?.id ??
+          "";
     } else value.message = `${result.error.code}: ${result.error.message}`;
     render();
   }
@@ -92,7 +96,7 @@ export function createParallelRunUi(
         slot = container.ownerDocument.createElement("section");
         slot.dataset.parallelPanel = plan;
         slot.setAttribute("aria-label", `并行执行 ${plan}`);
-        card.append(slot);
+        (card.querySelector("[data-plan-run-host]") ?? card).append(slot);
       }
       const focused = slot.contains(container.ownerDocument.activeElement)
         ? (container.ownerDocument.activeElement as HTMLTextAreaElement)
@@ -100,23 +104,61 @@ export function createParallelRunUi(
       const field = focused?.dataset.parallelField,
         reworkField = focused?.dataset.parallelReworkNote,
         selection = focused ? [focused.selectionStart, focused.selectionEnd] : null;
+      const focusAttribute = [
+        "data-parallel-action",
+        "data-parallel-id",
+        "data-parallel-land",
+        "data-parallel-rework",
+        "href",
+      ].find((name) => focused?.hasAttribute(name));
+      const focusedSummary =
+        focused?.tagName === "SUMMARY"
+          ? focused.parentElement?.getAttribute("data-parallel-details")
+          : null;
+      const nodeScrollTop =
+        slot.dataset.selectedRun === value.selected
+          ? (slot.querySelector<HTMLElement>(".run-nodes")?.scrollTop ?? 0)
+          : 0;
+      slot.dataset.selectedRun = value.selected;
+      const scrollPosition = typeof window !== "undefined" ? window.scrollY : 0;
       const opened = new Set(
         [...slot.querySelectorAll<HTMLDetailsElement>("details[open]")].map(
           (detail) => detail.dataset.parallelDetails,
         ),
       );
       const run = value.runs.find((entry) => entry.id === value.selected);
+      const active = value.runs.filter((entry) => !["completed", "stopped"].includes(entry.state));
+      const history = value.runs.filter((entry) => ["completed", "stopped"].includes(entry.state));
+
       const terminal = run && ["completed", "stopped"].includes(run.state);
-      slot.innerHTML = `<h3>有界并行执行</h3><p>${permission ? "计划已显式允许并行，最大容量为 2。" : "计划尚未显式允许并行；请先修订并批准并行许可。"} 每个任务使用独立 checkout，前置任务验收并落地后才解锁依赖。</p>${button("refresh", "刷新并行执行", value.busy)} ${button("create", "创建有界并行执行", value.busy || !permission || state.readPages?.plans.find((entry) => entry.id === plan)?.status === "done")}
-        ${value.runs.length ? `<ul>${value.runs.map((entry) => `<li><button type="button" class="btn btn-secondary" data-parallel-id="${e(entry.id)}">${e(entry.id)} · ${e(labels[entry.state] ?? entry.state)}</button></li>`).join("")}</ul>` : "<p>尚无并行执行。</p>"}
+      slot.dataset.active = String(active.length > 0);
+      slot.innerHTML = `<h4>有界并行执行</h4><p>${permission ? "计划已显式允许并行，最大容量为 2。" : "计划尚未显式允许并行；请先修订并批准并行许可。"} 每个任务使用独立 checkout，前置任务验收并落地后才解锁依赖。</p>${button("refresh", "刷新并行执行", value.busy)} ${button("create", "创建有界并行执行", value.busy || !permission || state.readPages?.plans.find((entry) => entry.id === plan)?.status === "done")}
+        ${
+          active.length
+            ? `<div class="run-current"><h5>当前并行运行</h5><ul>${active
+                .map(
+                  (entry) =>
+                    `<li><button type="button" class="btn btn-secondary" data-parallel-id="${e(entry.id)}">${e(labels[entry.state] ?? entry.state)} · ${e(entry.id)}</button>${entry.nodes
+                      .filter((node) => ["failed", "unknown"].includes(node.state))
+                      .map(
+                        (node) =>
+                          `<p role="alert">${e(node.input.title)}：${e(labels[node.state] ?? node.state)}</p>`,
+                      )
+                      .join("")}</li>`,
+                )
+                .join("")}</ul></div>`
+            : `<p>当前没有活动并行运行。</p>`
+        }
+        ${history.length ? `<details data-parallel-details="history" class="run-history"><summary>并行历史运行（${history.length}）</summary><ul>${history.map((entry) => `<li><button type="button" class="btn btn-secondary" data-parallel-id="${e(entry.id)}">${e(entry.id)} · ${e(labels[entry.state] ?? entry.state)}</button></li>`).join("")}</ul></details>` : ""}
+        ${!value.runs.length ? "<p>尚无并行执行。</p>" : ""}
         ${
           run
-            ? `<article><h4>${e(run.plan_snapshot.title)} · ${e(labels[run.state] ?? run.state)}</h4><p>执行 ID：${e(run.id)} · 冻结计划 revision：${e(run.plan_revision)} · 并发容量：${run.capacity}</p>
+            ? `${["completed", "stopped"].includes(run.state) ? `<details data-parallel-details="record-${e(run.id)}" class="run-history"><summary>查看并行历史详情 · ${e(labels[run.state] ?? run.state)}</summary>` : ""}<article class="run-detail"><h4>${e(run.plan_snapshot.title)} · ${e(labels[run.state] ?? run.state)}</h4><p>执行 ID：${e(run.id)} · 冻结计划 revision：${e(run.plan_revision)} · 并发容量：${run.capacity}</p>
           ${run.model ? `<p>固定模型：${e(run.model.provider)}/${e(run.model.id)}</p>` : ""}
           <p>集成 HEAD：<code>${e(run.integration_head)}</code></p><p>集成 checkout：<code>${e(run.workspace.integrationDir)}</code></p>
           <details data-parallel-details="snapshot"><summary>查看并行执行冻结计划</summary><pre>${e(JSON.stringify(run.plan_snapshot, null, 2))}</pre></details>
           <details data-parallel-details="commands"><summary>查看服务端落地验证命令</summary><pre>${e(JSON.stringify(run.commands, null, 2))}</pre></details>
-          <ol>${run.nodes
+          <ol class="run-nodes">${run.nodes
             .map(
               (
                 node,
@@ -137,12 +179,28 @@ export function createParallelRunUi(
           ${button("close-stopped", "终止并行执行", value.busy || !value.note.trim() || run.nodes.some((node) => ["running", "unknown", "landing"].includes(node.state)))}`
               : ""
           }
-          ${run.controls.length ? `<details data-parallel-details="controls"><summary>查看并行控制记录</summary><ul>${run.controls.map((control) => `<li>${e(control.at)} · ${e(control.action)} · ${e(control.note)}</li>`).join("")}</ul></details>` : ""}</article>`
+          ${run.controls.length ? `<details data-parallel-details="controls"><summary>查看并行控制记录</summary><ul>${run.controls.map((control) => `<li>${e(control.at)} · ${e(control.action)} · ${e(control.note)}</li>`).join("")}</ul></details>` : ""}</article>${["completed", "stopped"].includes(run.state) ? "</details>" : ""}`
             : ""
         }
         ${value.message ? `<p role="alert">${e(value.message)}</p>` : ""}`;
       for (const detail of slot.querySelectorAll<HTMLDetailsElement>("details"))
         if (opened.has(detail.dataset.parallelDetails)) detail.open = true;
+      const nodeList = slot.querySelector<HTMLElement>(".run-nodes");
+      if (nodeList) nodeList.scrollTop = nodeScrollTop;
+      if (focusAttribute) {
+        const value = focused!.getAttribute(focusAttribute)!;
+        slot
+          .querySelector<HTMLElement>(`[${focusAttribute}="${CSS.escape(value)}"]`)
+          ?.focus({ preventScroll: true });
+      } else if (focusedSummary) {
+        slot
+          .querySelector<HTMLElement>(
+            `[data-parallel-details="${CSS.escape(focusedSummary)}"] > summary`,
+          )
+          ?.focus({ preventScroll: true });
+      }
+      if (typeof window !== "undefined")
+        window.scrollTo({ top: scrollPosition, behavior: "instant" });
       if (field || reworkField) {
         const target = field
           ? slot.querySelector<HTMLTextAreaElement>(`[data-parallel-field="${field}"]`)
@@ -193,6 +251,7 @@ export function createParallelRunUi(
         );
     } else {
       const run = value.runs.find((entry) => entry.id === value.selected);
+
       if (!run) {
         value.busy = false;
         render();
@@ -261,6 +320,7 @@ export function createParallelRunUi(
         .closest("[data-parallel-panel]")
         ?.querySelector<HTMLButtonElement>('[data-parallel-action="close-stopped"]');
       const run = value.runs.find((entry) => entry.id === value.selected);
+
       if (close)
         close.disabled =
           value.busy ||

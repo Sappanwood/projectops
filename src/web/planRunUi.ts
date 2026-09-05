@@ -63,7 +63,11 @@ export function createPlanRunUi(container: HTMLElement, api: ApiClient, getState
     if (destroyed || request !== value.request) return;
     if (result.ok) {
       value.runs = result.data.runs;
-      if (!value.selected) value.selected = value.runs[0]?.id ?? "";
+      if (!value.selected)
+        value.selected =
+          value.runs.find((run) => !["completed", "stopped"].includes(run.state))?.id ??
+          value.runs[0]?.id ??
+          "";
     } else value.message = `${result.error.code}: ${result.error.message}`;
     render();
   }
@@ -86,29 +90,63 @@ export function createPlanRunUi(container: HTMLElement, api: ApiClient, getState
         slot = container.ownerDocument.createElement("section");
         slot.dataset.planRunPanel = plan;
         slot.setAttribute("aria-label", `计划执行 ${plan}`);
-        card.append(slot);
+        (card.querySelector("[data-plan-run-host]") ?? card).append(slot);
       }
       const focused = slot.contains(container.ownerDocument.activeElement)
         ? (container.ownerDocument.activeElement as HTMLTextAreaElement)
         : null;
       const field = focused?.dataset.planRunField,
         selection = focused ? [focused.selectionStart, focused.selectionEnd] : null;
+      const focusAttribute = ["data-plan-run-action", "data-plan-run-id", "href"].find((name) =>
+        focused?.hasAttribute(name),
+      );
+      const focusedSummary =
+        focused?.tagName === "SUMMARY"
+          ? focused.parentElement?.getAttribute("data-run-details")
+          : null;
+      const nodeScrollTop =
+        slot.dataset.selectedRun === value.selected
+          ? (slot.querySelector<HTMLElement>(".run-nodes")?.scrollTop ?? 0)
+          : 0;
+      slot.dataset.selectedRun = value.selected;
+      const scrollPosition = typeof window !== "undefined" ? window.scrollY : 0;
       const opened = new Set(
         [...slot.querySelectorAll<HTMLDetailsElement>("details[open]")].map(
           (detail) => detail.dataset.runDetails,
         ),
       );
       const run = value.runs.find((entry) => entry.id === value.selected);
-      slot.innerHTML = `<h3>计划执行</h3><p>每次执行冻结计划与任务输入。串行任务逐个运行，前置任务经人工验收后才继续。</p>${button("refresh", "刷新计划执行", value.busy)}
+      const active = value.runs.filter((entry) => !["completed", "stopped"].includes(entry.state));
+      const history = value.runs.filter((entry) => ["completed", "stopped"].includes(entry.state));
+
+      slot.dataset.active = String(active.length > 0);
+      slot.innerHTML = `<h4>串行执行</h4><p>每次执行冻结计划与任务输入。串行任务逐个运行，前置任务经人工验收后才继续。</p>${button("refresh", "刷新计划执行", value.busy)}
         <details data-run-details="reuse"><summary>复用已验收任务</summary><p>如需复用已完成任务或外部依赖，逐行填写任务 ID、尝试 ID 和复用说明，以 Tab 分隔。</p><label>复用记录<textarea class="form-input" data-plan-run-field="reuse">${e(value.reuse)}</textarea></label></details>
         <label>本次计划工作指示<textarea class="form-input" data-plan-run-field="instructions">${e(value.instructions)}</textarea></label>${button("create", "创建串行执行", value.busy || state.readPages?.plans.find((entry) => entry.id === plan)?.status === "done")}
-        ${value.runs.length ? `<ul>${value.runs.map((entry) => `<li><button type="button" class="btn btn-secondary" data-plan-run-id="${e(entry.id)}">${e(entry.id)} · ${e(labels[entry.state] ?? entry.state)}</button></li>`).join("")}</ul>` : "<p>尚无计划执行。</p>"}
+        ${
+          active.length
+            ? `<div class="run-current"><h5>当前串行运行</h5><ul>${active
+                .map(
+                  (entry) =>
+                    `<li><button type="button" class="btn btn-secondary" data-plan-run-id="${e(entry.id)}">${e(labels[entry.state] ?? entry.state)} · ${e(entry.id)}</button>${entry.nodes
+                      .filter((node) => ["failed", "unknown"].includes(node.state))
+                      .map(
+                        (node) =>
+                          `<p role="alert">${e(node.input.title)}：${e(labels[node.state] ?? node.state)}</p>`,
+                      )
+                      .join("")}</li>`,
+                )
+                .join("")}</ul></div>`
+            : `<p>当前没有活动串行运行。</p>`
+        }
+        ${history.length ? `<details data-run-details="history" class="run-history"><summary>串行历史运行（${history.length}）</summary><ul>${history.map((entry) => `<li><button type="button" class="btn btn-secondary" data-plan-run-id="${e(entry.id)}">${e(entry.id)} · ${e(labels[entry.state] ?? entry.state)}</button></li>`).join("")}</ul></details>` : ""}
+        ${!value.runs.length ? "<p>尚无计划执行。</p>" : ""}
         ${
           run
-            ? `<article><h4>${e(run.plan_snapshot.title)} · ${e(labels[run.state] ?? run.state)}</h4><p>执行 ID：${e(run.id)} · 冻结计划 revision：${e(run.plan_revision)} · 并发容量：${run.capacity}</p>
+            ? `${["completed", "stopped"].includes(run.state) ? `<details data-run-details="record-${e(run.id)}" class="run-history"><summary>查看串行历史详情 · ${e(labels[run.state] ?? run.state)}</summary>` : ""}<article class="run-detail"><h4>${e(run.plan_snapshot.title)} · ${e(labels[run.state] ?? run.state)}</h4><p>执行 ID：${e(run.id)} · 冻结计划 revision：${e(run.plan_revision)} · 并发容量：${run.capacity}</p>
           ${run.model ? `<p>固定模型：${e(run.model.provider)}/${e(run.model.id)}</p>` : ""}
           <details data-run-details="snapshot"><summary>查看本次冻结计划</summary><pre>${e(JSON.stringify(run.plan_snapshot, null, 2))}</pre></details>
-          <ol>${run.nodes.map((node) => `<li><a href="#/projects/${encodeURIComponent(project)}/backlog/${encodeURIComponent(node.item_id)}?plan=${encodeURIComponent(plan)}">${e(node.item_id)} — ${e(node.input.title)}</a><p>${e(labels[node.state] ?? node.state)} · 依赖：${e(node.depends_on.join(", ") || "无")}</p><p>尝试：${e(node.attempt_ids.join(", ") || "尚未启动")}</p>${node.reuse_note ? `<p>复用说明：${e(node.reuse_note)}</p>` : ""}</li>`).join("")}</ol>
+          <ol class="run-nodes">${run.nodes.map((node) => `<li><a href="#/projects/${encodeURIComponent(project)}/backlog/${encodeURIComponent(node.item_id)}?plan=${encodeURIComponent(plan)}">${e(node.item_id)} — ${e(node.input.title)}</a><p>${e(labels[node.state] ?? node.state)} · 依赖：${e(node.depends_on.join(", ") || "无")}</p><p>尝试：${e(node.attempt_ids.join(", ") || "尚未启动")}</p>${node.reuse_note ? `<p>复用说明：${e(node.reuse_note)}</p>` : ""}</li>`).join("")}</ol>
           ${run.diagnostics.map((message) => `<p role="alert">${e(message)}</p>`).join("")}
           ${run.state === "ready" ? button("advance", "启动计划执行", value.busy) : ""}
           ${
@@ -119,12 +157,28 @@ export function createPlanRunUi(container: HTMLElement, api: ApiClient, getState
               : ""
           }
           ${!["completed", "stopped"].includes(run.state) ? button("close-stopped", "终止计划执行", value.busy || !value.note.trim() || run.nodes.some((node) => ["running", "unknown"].includes(node.state))) : ""}<p>本次基线：<code>${e(run.baseline.digest)}</code></p>
-          ${run.controls.length ? `<details data-run-details="controls"><summary>查看人工控制记录</summary><ul>${run.controls.map((control) => `<li>${e(control.at)} · ${e(control.action)} · ${e(control.note)}</li>`).join("")}</ul></details>` : ""}</article>`
+          ${run.controls.length ? `<details data-run-details="controls"><summary>查看人工控制记录</summary><ul>${run.controls.map((control) => `<li>${e(control.at)} · ${e(control.action)} · ${e(control.note)}</li>`).join("")}</ul></details>` : ""}</article>${["completed", "stopped"].includes(run.state) ? "</details>" : ""}`
             : ""
         }
         ${value.message ? `<p role="alert">${e(value.message)}</p>` : ""}`;
       for (const detail of slot.querySelectorAll<HTMLDetailsElement>("details"))
         if (opened.has(detail.dataset.runDetails)) detail.open = true;
+      const nodeList = slot.querySelector<HTMLElement>(".run-nodes");
+      if (nodeList) nodeList.scrollTop = nodeScrollTop;
+      if (focusAttribute) {
+        const value = focused!.getAttribute(focusAttribute)!;
+        slot
+          .querySelector<HTMLElement>(`[${focusAttribute}="${CSS.escape(value)}"]`)
+          ?.focus({ preventScroll: true });
+      } else if (focusedSummary) {
+        slot
+          .querySelector<HTMLElement>(
+            `[data-run-details="${CSS.escape(focusedSummary)}"] > summary`,
+          )
+          ?.focus({ preventScroll: true });
+      }
+      if (typeof window !== "undefined")
+        window.scrollTo({ top: scrollPosition, behavior: "instant" });
       if (field) {
         const target = slot.querySelector<HTMLTextAreaElement>(`[data-plan-run-field="${field}"]`);
         target?.focus({ preventScroll: true });
@@ -185,6 +239,7 @@ export function createPlanRunUi(container: HTMLElement, api: ApiClient, getState
       }
     } else {
       const run = value.runs.find((entry) => entry.id === value.selected);
+
       if (!run) {
         value.busy = false;
         render();
@@ -243,6 +298,7 @@ export function createPlanRunUi(container: HTMLElement, api: ApiClient, getState
         .closest("[data-plan-run-panel]")
         ?.querySelector<HTMLButtonElement>('[data-plan-run-action="close-stopped"]');
       const run = value.runs.find((entry) => entry.id === value.selected);
+
       if (close)
         close.disabled =
           value.busy ||
