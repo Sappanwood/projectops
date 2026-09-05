@@ -233,10 +233,21 @@ Plan 修订采用草案 JSON 输入，先查看变更与受影响任务，再确
 验收要求执行成功、当前代码上的检查通过、证据完整且任务输入未变化；有执行历史的任务不能绕过验收直接标记 done。
 没有执行记录的手工任务仍可按原工作流更新状态。
 
-本版提供运行控制基础和可注入 runner，尚未接入 Pi。默认 Workbench 不配置 runner，启动/重试入口不可用；
+本版已接入 Pi 0.85.0。使用 `npm run workbench -- --workspace <workspace> --port <port> --pi` 启用本机 Pi；默认不配置 runner，启动/重试入口不可用；
 可以通过 CLI 记录外部执行，在网页核对并验收。CLI 的 finish/verify 记录调用方提交的事实，不执行命令或替调用方验证真实性。
 服务管理的工作独立于浏览器连接，页面重新进入后重读记录；服务重启后未确认的工作显示待核对，不自动重放。
 外部 CLI 记录不归服务进程管理，不会因 Workbench 重启而被判定中断。
 
 执行操作的完整参数和返回值见 [Agent 操作契约](docs/AGENT_CONTRACT.md#执行记录与验收)。
 执行记录需要已登记的 Git Repo；普通项目登记、Backlog 和文档能力仍不要求 Git。
+
+
+### Pi 单任务工作
+
+启用 `--pi` 后，从任务详情填写指示并开始工作。页面自动刷新文本/工具进展，支持追加指示、请求停止、刷新重连和失败后重试。
+追加指示在当前工具轮结束后生效；停止会清空 Pi 队列并等待中止确认。工作结束后查看 diff，再通过 execution verify 记录实际验证，显式接受或要求继续。
+
+模型与凭据沿用本机 Pi settings/auth/environment，凭据留在服务端。加载当前 Repo 与祖先的 AGENTS.md、Pi 全局与项目 skills；禁用 extensions、prompt templates 和 themes，工具限定 read/bash/edit/write。
+这不是操作系统 sandbox，适用于受信任本地 workspace。Pi session 保存在 workspace 的 `.pops/runtime/pi/<attempt-id>/`；执行记录保留 session ID 和最近 200 条进展，不复制完整会话。
+
+首版不承载 Pi extension 的交互 UI；若 Pi 在最终回复中请求补充信息，填写补充指示后明确重试当前任务，保留前次尝试。

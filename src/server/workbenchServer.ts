@@ -1,3 +1,4 @@
+import { getExecutionEvidence } from '../application/executionEvidence.js';
 import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import path from "node:path";
@@ -287,6 +288,13 @@ async function handleRequest(
           ? { ok: true, data: { ...result.data, runner_available: context.runtime.available } } : result);
         return;
       }
+      if (segments.length === 6 && segments[5] === "evidence") {
+        requireMethod(request, "GET");
+        const ref = singleQueryValue(url, "ref");
+        if (!ref) throw new HttpError(400, "INVALID_REQUEST", "An evidence reference is required.");
+        sendApplicationResult(response, getExecutionEvidence({ ...input, attemptId: segments[4]!, ref }));
+        return;
+      }
       requireNoQuery(url);
       if (segments.length === 5 && segments[4] === "start") {
         requireMethod(request, "POST");
@@ -314,18 +322,23 @@ async function handleRequest(
         sendApplicationResult(response, showExecution({ ...input, attemptId: segments[4]! }));
         return;
       }
-      if (segments.length === 6 && ["stop", "confirm-interrupted", "decide"].includes(segments[5]!)) {
+      if (segments.length === 6 && ["stop", "steer", "confirm-interrupted", "decide"].includes(segments[5]!)) {
         requireMethod(request, "POST");
         requireAllowedOrigin(request, context.origin);
         requireJsonContentType(request);
         const action = segments[5];
         const body = await readJsonRecord(request, action === "stop" ? ["expected_revision"]
+          : action === "steer" ? ["expected_revision", "message"]
           : action === "decide" ? ["expected_revision", "decision", "note"] : ["expected_revision", "note"]);
         if (typeof body.expected_revision !== "string" || Object.values(body).some(value => typeof value !== "string")) {
           throw new HttpError(400, "INVALID_REQUEST", "Execution mutation is invalid.");
         }
         const mutation = { ...input, attemptId: segments[4]!, expectedRevision: body.expected_revision };
         if (action === "stop") sendApplicationResult(response, context.runtime.stop(mutation));
+        else if (action === "steer") {
+          if (typeof body.message !== "string" || !body.message.trim()) throw new HttpError(400, "INVALID_REQUEST", "An instruction message is required.");
+          sendApplicationResult(response, await context.runtime.steer({ ...mutation, message: body.message }));
+        }
         else if (action === "confirm-interrupted") sendApplicationResult(response, context.runtime.confirmInterrupted({ ...mutation, note: String(body.note ?? "") }));
         else {
           if (body.decision !== "accepted" && body.decision !== "rework") throw new HttpError(400, "INVALID_REQUEST", "Acceptance decision is invalid.");

@@ -109,7 +109,7 @@ backlog --store <resolved-artifacts.backlog.root> <command> --json
 
 ## 外部 API 文档索引
 
-当前没有第三方运行时 API。新增或升级 Node.js、TypeScript、npm package 或外部 SDK 集成时，先查阅对应官方文档，
+Pi SDK 固定为 `@earendil-works/pi-coding-agent@0.85.0`；查阅 [官方 SDK](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/sdk.md) 与安装版本的类型声明。新增或升级 Node.js、TypeScript、npm package 或外部 SDK 集成时，先查阅对应官方文档，
 不要仅依赖训练数据中的版本信息。
 
 ## 代码风格

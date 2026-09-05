@@ -50,6 +50,11 @@ export function readAttempt(root: string, attemptId: string, projectId?: string)
         a.verifications.some(v => !v || !['passed','failed'].includes(v.outcome) || typeof v.command !== 'string' ||
           typeof v.evidence_ref !== 'string' || typeof v.evidence_digest !== 'string' || !/^[a-f0-9]{64}$/.test(v.evidence_digest) || !v.snapshot?.digest))
         throw new ExecutionError('EXECUTION_INVALID', 'Execution scope or lifecycle data is invalid.');
+    if (a.progress !== undefined && (!a.progress || !Array.isArray(a.progress.events) ||
+        (a.progress.session_id !== undefined && typeof a.progress.session_id !== 'string') ||
+        a.progress.events.some(e => !e || !['text', 'tool', 'status', 'session'].includes(e.type) ||
+            typeof e.text !== 'string' || typeof e.at !== 'string' || !Number.isFinite(Date.parse(e.at)))))
+        throw new ExecutionError('EXECUTION_INVALID', 'Execution progress is invalid.');
     return a;
 }
 export function listAttempts(root: string, projectId?: string) { return readdirSync(root).filter(f => /^exe-.*\.json$/.test(f)).map(f => readAttempt(root, f.slice(0, -5), projectId)).sort((a, b) => a.started_at.localeCompare(b.started_at)); }
@@ -57,6 +62,14 @@ export function saveAttempt(root: string, a: ExecutionAttempt, create = false) {
     a.revision = createHash('sha256').update(JSON.stringify({ ...a, revision: '' })).digest('hex').slice(0, 16);
     writeFileSync(path.join(root, `${a.id}.json`), JSON.stringify(a, null, 2) + '\n', { flag: create ? 'wx' : 'w' });
     return a;
+}
+export function saveProgress(root: string, attemptId: string, expectedRevision: string, progress: NonNullable<ExecutionAttempt['progress']>) {
+    const current = readAttempt(root, attemptId);
+    if (current.revision !== expectedRevision)
+        throw new ExecutionError('REVISION_MISMATCH', 'Execution changed while recording progress.');
+    current.progress = progress;
+    // Observational events do not invalidate pending lifecycle controls.
+    writeFileSync(path.join(root, `${attemptId}.json`), JSON.stringify(current, null, 2) + '\n');
 }
 export function evidence(root: string, attemptId: string, body: string) {
     const dir = path.join(root, 'evidence');

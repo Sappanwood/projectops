@@ -33,7 +33,7 @@ Markdown/JSON artifact 为权威数据，通过统一 `pops` CLI 和 Local Web W
 | Project Docs | roles、templates、scaffold、check | scaffold/check 与 Workbench 文档阅读已实现 |
 | Retrospective | workspace 级 Markdown 记录、inbox/active/archive store 与派生索引 | 已实现（Retrospective@1、Store@1、manifest 路由、`pops init` bootstrap、`pops retrospective capture/list/show/triage/archive` 与 revision 保护；Workbench 只读列表、过滤与详情已实现） |
 | Workbench | 统一浏览和受控写入 | Backlog 可写切片已实现（完整列表、详情、revision-protected 状态更新与冲突重试）；Plan、Report、Retrospective 阅读视图及 Docs 文档阅读与导航已实现；Chromium 浏览器 E2E 已覆盖启动、导航、读写和失败路径 |
-| Execution | 尝试记录、运行控制、验证与验收 | 已实现外部工作 CLI 记录、可注入 runner、Web 查看/控制/验收；尚未接入 Pi |
+| Execution | 尝试记录、运行控制、验证与验收 | 已实现外部工作 CLI 记录、Pi 单任务 runner、进展/追加指示、Web 控制与显式验收 |
 | CLI bootstrap | `pops --help`、`pops --version` | 已实现 |
 
 ## 数据契约原则
@@ -206,7 +206,7 @@ Plan show 额外返回内容计算得到的 revision；revision 不是新的持�
 关联 Plan 快照（存在物化来源时）、补充指示、起止时间、执行状态、结果、Git 快照、验证证据和验收结论。
 状态为 running、stop_requested、unknown、succeeded、failed、stopped；执行结束与验收是不同事实，重试创建新尝试而不改写旧输入。
 
-CLI 可记录外部工作；server 可接收受控 runner，默认无 runner 且不提供 Pi 或任意 shell 执行入口。
+CLI 可记录外部工作；server 可接收受控 runner，默认无 runner；显式 `--pi` 启用服务端 Pi SDK，浏览器不能提供执行路径或任意启动命令。
 同任务的重复启动返回已有活动尝试，unknown 阻止新工作；页面通过查询重读当前状态，断线不结束工作。
 停止请求先记录 stop_requested，runner 确认结束后才成为 stopped；无法确认的结果为 unknown。
 服务重启核对其管理的运行，缺少 handle 的活动记录为 unknown；外部工作记录不由服务恢复。
@@ -219,4 +219,10 @@ CLI 可记录外部工作；server 可接收受控 runner，默认无 runner 且
 
 当前仅支持本机单人、受信任 workspace 和 Node.js；执行快照需要 Git，可记录未提交和未跟踪改动。
 静态写入 containment 和创建 no-clobber 适用于本轮新增执行文件；不抵抗恶意 ancestor swap，不依赖 native helper，
-不承诺远端访问、多服务争抢、跨平台进程语义等价或自动恢复执行。凭据不得作为执行证据提交；Pi session 持久化留待实际接入。
+不承诺远端访问、多服务争抢、跨平台进程语义等价或自动恢复执行。凭据不得作为执行证据提交；Pi session 保存于 workspace runtime 目录。
+
+
+Pi 任务按登记 Repo 执行，同项目已有其他 running/stop_requested/unknown 尝试时拒绝启动。进展是执行记录的可选 `progress` 字段，包含 session_id 与最近 200 条 at/type/text 事件，每条最多 8000 字符；完整历史由 Pi session 保存。
+页面轮询只重读数据，保留输入、焦点与选区；追加指示携带当前 revision，冲突或投递失败明确显示。工作完成以 Pi 完整 prompt settle 和最终 assistant stopReason 为依据，模型错误或中止不显示成功。工具事件只显示工具名和开始/结束，不复制参数与输出。
+
+验证结果提供“查看证据正文”。GET `/api/projects/<project>/executions/<attempt>/evidence?ref=<exact-ref>` 只接受该尝试的验证引用，核对静态 containment 与完整内容 SHA256 后返回最多 65,536 字符预览及 truncated 标记；缺失或篡改返回诊断，页面清除旧正文，不能以旧预览冒充当前有效证据。

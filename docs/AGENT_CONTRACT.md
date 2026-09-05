@@ -305,7 +305,7 @@ Web 任务详情可刷新查看输入、代码 diff、检查与证据诊断，�
 HTTP endpoint 为 `/api/projects/<project>/executions`（GET 可用 `item_id`），详情为 `/<attempt>`；
 `POST /start` 使用 item_id、任务 expected_revision、instructions 和可选 retry_of；
 `POST /<attempt>/stop|confirm-interrupted|decide` 使用尝试 expected_revision，后两项还含 note，decide 另含 accepted/rework decision。
-默认服务没有 runner，列表的 runner_available 为 false，网页禁用启动/重试；不能把本轮基础能力当作已接入 Pi。
+默认服务没有 runner，列表的 runner_available 为 false，网页禁用启动/重试；通过 Workbench `--pi` 参数启用真实 Pi 0.85.0 runner。
 
 运行控制的 stop_requested 不等于停止成功。服务重启后只把其管理且无法确认的活动记录标为 unknown，
 不改变 external CLI 记录。unknown 必须人工检查旧工作确已停止后填写说明，确认后才能重试：
@@ -318,3 +318,15 @@ pops execution confirm-interrupted projectops "$attempt_id" --note "已检查并
 
 recover 只在原服务 owner 已退出且需要核对时使用，不对正在运行的服务执行。
 本版不自动恢复进程或重放工作；不记录凭据到输入、diff 附件或验证证据中。执行记录不是 Pi session 的副本。
+
+
+## Pi 工作进展与追加指示
+
+Workbench `--pi` 使用本机 Pi 的模型、凭据、AGENTS 与 skills，禁用 extensions/templates/themes，工具限定 read/bash/edit/write。无需给浏览器提供凭据。
+`POST /api/projects/<project>/executions/<attempt>/steer` 接收 `expected_revision` 与非空 `message`；只允许当前 running 且有活跃 handle 的尝试。
+`progress.events` 保存有界进展，`progress.session_id` 关联 runtime 内 Pi session。页面自动刷新，CLI show 同样可核对；进展不是验证证据，成功结束仍须 execution verify 和显式 accept。
+实际开发遵守任务前置；同项目其他活动或 unknown 尝试会阻止新的单任务 Pi 工作。请先确认旧工作，再决定停止、重试或继续。
+
+纯进展事件写入保留当前控制 revision；停止、追加指示和生命周期变更仍更新 revision 并校验 CAS，持续输出不会使控制操作持续冲突。
+
+验证结果提供“查看证据正文”。GET `/api/projects/<project>/executions/<attempt>/evidence?ref=<exact-ref>` 只接受该尝试的验证引用，核对静态 containment 与完整内容 SHA256 后返回最多 65,536 字符预览及 truncated 标记；缺失或篡改返回诊断，页面清除旧正文，不能以旧预览冒充当前有效证据。

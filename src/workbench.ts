@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { parseArgs } from "node:util";
+import { createPiRunner } from './execution/piRunner.js';
 
 import {
   WorkbenchServerStartError,
@@ -17,6 +18,7 @@ Options:
   --host <host>        Loopback host (default: 127.0.0.1)
   --port <port>        TCP port (default: 7331)
   --static-dir <path>  Frontend static asset root
+  --pi                Enable the local Pi task runner
   -h, --help           Show help`;
 
 async function main(args: string[]): Promise<number> {
@@ -29,6 +31,7 @@ async function main(args: string[]): Promise<number> {
         host: { type: "string" },
         port: { type: "string" },
         "static-dir": { type: "string" },
+        pi: { type: "boolean" },
         help: { type: "boolean", short: "h" },
       },
       allowPositionals: false,
@@ -47,6 +50,7 @@ async function main(args: string[]): Promise<number> {
       : Number(parsed.values.port);
     options = {
       workspaceDir: parsed.values.workspace,
+      ...(parsed.values.pi ? { runner: createPiRunner() } : {}),
       ...(parsed.values.host === undefined ? {} : { host: parsed.values.host }),
       ...(port === undefined ? {} : { port }),
       ...(parsed.values["static-dir"] === undefined

@@ -15,7 +15,13 @@ export type Verification = {
     evidence_ref: string;
     evidence_digest: string;
 };
+export type ExecutionEvent = {
+    at: string;
+    type: 'text' | 'tool' | 'status' | 'session';
+    text: string;
+};
 export type ExecutionAttempt = {
+    progress?: { events: ExecutionEvent[]; session_id?: string };
     schema: typeof EXECUTION_SCHEMA;
     id: string;
     execution_id: string;
