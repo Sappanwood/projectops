@@ -24,7 +24,11 @@ export function resolvePlansRoot(
     io.stderr(`Error: plans artifact type must be ${PLAN_SCHEMA}, got ${plansType ?? "missing"}`);
     return null;
   }
-  const plansRoot = projectArtifactRoots(workspace.root, projectId, workspace.manifest.artifact_layout).plans;
+  const plansRoot = projectArtifactRoots(
+    workspace.root,
+    projectId,
+    workspace.manifest.artifact_layout,
+  ).plans;
   if (!requireWritableContainment) return plansRoot;
 
   try {

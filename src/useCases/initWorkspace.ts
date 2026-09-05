@@ -6,12 +6,14 @@ import path from "node:path";
 import type { CliIO } from "../io.js";
 import { newWorkspaceManifest, workspaceRetrospectiveRoot } from "../catalog/workspace.js";
 import { createRetrospectiveStore } from "../retrospective/retrospectiveFs.js";
-import {
-  createWorkspaceManifestFile,
-  manifestPathFor,
-} from "../catalog/workspaceStore.js";
+import { createWorkspaceManifestFile, manifestPathFor } from "../catalog/workspaceStore.js";
 
-export function initWorkspace(targetArg: string | undefined, json: boolean, io: CliIO, cwd: string): number {
+export function initWorkspace(
+  targetArg: string | undefined,
+  json: boolean,
+  io: CliIO,
+  cwd: string,
+): number {
   const dir = path.resolve(cwd, targetArg ?? ".");
   const name = path.basename(dir) || "workspace";
   const manifest = newWorkspaceManifest(name);

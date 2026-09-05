@@ -22,10 +22,14 @@ function freshDir(): string {
 function run(args: string[], cwd: string): { code: number; stdout: string[]; stderr: string[] } {
   const stdout: string[] = [];
   const stderr: string[] = [];
-  const code = runCli(args, {
-    stdout: (message) => stdout.push(message),
-    stderr: (message) => stderr.push(message),
-  }, cwd);
+  const code = runCli(
+    args,
+    {
+      stdout: (message) => stdout.push(message),
+      stderr: (message) => stderr.push(message),
+    },
+    cwd,
+  );
   return { code, stdout, stderr };
 }
 
@@ -104,19 +108,28 @@ test("plan materialize creates mapped backlog items and resolves local links", (
     prepare: "REP-002",
     publish: "REP-003",
   });
-  assert.deepEqual(receipt.items.map(({ key, id, disposition }) => ({ key, id, disposition })), [
-    { key: "release", id: "REP-001", disposition: "created" },
-    { key: "prepare", id: "REP-002", disposition: "created" },
-    { key: "publish", id: "REP-003", disposition: "created" },
-  ]);
+  assert.deepEqual(
+    receipt.items.map(({ key, id, disposition }) => ({ key, id, disposition })),
+    [
+      { key: "release", id: "REP-001", disposition: "created" },
+      { key: "prepare", id: "REP-002", disposition: "created" },
+      { key: "publish", id: "REP-003", disposition: "created" },
+    ],
+  );
 
-  const epic = JSON.parse(run(["backlog", "show", "repo-a", "REP-001", "--json"], ws).stdout[0] ?? "null") as Record<string, unknown>;
-  const task = JSON.parse(run(["backlog", "show", "repo-a", "REP-003", "--json"], ws).stdout[0] ?? "null") as Record<string, unknown>;
+  const epic = JSON.parse(
+    run(["backlog", "show", "repo-a", "REP-001", "--json"], ws).stdout[0] ?? "null",
+  ) as Record<string, unknown>;
+  const task = JSON.parse(
+    run(["backlog", "show", "repo-a", "REP-003", "--json"], ws).stdout[0] ?? "null",
+  ) as Record<string, unknown>;
   assert.equal(epic.item_type, "epic");
   assert.equal(task.parent_id, "REP-001");
   assert.deepEqual(task.depends_on, ["REP-002"]);
 
-  const storedPlan = JSON.parse(readFileSync(path.join(ws, "ops", "repo-a", "plans", "plan-release-workflow.json"), "utf8")) as {
+  const storedPlan = JSON.parse(
+    readFileSync(path.join(ws, "ops", "repo-a", "plans", "plan-release-workflow.json"), "utf8"),
+  ) as {
     materialization: { mapping: Record<string, string> };
   };
   assert.deepEqual(storedPlan.materialization.mapping, receipt.mapping);
@@ -139,7 +152,10 @@ test("plan materialize rejects draft plans and invalid plans without writing bac
   const invalidResult = run(["plan", "materialize", "repo-a", "plan-release-workflow"], invalidWs);
   assert.equal(invalidResult.code, 1);
   assert.match(invalidResult.stderr.join("\n"), /dependency not found/i);
-  assert.equal(existsSync(path.join(invalidWs, "ops", "repo-a", "backlog", "items", "REP-001.md")), false);
+  assert.equal(
+    existsSync(path.join(invalidWs, "ops", "repo-a", "backlog", "items", "REP-001.md")),
+    false,
+  );
 });
 
 test("plan materialize retries a complete materialization as a no-op", () => {
@@ -161,14 +177,19 @@ test("plan materialize retries a complete materialization as a no-op", () => {
   assert.equal(receipt.ok, true);
   assert.equal(receipt.no_op, true);
   assert.deepEqual(receipt.mapping, JSON.parse(first.stdout[0] ?? "null").mapping);
-  assert.deepEqual(receipt.items.map(({ key, id, disposition }) => ({ key, id, disposition })), [
-    { key: "release", id: "REP-001", disposition: "reused" },
-    { key: "prepare", id: "REP-002", disposition: "reused" },
-    { key: "publish", id: "REP-003", disposition: "reused" },
-  ]);
+  assert.deepEqual(
+    receipt.items.map(({ key, id, disposition }) => ({ key, id, disposition })),
+    [
+      { key: "release", id: "REP-001", disposition: "reused" },
+      { key: "prepare", id: "REP-002", disposition: "reused" },
+      { key: "publish", id: "REP-003", disposition: "reused" },
+    ],
+  );
   assert.equal(readFileSync(planPath, "utf8"), planBeforeRetry);
   assert.equal(run(["backlog", "list", "repo-a", "--json"], ws).code, 0);
-  const items = JSON.parse(run(["backlog", "list", "repo-a", "--json"], ws).stdout[0] ?? "null") as { items: unknown[] };
+  const items = JSON.parse(
+    run(["backlog", "list", "repo-a", "--json"], ws).stdout[0] ?? "null",
+  ) as { items: unknown[] };
   assert.equal(items.items.length, 3);
 });
 
@@ -176,11 +197,19 @@ function writeExternalStore(storeRoot: string): { itemsRoot: string; indexPath: 
   const itemsRoot = path.join(storeRoot, "items");
   const indexPath = path.join(storeRoot, "INDEX.md");
   mkdirSync(itemsRoot, { recursive: true });
-  writeFileSync(path.join(storeRoot, "backlog.json"), `${JSON.stringify({
-    schema: "backlog/Store@1",
-    project_id: "repo-a",
-    id_prefix: "REP",
-  }, null, 2)}\n`, "utf8");
+  writeFileSync(
+    path.join(storeRoot, "backlog.json"),
+    `${JSON.stringify(
+      {
+        schema: "backlog/Store@1",
+        project_id: "repo-a",
+        id_prefix: "REP",
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
   writeFileSync(indexPath, "external index\n", "utf8");
   return { itemsRoot, indexPath };
 }

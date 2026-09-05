@@ -2,7 +2,10 @@ import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { test, expect } from "./fixture.js";
 
-test("production Workbench updates Backlog with revisions and recovers from a conflict", async ({ workbench, page }) => {
+test("production Workbench updates Backlog with revisions and recovers from a conflict", async ({
+  workbench,
+  page,
+}) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto(workbench.origin);
@@ -16,13 +19,25 @@ test("production Workbench updates Backlog with revisions and recovers from a co
   const loaded = JSON.parse(workbench.cli(["backlog", "show", "alpha", "ALP-001", "--json"]));
   const request = page.waitForRequest((request) => request.method() === "PATCH");
   await detail.getByRole("button", { name: "done", exact: true }).click();
-  expect((await request).postDataJSON()).toEqual({ status: "done", expected_revision: loaded.revision });
+  expect((await request).postDataJSON()).toEqual({
+    status: "done",
+    expected_revision: loaded.revision,
+  });
   await expect(detail).toContainText("Status updated.");
   const updated = JSON.parse(workbench.cli(["backlog", "show", "alpha", "ALP-001", "--json"]));
   expect(updated.status).toBe("done");
   expect(updated.revision).not.toBe(loaded.revision);
 
-  workbench.cli(["backlog", "update", "alpha", "ALP-001", "--status", "in_progress", "--expected-revision", updated.revision]);
+  workbench.cli([
+    "backlog",
+    "update",
+    "alpha",
+    "ALP-001",
+    "--status",
+    "in_progress",
+    "--expected-revision",
+    updated.revision,
+  ]);
   const beforeConflict = workbench.snapshot();
   const conflict = page.waitForResponse((response) => response.request().method() === "PATCH");
   await detail.getByRole("button", { name: "todo", exact: true }).click();
@@ -34,11 +49,16 @@ test("production Workbench updates Backlog with revisions and recovers from a co
   await expect(detail).toContainText("Status: in_progress");
   await detail.getByRole("button", { name: "todo", exact: true }).click();
   await expect(detail).toContainText("Status updated.");
-  expect(JSON.parse(workbench.cli(["backlog", "show", "alpha", "ALP-001", "--json"])).status).toBe("todo");
+  expect(JSON.parse(workbench.cli(["backlog", "show", "alpha", "ALP-001", "--json"])).status).toBe(
+    "todo",
+  );
   expect(errors).toEqual([]);
 });
 
-test("four read-only pages show details, empty states and malformed diagnostics", async ({ workbench, page }) => {
+test("four read-only pages show details, empty states and malformed diagnostics", async ({
+  workbench,
+  page,
+}) => {
   const before = workbench.snapshot();
   await page.goto(workbench.origin);
   await page.getByLabel("Select active project").selectOption("alpha");
@@ -49,14 +69,27 @@ test("four read-only pages show details, empty states and malformed diagnostics"
   await expect(page.getByRole("tabpanel")).toContainText("ALP-001");
   await page.getByRole("tab", { name: /^Reports/ }).click();
   await page.locator("summary").filter({ hasText: "Browser report" }).click();
-  for (const text of ["Browser report body", "Browser checks", "Accepted pending task", "Isolated fixtures", "project-ops:plans/plan-browser.json"]) {
+  for (const text of [
+    "Browser report body",
+    "Browser checks",
+    "Accepted pending task",
+    "Isolated fixtures",
+    "project-ops:plans/plan-browser.json",
+  ]) {
     await expect(page.getByRole("tabpanel")).toContainText(text);
   }
   await page.getByRole("tab", { name: /^Docs/ }).click();
-  for (const document of ["README.md", "AGENTS.md", "docs/PRODUCT_SPEC.md", "docs/ARCHITECTURE.md"]) {
+  for (const document of [
+    "README.md",
+    "AGENTS.md",
+    "docs/PRODUCT_SPEC.md",
+    "docs/ARCHITECTURE.md",
+  ]) {
     await expect(page.getByRole("tabpanel")).toContainText(document);
   }
-  await expect(page.getByRole("tabpanel").getByText("标准文档 · 检查通过", { exact: true })).toHaveCount(4);
+  await expect(
+    page.getByRole("tabpanel").getByText("标准文档 · 检查通过", { exact: true }),
+  ).toHaveCount(4);
   await page.getByRole("tab", { name: /^Retrospectives/ }).click();
   await page.locator("summary").filter({ hasText: "browser" }).click();
   await expect(page.getByRole("tabpanel")).toContainText("Browser retrospective body");
@@ -65,11 +98,17 @@ test("four read-only pages show details, empty states and malformed diagnostics"
   await expect(page.getByRole("tabpanel")).toContainText("No inbox retrospectives found.");
   await page.getByLabel("Task", { exact: true }).fill("ALP-001");
   await page.getByRole("button", { name: "Apply filters" }).click();
-  await expect(page.locator('[data-retrospective-id="browser"] > summary')).toContainText("browser");
+  await expect(page.locator('[data-retrospective-id="browser"] > summary')).toContainText(
+    "browser",
+  );
 
   await page.getByLabel("Select active project").selectOption("empty");
   await expect(page.getByRole("tabpanel")).toContainText("No inbox retrospectives found.");
-  for (const [tab, empty] of [["Plans", "No plans found."], ["Reports", "No delivery reports found."], ["Docs", "文档不存在"]]) {
+  for (const [tab, empty] of [
+    ["Plans", "No plans found."],
+    ["Reports", "No delivery reports found."],
+    ["Docs", "文档不存在"],
+  ]) {
     await page.getByRole("tab", { name: new RegExp(`^${tab}`) }).click();
     await expect(page.getByRole("tabpanel")).toContainText(empty!);
   }
@@ -82,7 +121,7 @@ test("four read-only pages show details, empty states and malformed diagnostics"
   const malformed = workbench.snapshot();
   await page.getByRole("button", { name: "Refresh workspace and project data" }).click();
   await expect(page.getByRole("tabpanel")).toContainText("缺少一级 Markdown 标题；仍可阅读");
-  await expect(page.locator('.markdown-content')).toContainText("Missing heading");
+  await expect(page.locator(".markdown-content")).toContainText("Missing heading");
   for (const tab of ["Plans", "Reports", "Retrospectives"]) {
     await page.getByRole("tab", { name: new RegExp(`^${tab}`) }).click();
     await expect(page.getByRole("tabpanel")).toContainText("ARTIFACT_INVALID");
@@ -91,7 +130,10 @@ test("four read-only pages show details, empty states and malformed diagnostics"
   expect(workbench.snapshot()).toEqual(malformed);
 });
 
-test("unknown project and disconnected server show errors without authority writes", async ({ workbench, page }) => {
+test("unknown project and disconnected server show errors without authority writes", async ({
+  workbench,
+  page,
+}) => {
   const before = workbench.snapshot();
   await page.goto(`${workbench.origin}/#/projects/missing/backlog`);
   await expect(page.getByRole("heading", { name: "Project Not Available" })).toBeVisible();
@@ -106,13 +148,26 @@ test("unknown project and disconnected server show errors without authority writ
   expect(workbench.snapshot()).toEqual(before);
 });
 
-test("Backlog reading mode and Plan task navigation work without changing authority", async ({ workbench, page }) => {
+test("Backlog reading mode and Plan task navigation work without changing authority", async ({
+  workbench,
+  page,
+}) => {
   const draft = path.join(workbench.root, "reading-plan.json");
-  writeFileSync(draft, JSON.stringify({ title: "Reading plan", goal: "Review four tasks", items: [1, 2, 3, 4].map((n) => ({
-    key: `step-${n}`, title: `Reading task ${n}`, item_type: "task", priority: "P1",
-    depends_on: n === 1 ? [] : [`step-${n - 1}`],
-    body: `## Acceptance ${n}\n\n- Read **clearly**\n- Keep state\n\n\`code\` and <script>unsafe</script>`,
-  })) }));
+  writeFileSync(
+    draft,
+    JSON.stringify({
+      title: "Reading plan",
+      goal: "Review four tasks",
+      items: [1, 2, 3, 4].map((n) => ({
+        key: `step-${n}`,
+        title: `Reading task ${n}`,
+        item_type: "task",
+        priority: "P1",
+        depends_on: n === 1 ? [] : [`step-${n - 1}`],
+        body: `## Acceptance ${n}\n\n- Read **clearly**\n- Keep state\n\n\`code\` and <script>unsafe</script>`,
+      })),
+    }),
+  );
   workbench.cli(["plan", "create", "alpha", "--input", draft]);
   const before = workbench.snapshot();
   await page.goto(`${workbench.origin}/#/projects/alpha/backlog`);
@@ -128,7 +183,9 @@ test("Backlog reading mode and Plan task navigation work without changing author
   await page.getByRole("tab", { name: /^Plans/ }).click();
   const plan = page.locator(".plan-card").filter({ hasText: "Review four tasks" });
   await plan.locator(":scope > summary").click();
-  await expect(plan.getByRole("navigation", { name: "任务目录" }).getByRole("button")).toHaveCount(4);
+  await expect(plan.getByRole("navigation", { name: "任务目录" }).getByRole("button")).toHaveCount(
+    4,
+  );
   await plan.getByRole("button", { name: /Reading task 3 依赖/ }).click();
   await expect(plan.getByRole("heading", { name: "Acceptance 3" })).toBeVisible();
   await expect(plan.getByRole("heading", { name: "Acceptance 2" })).toBeHidden();

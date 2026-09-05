@@ -11,8 +11,9 @@ import { getPlanNext } from "../src/application/planNext.js";
 function setup() {
   const root = mkdtempSync(path.join(tmpdir(), "pops-plan-next-"));
   function call(args: string[]) {
-    const out: string[] = [], err: string[] = [];
-    const code = runCli(args, { stdout: s => out.push(s), stderr: s => err.push(s) }, root);
+    const out: string[] = [],
+      err: string[] = [];
+    const code = runCli(args, { stdout: (s) => out.push(s), stderr: (s) => err.push(s) }, root);
     return { code, stdout: out.join("\n"), stderr: err.join("\n") };
   }
   function run(args: string[]) {
@@ -26,13 +27,43 @@ function setup() {
   run(["backlog", "init", "alpha"]);
   const ops = path.join(root, "ops/alpha");
   function item(title: string, priority = "P1", extra: string[] = []) {
-    return run(["backlog", "add", "alpha", "-T", title, "-c", "feature", "--priority", priority, ...extra]).item.id as string;
+    return run([
+      "backlog",
+      "add",
+      "alpha",
+      "-T",
+      title,
+      "-c",
+      "feature",
+      "--priority",
+      priority,
+      ...extra,
+    ]).item.id as string;
   }
   function plan(ids: string[], materialized = true) {
     const data = {
-      schema: "plan/Plan@1", id: "plan-next", title: "Next", goal: "Read next tasks", status: materialized ? "approved" : "draft",
-      ...(materialized ? { approval: { approved_at: "2026-09-05", review_note: "Fixture" }, materialization: { materialized_at: "2026-09-05", mapping: Object.fromEntries(ids.map((id, i) => [`task-${i}`, id])) } } : {}),
-      items: ids.map((id, i) => ({ key: `task-${i}`, title: `Planned ${id}`, item_type: run(["backlog", "show", "alpha", id]).item_type, priority: "P1", body: "Scope", depends_on: [] })),
+      schema: "plan/Plan@1",
+      id: "plan-next",
+      title: "Next",
+      goal: "Read next tasks",
+      status: materialized ? "approved" : "draft",
+      ...(materialized
+        ? {
+            approval: { approved_at: "2026-09-05", review_note: "Fixture" },
+            materialization: {
+              materialized_at: "2026-09-05",
+              mapping: Object.fromEntries(ids.map((id, i) => [`task-${i}`, id])),
+            },
+          }
+        : {}),
+      items: ids.map((id, i) => ({
+        key: `task-${i}`,
+        title: `Planned ${id}`,
+        item_type: run(["backlog", "show", "alpha", id]).item_type,
+        priority: "P1",
+        body: "Scope",
+        depends_on: [],
+      })),
     };
     writeFileSync(path.join(ops, "plans/plan-next.json"), JSON.stringify(data));
   }
@@ -42,7 +73,9 @@ function snapshot(root: string): Record<string, string> {
   const result: Record<string, string> = {};
   for (const entry of readdirSync(root, { withFileTypes: true })) {
     const file = path.join(root, entry.name);
-    if (entry.isDirectory()) for (const [key, value] of Object.entries(snapshot(file))) result[`${entry.name}/${key}`] = value;
+    if (entry.isDirectory())
+      for (const [key, value] of Object.entries(snapshot(file)))
+        result[`${entry.name}/${key}`] = value;
     else result[entry.name] = readFileSync(file, "utf8");
   }
   return result;
@@ -67,13 +100,22 @@ test("plan next uses current priorities and direct dependencies within one proje
     f.plan([low, second, middle, high, first, running, blocked, done, epic]);
     const before = snapshot(f.root);
     const data = f.run(["plan", "next", "alpha", "plan-next"]);
-    assert.deepEqual(Object.keys(data).sort(), ["ok", "plan_id", "ready", "in_progress", "blocked", "next", "diagnostics"].sort());
-    assert.deepEqual(data.ready.map((i: any) => i.id), [first, second, high, middle, low]);
+    assert.deepEqual(
+      Object.keys(data).sort(),
+      ["ok", "plan_id", "ready", "in_progress", "blocked", "next", "diagnostics"].sort(),
+    );
+    assert.deepEqual(
+      data.ready.map((i: any) => i.id),
+      [first, second, high, middle, low],
+    );
     assert.equal(data.next.id, first);
     assert.equal(data.next.title, "First");
     assert.equal(data.next.priority, "P0");
     assert.equal(data.next.status, "todo");
-    assert.deepEqual(data.in_progress.map((i: any) => i.id), [running]);
+    assert.deepEqual(
+      data.in_progress.map((i: any) => i.id),
+      [running],
+    );
     assert.equal(data.blocked[0].id, blocked);
     assert.equal(data.blocked[0].reasons[0].id, running);
     assert.equal(data.blocked[0].reasons[0].code, "DEPENDENCY_NOT_DONE");
@@ -87,9 +129,12 @@ test("plan next uses current priorities and direct dependencies within one proje
     assert.deepEqual(snapshot(f.root), before);
     const text = f.call(["plan", "next", "alpha", "plan-next"]);
     assert.equal(text.code, 0);
-    for (const token of [first, running, blocked, "in_progress", "P0"]) assert.ok(text.stdout.includes(token), token);
+    for (const token of [first, running, blocked, "in_progress", "P0"])
+      assert.ok(text.stdout.includes(token), token);
     assert.deepEqual(snapshot(f.root), before);
-  } finally { rmSync(f.root, { recursive: true, force: true }); }
+  } finally {
+    rmSync(f.root, { recursive: true, force: true });
+  }
 });
 
 test("plan next isolates missing, corrupt and foreign dependencies and unreadable mapped tasks", () => {
@@ -106,18 +151,32 @@ test("plan next isolates missing, corrupt and foreign dependencies and unreadabl
     writeFileSync(path.join(f.ops, `backlog/items/${corrupt}.md`), "broken");
     writeFileSync(path.join(f.ops, `backlog/items/${unreadable}.md`), "broken");
     const file = path.join(f.ops, `backlog/items/${foreign}.md`);
-    writeFileSync(file, readFileSync(file, "utf8").replace("depends_on: []", 'depends_on: ["BET-001"]'));
+    writeFileSync(
+      file,
+      readFileSync(file, "utf8").replace("depends_on: []", 'depends_on: ["BET-001"]'),
+    );
     const before = snapshot(f.root);
     const data = f.run(["plan", "next", "alpha", "plan-next"]);
-    assert.deepEqual(data.ready.map((i: any) => i.id), [ready]);
-    assert.deepEqual(data.blocked[0].reasons.map((r: any) => [r.id, r.code]), [[missing, "ITEM_NOT_FOUND"], [corrupt, "ITEM_INVALID"]]);
+    assert.deepEqual(
+      data.ready.map((i: any) => i.id),
+      [ready],
+    );
+    assert.deepEqual(
+      data.blocked[0].reasons.map((r: any) => [r.id, r.code]),
+      [
+        [missing, "ITEM_NOT_FOUND"],
+        [corrupt, "ITEM_INVALID"],
+      ],
+    );
     assert.equal(data.blocked[1].reasons[0].id, "BET-001");
     assert.equal(data.blocked[1].reasons[0].code, "INVALID_ITEM_ID");
     assert.equal(data.diagnostics[0].id, unreadable);
     assert.equal(data.diagnostics[0].code, "ITEM_INVALID");
     assert.equal(JSON.stringify(data).includes(f.root), false);
     assert.deepEqual(snapshot(f.root), before);
-  } finally { rmSync(f.root, { recursive: true, force: true }); }
+  } finally {
+    rmSync(f.root, { recursive: true, force: true });
+  }
 });
 
 test("plan next handles unmaterialized, all-done and blocked-only Plans as successful empty recommendations", () => {
@@ -133,20 +192,26 @@ test("plan next handles unmaterialized, all-done and blocked-only Plans as succe
     f.run(["backlog", "update", "alpha", id, "--status", "done"]);
     data = f.run(["plan", "next", "alpha", "plan-next"]);
     assert.equal(data.next, null);
-    assert.deepEqual([data.ready, data.in_progress, data.blocked, data.diagnostics], [[], [], [], []]);
+    assert.deepEqual(
+      [data.ready, data.in_progress, data.blocked, data.diagnostics],
+      [[], [], [], []],
+    );
     const dep = f.item("Pending outside Plan");
     const blocked = f.item("Blocked", "P1", ["--depends-on", dep]);
     f.plan([blocked]);
     data = f.run(["plan", "next", "alpha", "plan-next"]);
     assert.equal(data.next, null);
     assert.equal(data.blocked.length, 1);
-  } finally { rmSync(f.root, { recursive: true, force: true }); }
+  } finally {
+    rmSync(f.root, { recursive: true, force: true });
+  }
 });
 
 test("built plan next CLI exposes text/JSON, structured failures and preserves authority", () => {
   const f = setup();
   const cli = path.resolve("dist/cli.js");
-  const invoke = (args: string[], cwd = f.root) => spawnSync(process.execPath, [cli, ...args], { cwd, encoding: "utf8" });
+  const invoke = (args: string[], cwd = f.root) =>
+    spawnSync(process.execPath, [cli, ...args], { cwd, encoding: "utf8" });
   try {
     const id = f.item("Built task");
     f.plan([id]);
@@ -157,7 +222,13 @@ test("built plan next CLI exposes text/JSON, structured failures and preserves a
     assert.equal(result.stderr, "");
     assert.match(invoke(["plan", "next", "alpha", "plan-next"]).stdout, /Built task/);
     assert.match(invoke(["--help"]).stdout, /plan next/);
-    for (const args of [["alpha", "plan-missing"], ["missing", "plan-next"], ["alpha"], ["alpha", "../invalid"], ["alpha", "plan-next", "--unknown"]]) {
+    for (const args of [
+      ["alpha", "plan-missing"],
+      ["missing", "plan-next"],
+      ["alpha"],
+      ["alpha", "../invalid"],
+      ["alpha", "plan-next", "--unknown"],
+    ]) {
       const failed = invoke(["plan", "next", ...args, "--json"]);
       assert.notEqual(failed.status, 0);
       assert.equal(JSON.parse(failed.stdout).ok, false);
@@ -166,14 +237,24 @@ test("built plan next CLI exposes text/JSON, structured failures and preserves a
     }
     assert.deepEqual(snapshot(f.root), before);
     writeFileSync(path.join(f.ops, "plans/plan-next.json"), "{");
-    assert.equal(JSON.parse(invoke(["plan", "next", "alpha", "plan-next", "--json"]).stdout).ok, false);
+    assert.equal(
+      JSON.parse(invoke(["plan", "next", "alpha", "plan-next", "--json"]).stdout).ok,
+      false,
+    );
     writeFileSync(path.join(f.root, ".pops/workspace.json"), "{");
-    assert.equal(JSON.parse(invoke(["plan", "next", "alpha", "plan-next", "--json"]).stdout).ok, false);
+    assert.equal(
+      JSON.parse(invoke(["plan", "next", "alpha", "plan-next", "--json"]).stdout).ok,
+      false,
+    );
     const absent = mkdtempSync(path.join(tmpdir(), "pops-no-workspace-"));
     try {
       const result = invoke(["plan", "next", "alpha", "plan-next", "--json"], absent);
       assert.notEqual(result.status, 0);
       assert.equal(JSON.parse(result.stdout).ok, false);
-    } finally { rmSync(absent, { recursive: true, force: true }); }
-  } finally { rmSync(f.root, { recursive: true, force: true }); }
+    } finally {
+      rmSync(absent, { recursive: true, force: true });
+    }
+  } finally {
+    rmSync(f.root, { recursive: true, force: true });
+  }
 });

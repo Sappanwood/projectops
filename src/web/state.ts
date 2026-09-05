@@ -8,12 +8,12 @@ import type {
 } from "./types.js";
 import { emptyBacklogState } from "./backlogController.js";
 import { emptyDocsState } from "./docsView.js";
-import { initialModelSelection } from './modelSelector.js';
+import { initialModelSelection } from "./modelSelector.js";
 
 export function createInitialState(route?: RouteState): AppState {
   return {
     modelSelection: initialModelSelection(),
-    route: route ?? {projectId:null, view:"overview"},
+    route: route ?? { projectId: null, view: "overview" },
     docs: emptyDocsState(),
     selectedPlanId: route?.planId ?? null,
     selectedReportId: route?.reportId ?? null,
@@ -77,9 +77,7 @@ export function setWorkspaceSuccess(
     projectError,
     // if project is not found or changed, clear stale overview
     projectOverview:
-      state.projectOverview?.project.id === selectedProjectId
-        ? state.projectOverview
-        : null,
+      state.projectOverview?.project.id === selectedProjectId ? state.projectOverview : null,
   };
 }
 

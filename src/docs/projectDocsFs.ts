@@ -122,9 +122,7 @@ export function scaffoldProjectDocs(workspaceRoot: string, projectDir: string): 
         skipped.push(target.path);
         continue;
       }
-      throw new ProjectDocsScaffoldError(
-        `cannot create ${target.path}: ${formatFsError(error)}`,
-      );
+      throw new ProjectDocsScaffoldError(`cannot create ${target.path}: ${formatFsError(error)}`);
     }
   }
   return { created, skipped };
@@ -183,7 +181,9 @@ function ensureDirectory(target: string, displayPath: string): void {
     }
   } catch (error) {
     if (error instanceof ProjectDocsScaffoldError) throw error;
-    throw new ProjectDocsScaffoldError(`${displayPath} cannot be accessed: ${formatFsError(error)}`);
+    throw new ProjectDocsScaffoldError(
+      `${displayPath} cannot be accessed: ${formatFsError(error)}`,
+    );
   }
 }
 
@@ -202,7 +202,9 @@ function resolveExistingPath(target: string, displayPath: string): string {
   try {
     return realpathSync(target);
   } catch (error) {
-    throw new ProjectDocsScaffoldError(`${displayPath} cannot be resolved: ${formatFsError(error)}`);
+    throw new ProjectDocsScaffoldError(
+      `${displayPath} cannot be resolved: ${formatFsError(error)}`,
+    );
   }
 }
 
@@ -238,7 +240,12 @@ export function hasLevelOneHeading(content: string): boolean {
   for (let index = 0; index + 1 < lines.length; index += 1) {
     const current = lines[index];
     const next = lines[index + 1];
-    if (current !== undefined && next !== undefined && current.trim() !== "" && /^ {0,3}=+[ \t]*$/.test(next)) {
+    if (
+      current !== undefined &&
+      next !== undefined &&
+      current.trim() !== "" &&
+      /^ {0,3}=+[ \t]*$/.test(next)
+    ) {
       return true;
     }
   }

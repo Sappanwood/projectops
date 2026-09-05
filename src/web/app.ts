@@ -20,8 +20,8 @@ import {
 } from "./state.js";
 import type { AppState, RouteState } from "./types.js";
 import { emptyDocsState } from "./docsView.js";
-import { rememberModel } from './modelSelector.js';
-import type { ModelCatalog } from '../execution/models.js';
+import { rememberModel } from "./modelSelector.js";
+import type { ModelCatalog } from "../execution/models.js";
 
 export type WorkbenchAppOptions = {
   container: HTMLElement;
@@ -50,23 +50,34 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
     if (!apiClient.request) return;
     const request = ++modelRequestId;
     state = { ...state, modelSelection: { ...state.modelSelection, loading: true } };
-    const result = await apiClient.request<ModelCatalog>('/api/models');
+    const result = await apiClient.request<ModelCatalog>("/api/models");
     if (destroyed || request !== modelRequestId) return;
-    state = { ...state, modelSelection: { ...state.modelSelection, loading: false,
-      ...(result.ok ? { ...result.data, error: '' } : { error: result.error.message }) } };
+    state = {
+      ...state,
+      modelSelection: {
+        ...state.modelSelection,
+        loading: false,
+        ...(result.ok ? { ...result.data, error: "" } : { error: result.error.message }),
+      },
+    };
     render();
   }
-  const backlog = createBacklogController(apiClient, (next) => {
-    state = { ...state, backlog: next };
-    render();
-  }, async (projectId) => {
-    const requestId = currentRequestId;
-    const result = await apiClient.getProjectOverview(projectId);
-    if (destroyed || requestId !== currentRequestId || state.selectedProjectId !== projectId) return;
-    if (result.ok) state = setProjectSuccess(state, result.data);
-    else state = setProjectError(state, result.error);
-    render();
-  });
+  const backlog = createBacklogController(
+    apiClient,
+    (next) => {
+      state = { ...state, backlog: next };
+      render();
+    },
+    async (projectId) => {
+      const requestId = currentRequestId;
+      const result = await apiClient.getProjectOverview(projectId);
+      if (destroyed || requestId !== currentRequestId || state.selectedProjectId !== projectId)
+        return;
+      if (result.ok) state = setProjectSuccess(state, result.data);
+      else state = setProjectError(state, result.error);
+      render();
+    },
+  );
 
   const parallelRuns = createParallelRunUi(container, apiClient, () => state);
   const planRuns = createPlanRunUi(container, apiClient, () => state);
@@ -76,19 +87,28 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
   const readingDetails = new Map<string, boolean>();
   const readingPositions = new Map<string, number>();
   function saveReadingPosition(): void {
-    if (typeof window === "undefined" || state.projectLoading || state.readPagesLoading || state.docs.loading || state.status !== "ready") return;
+    if (
+      typeof window === "undefined" ||
+      state.projectLoading ||
+      state.readPagesLoading ||
+      state.docs.loading ||
+      state.status !== "ready"
+    )
+      return;
     readingPositions.set(formatRoute(state.route), window.scrollY);
   }
   function restoreReadingPosition(): boolean {
     const position = readingPositions.get(formatRoute(state.route));
     if (typeof window === "undefined" || position === undefined) return false;
-    window.scrollTo({top:position,behavior:"instant"});
+    window.scrollTo({ top: position, behavior: "instant" });
     return true;
   }
   let renderedProject: string | null = null;
   function render(): void {
     if (destroyed) return;
-    for (const detail of container.querySelectorAll?.<HTMLDetailsElement>("details[data-reading-key]") ?? []) {
+    for (const detail of container.querySelectorAll?.<HTMLDetailsElement>(
+      "details[data-reading-key]",
+    ) ?? []) {
       readingDetails.set(`${renderedProject}:${detail.dataset.readingKey}`, detail.open);
     }
     container.innerHTML = renderApp(state);
@@ -97,7 +117,9 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
     planRuns.render();
     parallelRuns.render();
     renderedProject = state.selectedProjectId;
-    for (const detail of container.querySelectorAll?.<HTMLDetailsElement>("details[data-reading-key]") ?? []) {
+    for (const detail of container.querySelectorAll?.<HTMLDetailsElement>(
+      "details[data-reading-key]",
+    ) ?? []) {
       const open = readingDetails.get(`${renderedProject}:${detail.dataset.readingKey}`);
       if (open !== undefined) detail.open = open;
     }
@@ -122,7 +144,14 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
 
     const currentRoute = router.getCurrentRoute();
     state = setWorkspaceSuccess(state, workspaceResult.data, currentRoute);
-    state = { ...state, retrospectiveFilters: currentRoute.retrospectiveFilters ?? { project: state.selectedProjectId ?? "", task: "", status: "" } };
+    state = {
+      ...state,
+      retrospectiveFilters: currentRoute.retrospectiveFilters ?? {
+        project: state.selectedProjectId ?? "",
+        task: "",
+        status: "",
+      },
+    };
     render();
 
     // If a valid project is selected, load its overview
@@ -162,16 +191,35 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
     const navigation = ++backlogNavigation;
     await backlog.load(projectId);
     const route = router.getCurrentRoute();
-    if (navigation !== backlogNavigation || route.projectId !== projectId || route.view !== "backlog") return;
+    if (
+      navigation !== backlogNavigation ||
+      route.projectId !== projectId ||
+      route.view !== "backlog"
+    )
+      return;
     if (route.itemId && !state.backlog.saving) await backlog.select(route.itemId);
   }
 
   function focusReadArtifact(): void {
     const route = router.getCurrentRoute();
-    const id = state.currentView === "plans" ? route.planId : state.currentView === "reports" ? route.reportId : state.currentView === "retrospectives" ? route.retrospectiveId : undefined;
+    const id =
+      state.currentView === "plans"
+        ? route.planId
+        : state.currentView === "reports"
+          ? route.reportId
+          : state.currentView === "retrospectives"
+            ? route.retrospectiveId
+            : undefined;
     if (!id) return;
-    const attribute = state.currentView === "plans" ? "planId" : state.currentView === "reports" ? "reportId" : "retrospectiveId";
-    for (const detail of container.querySelectorAll?.<HTMLDetailsElement>("details[data-plan-id], details[data-report-id], details[data-retrospective-id]") ?? []) {
+    const attribute =
+      state.currentView === "plans"
+        ? "planId"
+        : state.currentView === "reports"
+          ? "reportId"
+          : "retrospectiveId";
+    for (const detail of container.querySelectorAll?.<HTMLDetailsElement>(
+      "details[data-plan-id], details[data-report-id], details[data-retrospective-id]",
+    ) ?? []) {
       if (detail.dataset[attribute] !== id) continue;
       detail.open = true;
       detail.scrollIntoView({ block: "start" });
@@ -180,35 +228,71 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
   }
 
   async function loadReadPages(projectId: string): Promise<void> {
-    if (state.currentView === "docs") { await loadDocs(projectId); return; }
+    if (state.currentView === "docs") {
+      await loadDocs(projectId);
+      return;
+    }
     const requestId = currentRequestId;
     const readId = ++readRequestId;
     state = { ...state, readPages: null, readPagesLoading: true, readPagesError: null };
     render();
     const result = await apiClient.getReadPages(projectId);
-    if (destroyed || requestId !== currentRequestId || readId !== readRequestId || state.selectedProjectId !== projectId) return;
-    state = { ...state, readPagesLoading: false,
+    if (
+      destroyed ||
+      requestId !== currentRequestId ||
+      readId !== readRequestId ||
+      state.selectedProjectId !== projectId
+    )
+      return;
+    state = {
+      ...state,
+      readPagesLoading: false,
       readPages: result.ok ? result.data : null,
-      readPagesError: result.ok ? null : result.error };
+      readPagesError: result.ok ? null : result.error,
+    };
     render();
-    if (result.ok) { focusReadArtifact(); restoreReadingPosition(); }
+    if (result.ok) {
+      focusReadArtifact();
+      restoreReadingPosition();
+    }
   }
 
   function focusDocumentSection(): void {
     const section = router.getCurrentRoute().section;
     if (!section) return;
     const target = container.ownerDocument?.getElementById(`doc-heading-${section}`);
-    if (target && container.contains(target)) { target.scrollIntoView({block:"start"}); target.focus({preventScroll:true}); }
+    if (target && container.contains(target)) {
+      target.scrollIntoView({ block: "start" });
+      target.focus({ preventScroll: true });
+    }
   }
 
   async function loadDocs(projectId: string): Promise<void> {
     const request = ++documentRequestId;
     const documentPath = router.getCurrentRoute().documentPath ?? "README.md";
-    state = {...state, docs:{...emptyDocsState(), loading:true}};
+    state = { ...state, docs: { ...emptyDocsState(), loading: true } };
     render();
-    const [list, document] = await Promise.all([apiClient.listDocuments(projectId), apiClient.showDocument(projectId, documentPath)]);
-    if (destroyed || request !== documentRequestId || state.selectedProjectId !== projectId || state.currentView !== "docs") return;
-    state = {...state, docs:{list:list.ok ? list.data : null, document:document.ok ? document.data : null, loading:false, error:document.ok ? null : document.error, listError:list.ok ? null : list.error}};
+    const [list, document] = await Promise.all([
+      apiClient.listDocuments(projectId),
+      apiClient.showDocument(projectId, documentPath),
+    ]);
+    if (
+      destroyed ||
+      request !== documentRequestId ||
+      state.selectedProjectId !== projectId ||
+      state.currentView !== "docs"
+    )
+      return;
+    state = {
+      ...state,
+      docs: {
+        list: list.ok ? list.data : null,
+        document: document.ok ? document.data : null,
+        loading: false,
+        error: document.ok ? null : document.error,
+        listError: list.ok ? null : list.error,
+      },
+    };
     render();
     if (document.ok && !restoreReadingPosition()) focusDocumentSection();
   }
@@ -258,19 +342,39 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
 
     render();
     if (state.currentView === "overview") restoreReadingPosition();
-    if (state.currentView === "backlog" && state.selectedProjectId !== null && state.projectError === null) {
+    if (
+      state.currentView === "backlog" &&
+      state.selectedProjectId !== null &&
+      state.projectError === null
+    ) {
       await loadBacklogRoute(state.selectedProjectId);
     }
-    if (isReadPage(state.currentView) && state.selectedProjectId !== null && state.projectError === null) await loadReadPages(state.selectedProjectId);
+    if (
+      isReadPage(state.currentView) &&
+      state.selectedProjectId !== null &&
+      state.projectError === null
+    )
+      await loadReadPages(state.selectedProjectId);
   }
 
   function handleRouteChange(route: RouteState): void {
     if (destroyed) return;
-    if (route.view === "retrospectives" && state.currentView === "retrospectives" && state.readPages && !state.projectLoading && formatRoute(route) === formatRoute(state.route)) return;
+    if (
+      route.view === "retrospectives" &&
+      state.currentView === "retrospectives" &&
+      state.readPages &&
+      !state.projectLoading &&
+      formatRoute(route) === formatRoute(state.route)
+    )
+      return;
     saveReadingPosition();
     const previousRoute = state.route;
-    state = {...state, route};
-    state = { ...state, selectedPlanId: route.planId ?? null, selectedReportId: route.reportId ?? null };
+    state = { ...state, route };
+    state = {
+      ...state,
+      selectedPlanId: route.planId ?? null,
+      selectedReportId: route.reportId ?? null,
+    };
 
     if (state.workspace === null || state.status === "loading") {
       if (state.status === "loading") {
@@ -288,14 +392,38 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
 
     const projectChanged = route.projectId !== state.selectedProjectId;
     const viewChanged = route.view !== state.currentView;
-    if (route.view === "retrospectives") state = {...state,retrospectiveFilters:route.retrospectiveFilters ?? (projectChanged ? {project:route.projectId ?? "",status:"",task:""} : state.retrospectiveFilters)};
-    if (projectChanged || viewChanged) { documentRequestId++; state = {...state, docs:emptyDocsState()}; }
+    if (route.view === "retrospectives")
+      state = {
+        ...state,
+        retrospectiveFilters:
+          route.retrospectiveFilters ??
+          (projectChanged
+            ? { project: route.projectId ?? "", status: "", task: "" }
+            : state.retrospectiveFilters),
+      };
+    if (projectChanged || viewChanged) {
+      documentRequestId++;
+      state = { ...state, docs: emptyDocsState() };
+    }
     backlogNavigation++;
-    if (viewChanged) { backlog.reset(); readRequestId++; }
+    if (viewChanged) {
+      backlog.reset();
+      readRequestId++;
+    }
 
     if (projectChanged) {
       backlog.reset();
-      state = { ...state, readPages: null, readPagesLoading: false, readPagesError: null, retrospectiveFilters: route.retrospectiveFilters ?? { project: route.projectId ?? "", status: "", task: "" } };
+      state = {
+        ...state,
+        readPages: null,
+        readPagesLoading: false,
+        readPagesError: null,
+        retrospectiveFilters: route.retrospectiveFilters ?? {
+          project: route.projectId ?? "",
+          status: "",
+          task: "",
+        },
+      };
       if (route.projectId === null) {
         currentRequestId++;
         state = {
@@ -319,7 +447,8 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
       state = selectView(state, route.view);
       render();
       if (route.view === "overview" && route.projectId !== null) void loadProject(route.projectId);
-      if (route.view === "backlog" && route.projectId !== null) void loadBacklogRoute(route.projectId);
+      if (route.view === "backlog" && route.projectId !== null)
+        void loadBacklogRoute(route.projectId);
       if (isReadPage(route.view) && route.projectId !== null) void loadReadPages(route.projectId);
     } else {
       render();
@@ -327,41 +456,52 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
         backlog.reset();
         void loadBacklogRoute(route.projectId);
       }
-      if ((route.view === "plans" || route.view === "reports") && route.projectId !== null) void loadReadPages(route.projectId);
+      if ((route.view === "plans" || route.view === "reports") && route.projectId !== null)
+        void loadReadPages(route.projectId);
       if (route.view === "retrospectives" && route.projectId !== null) {
-        if (state.readPages) { focusReadArtifact(); restoreReadingPosition(); }
-        else void loadReadPages(route.projectId);
+        if (state.readPages) {
+          focusReadArtifact();
+          restoreReadingPosition();
+        } else void loadReadPages(route.projectId);
       }
       if (route.view === "docs" && route.projectId !== null) {
-        if (previousRoute.documentPath === route.documentPath && state.docs.document) focusDocumentSection();
+        if (previousRoute.documentPath === route.documentPath && state.docs.document)
+          focusDocumentSection();
         else void loadDocs(route.projectId);
       }
     }
   }
 
-  const router = typeof options.router === "function"
-    ? options.router(handleRouteChange)
-    : (options.router ?? setupRouter(handleRouteChange));
+  const router =
+    typeof options.router === "function"
+      ? options.router(handleRouteChange)
+      : (options.router ?? setupRouter(handleRouteChange));
 
   // Global event delegation on container
   function handleClick(event: MouseEvent): void {
     const target = event.target as HTMLElement | null;
     if (target === null) return;
 
-    const link = target.closest<HTMLAnchorElement>('a[href]');
+    const link = target.closest<HTMLAnchorElement>("a[href]");
     if (link && typeof window !== "undefined" && link.hash.startsWith("#/projects/")) {
       const destination = parseRoute(link.hash);
       if (destination.returnTo) {
         const origin = parseRoute(destination.returnTo);
-        if (origin.projectId === state.route.projectId && origin.view === state.currentView) readingPositions.set(destination.returnTo,window.scrollY);
+        if (origin.projectId === state.route.projectId && origin.view === state.currentView)
+          readingPositions.set(destination.returnTo, window.scrollY);
       }
     }
 
-    if (target.closest("#docs-retry") !== null && state.selectedProjectId !== null) { void loadDocs(state.selectedProjectId); return; }
+    if (target.closest("#docs-retry") !== null && state.selectedProjectId !== null) {
+      void loadDocs(state.selectedProjectId);
+      return;
+    }
 
     const taskLink = target.closest<HTMLButtonElement>("[data-plan-target]");
     if (taskLink !== null) {
-      const detail = container.ownerDocument.getElementById(taskLink.dataset.planTarget!) as HTMLDetailsElement | null;
+      const detail = container.ownerDocument.getElementById(
+        taskLink.dataset.planTarget!,
+      ) as HTMLDetailsElement | null;
       if (detail && container.contains(detail)) {
         detail.open = true;
         detail.scrollIntoView({ block: "start" });
@@ -389,9 +529,12 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
     }
     const itemButton = target.closest<HTMLButtonElement>("[data-backlog-item]");
     if (itemButton !== null) {
-      router.navigate({ projectId: state.selectedProjectId, view: "backlog", itemId: itemButton.dataset.backlogItem!,
+      router.navigate({
+        projectId: state.selectedProjectId,
+        view: "backlog",
+        itemId: itemButton.dataset.backlogItem!,
         ...(state.selectedPlanId ? { planId: state.selectedPlanId } : {}),
-        ...(state.route.returnTo ? {returnTo:state.route.returnTo} : {}),
+        ...(state.route.returnTo ? { returnTo: state.route.returnTo } : {}),
       });
       return;
     }
@@ -411,7 +554,7 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
 
   function handleChange(event: Event): void {
     const modelSelect = event.target as HTMLSelectElement | null;
-    if (modelSelect?.id === 'model-select') {
+    if (modelSelect?.id === "model-select") {
       const selected = modelSelect.value ? JSON.parse(modelSelect.value) : null;
       state = { ...state, modelSelection: { ...state.modelSelection, selected } };
       rememberModel(selected);
@@ -435,19 +578,28 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
     const form = event.target as HTMLFormElement | null;
     if (form?.id !== "retrospective-filters") return;
     event.preventDefault();
-    const value = (name: string) => (form.elements.namedItem(name) as HTMLInputElement | HTMLSelectElement).value;
-    state = { ...state, retrospectiveFilters: {
-      project: value("project").trim(),
-      task: value("task").trim(),
-      status: value("status"),
-    } };
-    const nextRoute = {...state.route, retrospectiveId:undefined, retrospectiveFilters:state.retrospectiveFilters};
-    state = {...state,route:nextRoute};
+    const value = (name: string) =>
+      (form.elements.namedItem(name) as HTMLInputElement | HTMLSelectElement).value;
+    state = {
+      ...state,
+      retrospectiveFilters: {
+        project: value("project").trim(),
+        task: value("task").trim(),
+        status: value("status"),
+      },
+    };
+    const nextRoute = {
+      ...state.route,
+      retrospectiveId: undefined,
+      retrospectiveFilters: state.retrospectiveFilters,
+    };
+    state = { ...state, route: nextRoute };
     render();
     router.navigate(nextRoute);
   }
 
-  if (typeof window !== "undefined") window.addEventListener("scroll", saveReadingPosition, {passive:true});
+  if (typeof window !== "undefined")
+    window.addEventListener("scroll", saveReadingPosition, { passive: true });
   container.addEventListener("submit", handleSubmit);
   container.addEventListener("click", handleClick);
   container.addEventListener("change", handleChange);

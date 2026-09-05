@@ -47,26 +47,47 @@ export function backlogUpdate(
     return 1;
   }
   const contentEdit = values.title !== undefined || values["body-file"] !== undefined;
-  if (contentEdit && values.status !== undefined) { io.stderr("Error: edit content and status separately."); return 1; }
-  if (!contentEdit && (values.status === undefined || !ITEM_STATUSES.includes(values.status as ItemStatus))) {
+  if (contentEdit && values.status !== undefined) {
+    io.stderr("Error: edit content and status separately.");
+    return 1;
+  }
+  if (
+    !contentEdit &&
+    (values.status === undefined || !ITEM_STATUSES.includes(values.status as ItemStatus))
+  ) {
     io.stderr(`Error: --status must be one of: ${ITEM_STATUSES.join(", ")}`);
     return 1;
   }
   let body: string | undefined;
-  try { if (values["body-file"] !== undefined) body = readFileSync(values["body-file"], "utf8"); } catch { io.stderr("Error: cannot read body file."); return 1; }
-  const result = contentEdit ? updateBacklogItemContent({workspaceDir:cwd, projectId, itemId, expectedRevision: values["expected-revision"] ?? "", ...(values.title === undefined ? {} : {title: values.title}), ...(body === undefined ? {} : {body})}) : updateBacklogItemStatus({
-    workspaceDir: cwd,
-    projectId,
-    itemId,
-    status: values.status as ItemStatus,
-    ...(values["expected-revision"] === undefined
-      ? {}
-      : { expectedRevision: values["expected-revision"] }),
-  });
+  try {
+    if (values["body-file"] !== undefined) body = readFileSync(values["body-file"], "utf8");
+  } catch {
+    io.stderr("Error: cannot read body file.");
+    return 1;
+  }
+  const result = contentEdit
+    ? updateBacklogItemContent({
+        workspaceDir: cwd,
+        projectId,
+        itemId,
+        expectedRevision: values["expected-revision"] ?? "",
+        ...(values.title === undefined ? {} : { title: values.title }),
+        ...(body === undefined ? {} : { body }),
+      })
+    : updateBacklogItemStatus({
+        workspaceDir: cwd,
+        projectId,
+        itemId,
+        status: values.status as ItemStatus,
+        ...(values["expected-revision"] === undefined
+          ? {}
+          : { expectedRevision: values["expected-revision"] }),
+      });
   if (!result.ok) {
-    const suffix = result.error.code === "BACKLOG_STORE_NOT_FOUND"
-      ? ` Run "pops backlog init ${projectId}" first.`
-      : "";
+    const suffix =
+      result.error.code === "BACKLOG_STORE_NOT_FOUND"
+        ? ` Run "pops backlog init ${projectId}" first.`
+        : "";
     io.stderr(`Error: ${result.error.message}${suffix}`);
     return 1;
   }

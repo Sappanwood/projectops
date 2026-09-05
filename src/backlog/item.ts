@@ -100,7 +100,10 @@ function serializeList(value: string[]): string {
 }
 
 export class ItemParseError extends Error {
-  constructor(public readonly id: string, cause: string) {
+  constructor(
+    public readonly id: string,
+    cause: string,
+  ) {
     super(`Invalid backlog item ${id}: ${cause}`);
   }
 }
@@ -154,7 +157,10 @@ export function parseItemFile(content: string): BacklogItem {
     }
   };
 
-  const body = lines.slice(end + 1).join("\n").replace(/^\n/, "");
+  const body = lines
+    .slice(end + 1)
+    .join("\n")
+    .replace(/^\n/, "");
   const item: BacklogItem = {
     id,
     project: scalar("project", ""),

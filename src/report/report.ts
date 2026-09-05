@@ -135,7 +135,10 @@ function validateReport(value: unknown): string | null {
       return `report ${field} must be an array of strings`;
     }
   }
-  if (!Array.isArray(value.repo_docs) || !value.repo_docs.every((entry) => typeof entry === "string" && isRepoRelativeReference(entry))) {
+  if (
+    !Array.isArray(value.repo_docs) ||
+    !value.repo_docs.every((entry) => typeof entry === "string" && isRepoRelativeReference(entry))
+  ) {
     return "report repo_docs must be an array of repo-relative logical references";
   }
   if (value.body !== undefined && typeof value.body !== "string") {
@@ -152,18 +155,29 @@ function validateBacklogResult(value: unknown): string | null {
   if (typeof value.status !== "string" || value.status.trim() === "") {
     return `report backlog result ${value.id ?? "?"} status must be a non-empty string`;
   }
-  if (value.revision !== undefined && (typeof value.revision !== "string" || value.revision.trim() === "")) {
+  if (
+    value.revision !== undefined &&
+    (typeof value.revision !== "string" || value.revision.trim() === "")
+  ) {
     return `report backlog result ${value.id} revision must be a non-empty string`;
   }
-  if (value.uri !== undefined && (typeof value.uri !== "string" || !isLogicalReference(value.uri))) {
+  if (
+    value.uri !== undefined &&
+    (typeof value.uri !== "string" || !isLogicalReference(value.uri))
+  ) {
     return `report backlog result ${value.id} uri must be a logical reference`;
   }
   return null;
 }
 
 function isLogicalReference(value: string): boolean {
-  return value.trim() !== "" && !path.isAbsolute(value) && !value.includes("\\") &&
-    !value.split("/").includes("..") && !value.startsWith("~");
+  return (
+    value.trim() !== "" &&
+    !path.isAbsolute(value) &&
+    !value.includes("\\") &&
+    !value.split("/").includes("..") &&
+    !value.startsWith("~")
+  );
 }
 
 function isRepoRelativeReference(value: string): boolean {
@@ -189,12 +203,18 @@ function findMachineAbsolutePath(value: unknown, location: string): string | nul
 }
 
 function containsMachineAbsolutePath(value: string): boolean {
-  if (value !== "/" && value !== "\\" && (path.posix.isAbsolute(value) || path.win32.isAbsolute(value))) {
+  if (
+    value !== "/" &&
+    value !== "\\" &&
+    (path.posix.isAbsolute(value) || path.win32.isAbsolute(value))
+  ) {
     return true;
   }
   // Embedded paths are detected only at a text boundary. URL schemes, Markdown
   // root-relative links, closing HTML tags, and an isolated slash are text.
-  const posixPathToken = /(?:^|[^\p{L}\p{N}\p{M}<(:/])\/(?:[^\s"'`),;]+(?:\/[^\s"'`),;]+)*)/u.test(value);
+  const posixPathToken = /(?:^|[^\p{L}\p{N}\p{M}<(:/])\/(?:[^\s"'`),;]+(?:\/[^\s"'`),;]+)*)/u.test(
+    value,
+  );
   const windowsPathToken = /(?:^|[^A-Za-z0-9])(?:[A-Za-z]:[\\/]|\\\\)/.test(value);
   return posixPathToken || windowsPathToken;
 }
@@ -218,7 +238,11 @@ function parseMarkdown(content: string): Record<string, unknown> | string {
       return `invalid frontmatter value: ${key}`;
     }
   }
-  raw.body = lines.slice(end + 1).join("\n").replace(/^\n/, "").replace(/\n$/, "");
+  raw.body = lines
+    .slice(end + 1)
+    .join("\n")
+    .replace(/^\n/, "")
+    .replace(/\n$/, "");
   return raw;
 }
 

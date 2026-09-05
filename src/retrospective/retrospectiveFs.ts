@@ -51,19 +51,28 @@ export class RetrospectiveStoreNotFoundError extends Error {
 }
 
 export class RetrospectiveStoreParseError extends Error {
-  constructor(public readonly root: string, problem: unknown) {
+  constructor(
+    public readonly root: string,
+    problem: unknown,
+  ) {
     super(`Invalid retrospective store at ${root}: ${String(problem)}`);
   }
 }
 
 export class RetrospectiveRootError extends Error {
-  constructor(public readonly root: string, problem: string) {
+  constructor(
+    public readonly root: string,
+    problem: string,
+  ) {
     super(`Invalid retrospectives root ${root}: ${problem}`);
   }
 }
 
 export class RetrospectiveTargetError extends Error {
-  constructor(public readonly target: string, problem: string) {
+  constructor(
+    public readonly target: string,
+    problem: string,
+  ) {
     super(`Invalid retrospective target ${target}: ${problem}`);
   }
 }
@@ -81,19 +90,29 @@ export class RetrospectiveAlreadyExistsError extends Error {
 }
 
 export class RetrospectiveParseError extends Error {
-  constructor(public readonly id: string, problem: string) {
+  constructor(
+    public readonly id: string,
+    problem: string,
+  ) {
     super(`Invalid retrospective ${id}: ${problem}`);
   }
 }
 
 export class RetrospectiveRevisionConflictError extends Error {
-  constructor(public readonly id: string, public readonly expected: string, public readonly actual: string) {
+  constructor(
+    public readonly id: string,
+    public readonly expected: string,
+    public readonly actual: string,
+  ) {
     super(`Retrospective revision conflict for ${id}: expected ${expected}, current ${actual}`);
   }
 }
 
 export class RetrospectiveTransitionError extends Error {
-  constructor(public readonly id: string, problem: string) {
+  constructor(
+    public readonly id: string,
+    problem: string,
+  ) {
     super(`Invalid retrospective transition for ${id}: ${problem}`);
   }
 }
@@ -161,11 +180,20 @@ export function createRetrospectiveStore(workspaceRoot: string, storeRoot: strin
       mkdirSync(dir);
       created.push(dir);
     }
-    writeFileNoClobber(path.join(root, RETROSPECTIVE_STORE_MANIFEST_FILE), `${JSON.stringify(newRetrospectiveStoreManifest(), null, 2)}\n`);
+    writeFileNoClobber(
+      path.join(root, RETROSPECTIVE_STORE_MANIFEST_FILE),
+      `${JSON.stringify(newRetrospectiveStoreManifest(), null, 2)}\n`,
+    );
     created.push(path.join(root, RETROSPECTIVE_STORE_MANIFEST_FILE));
-    writeFileNoClobber(path.join(root, RETROSPECTIVE_INDEX_FILE), `${JSON.stringify(emptyIndex(), null, 2)}\n`);
+    writeFileNoClobber(
+      path.join(root, RETROSPECTIVE_INDEX_FILE),
+      `${JSON.stringify(emptyIndex(), null, 2)}\n`,
+    );
     created.push(path.join(root, RETROSPECTIVE_INDEX_FILE));
-    writeFileNoClobber(path.join(root, RETROSPECTIVE_READABLE_INDEX_FILE), renderReadableIndex(emptyIndex()));
+    writeFileNoClobber(
+      path.join(root, RETROSPECTIVE_READABLE_INDEX_FILE),
+      renderReadableIndex(emptyIndex()),
+    );
     created.push(path.join(root, RETROSPECTIVE_READABLE_INDEX_FILE));
   } catch (error) {
     for (const entry of created.reverse()) {
@@ -180,7 +208,10 @@ export function createRetrospectiveStore(workspaceRoot: string, storeRoot: strin
   }
 }
 
-export function loadRetrospectiveStore(storeRoot: string, workspaceRoot = path.dirname(storeRoot)): RetrospectiveStoreManifest {
+export function loadRetrospectiveStore(
+  storeRoot: string,
+  workspaceRoot = path.dirname(storeRoot),
+): RetrospectiveStoreManifest {
   const root = validateStoreLocation(workspaceRoot, storeRoot, false);
   const manifestPath = path.join(root, RETROSPECTIVE_STORE_MANIFEST_FILE);
   ensureRegular(manifestPath, manifestPath);
@@ -190,8 +221,12 @@ export function loadRetrospectiveStore(storeRoot: string, workspaceRoot = path.d
   } catch (error) {
     throw new RetrospectiveStoreParseError(root, formatFsError(error));
   }
-  if (!isRecord(parsed) || parsed.schema !== RETROSPECTIVE_STORE_SCHEMA ||
-      parsed.record_schema !== RETROSPECTIVE_SCHEMA || parsed.index_schema !== RETROSPECTIVE_INDEX_SCHEMA) {
+  if (
+    !isRecord(parsed) ||
+    parsed.schema !== RETROSPECTIVE_STORE_SCHEMA ||
+    parsed.record_schema !== RETROSPECTIVE_SCHEMA ||
+    parsed.index_schema !== RETROSPECTIVE_INDEX_SCHEMA
+  ) {
     throw new RetrospectiveStoreParseError(root, "unexpected schema");
   }
   for (const status of RETROSPECTIVE_STATUSES) {
@@ -208,7 +243,11 @@ export function retrospectivePath(root: string, status: RetrospectiveStatus, id:
   return path.join(root, status, `${id}.md`);
 }
 
-export function writeRetrospective(workspaceRoot: string, storeRoot: string, retrospective: Retrospective): void {
+export function writeRetrospective(
+  workspaceRoot: string,
+  storeRoot: string,
+  retrospective: Retrospective,
+): void {
   const root = validateStoreLocation(workspaceRoot, storeRoot, false);
   loadRetrospectiveStore(root, workspaceRoot);
   const parsed = parseRetrospective(retrospective);
@@ -244,7 +283,14 @@ export function captureRetrospective(
   const fsOps = resolveFsOps(options.fsOps);
   const release = acquireCaptureLock(workspaceRoot, root, fsOps);
   try {
-    return captureRetrospectiveLocked(workspaceRoot, root, retrospective, observeWrite, options, fsOps);
+    return captureRetrospectiveLocked(
+      workspaceRoot,
+      root,
+      retrospective,
+      observeWrite,
+      options,
+      fsOps,
+    );
   } finally {
     release();
   }
@@ -260,7 +306,8 @@ function captureRetrospectiveLocked(
 ): RetrospectiveRecord {
   const parsed = parseRetrospective(retrospective);
   if (typeof parsed === "string") throw new RetrospectiveParseError(retrospective.id, parsed);
-  if (parsed.status !== "inbox") throw new RetrospectiveParseError(parsed.id, "capture records must use inbox status");
+  if (parsed.status !== "inbox")
+    throw new RetrospectiveParseError(parsed.id, "capture records must use inbox status");
 
   const id = options.generated ? allocateGeneratedId(root, parsed.id) : parsed.id;
   if (allRetrospectiveIds(root).has(id)) throw new RetrospectiveAlreadyExistsError(id);
@@ -278,10 +325,15 @@ function captureRetrospectiveLocked(
     writeOwnedNewFile(file, Buffer.from(content, "utf8"), fsOps);
     fileCreated = true;
     observeWrite?.(file, Buffer.from(content, "utf8"));
-    rebuildRetrospectiveIndexes(workspaceRoot, root, (target, intended) => {
-      intendedIndexes.set(target, intended);
-      observeWrite?.(target, intended);
-    }, fsOps);
+    rebuildRetrospectiveIndexes(
+      workspaceRoot,
+      root,
+      (target, intended) => {
+        intendedIndexes.set(target, intended);
+        observeWrite?.(target, intended);
+      },
+      fsOps,
+    );
   } catch (error) {
     if (!fileCreated) {
       if (isErrno(error, "EEXIST")) throw new RetrospectiveAlreadyExistsError(captured.id);
@@ -396,7 +448,10 @@ function transitionRetrospective(
       if (!targetExists(existingFile)) continue;
       ensureRegular(existingFile, existingFile);
       if (status === destination) throw new RetrospectiveAlreadyExistsError(id);
-      throw new RetrospectiveTransitionError(id, `records in ${status} cannot transition via this operation`);
+      throw new RetrospectiveTransitionError(
+        id,
+        `records in ${status} cannot transition via this operation`,
+      );
     }
     if (!targetExists(sourceFile)) {
       throw new RetrospectiveNotFoundError(id);
@@ -410,11 +465,13 @@ function transitionRetrospective(
       throw new RetrospectiveAlreadyExistsError(id);
     }
 
-    const indexSnapshots = [RETROSPECTIVE_INDEX_FILE, RETROSPECTIVE_READABLE_INDEX_FILE].map((name) => {
-      const target = path.join(root, name);
-      ensureRegular(target, target);
-      return { target, content: readFileSync(target) };
-    });
+    const indexSnapshots = [RETROSPECTIVE_INDEX_FILE, RETROSPECTIVE_READABLE_INDEX_FILE].map(
+      (name) => {
+        const target = path.join(root, name);
+        ensureRegular(target, target);
+        return { target, content: readFileSync(target) };
+      },
+    );
     const next = parseRetrospective(transform(source.record));
     if (typeof next === "string") throw new RetrospectiveParseError(id, next);
     const destinationContent = Buffer.from(serializeRetrospective(next), "utf8");
@@ -458,7 +515,11 @@ function transitionRetrospective(
   }
 }
 
-function readRecordFile(file: string, status: RetrospectiveStatus, id: string): { record: Retrospective; content: string; revision: string } {
+function readRecordFile(
+  file: string,
+  status: RetrospectiveStatus,
+  id: string,
+): { record: Retrospective; content: string; revision: string } {
   ensureRegular(file, file);
   let content: string;
   try {
@@ -489,7 +550,10 @@ function validateArchiveOptions(id: string, options: RetrospectiveArchiveOptions
   validateStringList(id, "backlog", options.backlog);
   for (const reference of options.backlog) {
     if (!isCanonicalBacklogReference(reference)) {
-      throw new RetrospectiveParseError(id, "backlog links must use project-ops:backlog/items/<PREFIX>-NNN.md logical references");
+      throw new RetrospectiveParseError(
+        id,
+        "backlog links must use project-ops:backlog/items/<PREFIX>-NNN.md logical references",
+      );
     }
   }
 }
@@ -505,7 +569,10 @@ function validateNonEmpty(id: string, field: string, value: string): void {
 }
 
 function validateStringList(id: string, field: string, values: string[]): void {
-  if (!Array.isArray(values) || values.some((value) => typeof value !== "string" || value.trim() === "")) {
+  if (
+    !Array.isArray(values) ||
+    values.some((value) => typeof value !== "string" || value.trim() === "")
+  ) {
     throw new RetrospectiveParseError(id, `${field} must be an array of non-empty strings`);
   }
 }
@@ -561,12 +628,20 @@ export function listRetrospectiveRecords(
           continue;
         }
         if (parsed.id !== id || parsed.status !== currentStatus) {
-          diagnostics.push({ id, path: relativePath, message: "record id or status does not match its path" });
+          diagnostics.push({
+            id,
+            path: relativePath,
+            message: "record id or status does not match its path",
+          });
           continue;
         }
         records.push({ ...parsed, path: relativePath, revision: revisionOf(content) });
       } catch (error) {
-        diagnostics.push({ id, path: relativePath, message: error instanceof Error ? error.message : String(error) });
+        diagnostics.push({
+          id,
+          path: relativePath,
+          message: error instanceof Error ? error.message : String(error),
+        });
       }
     }
   }
@@ -584,7 +659,10 @@ export function showRetrospectiveRecord(
   const pathParts = normalized.split("/");
   let status: RetrospectiveStatus | undefined;
   let id: string | undefined;
-  if (pathParts.length === 2 && RETROSPECTIVE_STATUSES.includes(pathParts[0] as RetrospectiveStatus)) {
+  if (
+    pathParts.length === 2 &&
+    RETROSPECTIVE_STATUSES.includes(pathParts[0] as RetrospectiveStatus)
+  ) {
     status = pathParts[0] as RetrospectiveStatus;
     id = pathParts[1]?.slice(0, -3);
   } else if (pathParts.length === 1) {
@@ -592,7 +670,9 @@ export function showRetrospectiveRecord(
   }
   if (id === undefined || !isRetrospectiveId(id)) throw new RetrospectiveNotFoundError(reference);
   const result = listRetrospectiveRecords(workspaceRoot, storeRoot, status);
-  const record = result.records.find((candidate) => candidate.id === id && (status === undefined || candidate.status === status));
+  const record = result.records.find(
+    (candidate) => candidate.id === id && (status === undefined || candidate.status === status),
+  );
   if (record !== undefined) return record;
   const diagnostic = result.diagnostics.find((candidate) => candidate.id === id);
   if (diagnostic !== undefined) throw new RetrospectiveParseError(id, diagnostic.message);
@@ -662,15 +742,39 @@ export function rebuildRetrospectiveIndexes(
         model: record.model,
         path: `${status}/${id}.md`,
       };
-      for (const field of ["disposition", "owner_scope", "categories", "next_action", "related_info", "canonical", "action_disposition", "actioned_at", "backlog", "resolution_note"] as const) {
-        if (record[field] !== undefined) (indexRecord as Record<string, unknown>)[field] = record[field];
+      for (const field of [
+        "disposition",
+        "owner_scope",
+        "categories",
+        "next_action",
+        "related_info",
+        "canonical",
+        "action_disposition",
+        "actioned_at",
+        "backlog",
+        "resolution_note",
+      ] as const) {
+        if (record[field] !== undefined)
+          (indexRecord as Record<string, unknown>)[field] = record[field];
       }
       records.push(indexRecord);
     }
   }
   const index: RetrospectiveIndex = { schema: RETROSPECTIVE_INDEX_SCHEMA, records };
-  writeDerived(root, RETROSPECTIVE_INDEX_FILE, `${JSON.stringify(index, null, 2)}\n`, observeWrite, fsOps);
-  writeDerived(root, RETROSPECTIVE_READABLE_INDEX_FILE, renderReadableIndex(index), observeWrite, fsOps);
+  writeDerived(
+    root,
+    RETROSPECTIVE_INDEX_FILE,
+    `${JSON.stringify(index, null, 2)}\n`,
+    observeWrite,
+    fsOps,
+  );
+  writeDerived(
+    root,
+    RETROSPECTIVE_READABLE_INDEX_FILE,
+    renderReadableIndex(index),
+    observeWrite,
+    fsOps,
+  );
   return index;
 }
 
@@ -689,20 +793,30 @@ function renderReadableIndex(index: RetrospectiveIndex): string {
     "|---|---|---|---|---|",
   ];
   for (const record of index.records) {
-    lines.push(`| ${record.status} | ${record.id} | ${record.project} | ${record.task} | ${record.path} |`);
+    lines.push(
+      `| ${record.status} | ${record.id} | ${record.project} | ${record.task} | ${record.path} |`,
+    );
   }
   return `${lines.join("\n")}\n`;
 }
 
-function validateStoreLocation(workspaceRoot: string, storeRoot: string, allowMissing: boolean): string {
+function validateStoreLocation(
+  workspaceRoot: string,
+  storeRoot: string,
+  allowMissing: boolean,
+): string {
   const workspace = path.resolve(workspaceRoot);
   let workspaceCanonical: string;
   try {
     const stat = lstatSync(workspace);
-    if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error("workspace is not a regular directory");
+    if (!stat.isDirectory() || stat.isSymbolicLink())
+      throw new Error("workspace is not a regular directory");
     workspaceCanonical = realpathSync(workspace);
   } catch (error) {
-    throw new RetrospectiveRootError(workspace, `workspace cannot be resolved: ${formatFsError(error)}`);
+    throw new RetrospectiveRootError(
+      workspace,
+      `workspace cannot be resolved: ${formatFsError(error)}`,
+    );
   }
 
   const root = path.resolve(storeRoot);
@@ -721,7 +835,8 @@ function validateStoreLocation(workspaceRoot: string, storeRoot: string, allowMi
       throw new RetrospectiveRootError(root, `cannot inspect path: ${formatFsError(error)}`);
     }
     if (stat.isSymbolicLink()) throw new RetrospectiveRootError(root, "path contains a symlink");
-    if (!stat.isDirectory()) throw new RetrospectiveRootError(root, "path component is not a directory");
+    if (!stat.isDirectory())
+      throw new RetrospectiveRootError(root, "path component is not a directory");
   }
 
   if (!existsSync(root)) {
@@ -815,7 +930,11 @@ function allRetrospectiveIds(root: string): Set<string> {
 }
 
 /** Restore a derived file from the operation snapshot while the store lock is held. */
-function restoreDerivedSnapshot(target: string, snapshot: Buffer, fsOps: ResolvedRetrospectiveFsOps): void {
+function restoreDerivedSnapshot(
+  target: string,
+  snapshot: Buffer,
+  fsOps: ResolvedRetrospectiveFsOps,
+): void {
   try {
     ensureRegular(target, target);
     fsOps.writeFileSync(target, snapshot);
@@ -833,7 +952,11 @@ export function retrospectiveLockPath(workspaceRoot: string, storeRoot: string):
 }
 
 /** Serialize capture and derived-index publication across concurrent local processes. */
-function acquireCaptureLock(workspaceRoot: string, root: string, fsOps: ResolvedRetrospectiveFsOps): () => void {
+function acquireCaptureLock(
+  workspaceRoot: string,
+  root: string,
+  fsOps: ResolvedRetrospectiveFsOps,
+): () => void {
   const target = retrospectiveLockPath(workspaceRoot, root);
   ensureRuntimeLockDirectory(workspaceRoot, path.dirname(target));
   for (let attempt = 0; attempt < 500; attempt += 1) {
@@ -844,7 +967,8 @@ function acquireCaptureLock(workspaceRoot: string, root: string, fsOps: Resolved
       lockCreated = true;
       const content = Buffer.from(`${process.pid}\n`, "utf8");
       const written = fsOps.writeSync(descriptor, content, 0, content.byteLength, null);
-      if (written !== content.byteLength) throw new Error("retrospective lock PID write was incomplete");
+      if (written !== content.byteLength)
+        throw new Error("retrospective lock PID write was incomplete");
       fsOps.closeSync(descriptor);
       descriptor = undefined;
       return () => {
@@ -876,7 +1000,8 @@ function acquireCaptureLock(workspaceRoot: string, root: string, fsOps: Resolved
           try {
             fsOps.unlinkSync(target);
           } catch (cleanupError) {
-            if (!isErrno(cleanupError, "ENOENT")) throw new RetrospectiveTargetError(target, formatFsError(cleanupError));
+            if (!isErrno(cleanupError, "ENOENT"))
+              throw new RetrospectiveTargetError(target, formatFsError(cleanupError));
           }
           continue;
         }
@@ -903,11 +1028,13 @@ function ensureRuntimeLockDirectory(workspaceRoot: string, target: string): void
     try {
       stat = lstatSync(current);
     } catch (error) {
-      if (!isErrno(error, "ENOENT")) throw new RetrospectiveTargetError(current, formatFsError(error));
+      if (!isErrno(error, "ENOENT"))
+        throw new RetrospectiveTargetError(current, formatFsError(error));
       try {
         mkdirSync(current);
       } catch (mkdirError) {
-        if (!isErrno(mkdirError, "EEXIST")) throw new RetrospectiveTargetError(current, formatFsError(mkdirError));
+        if (!isErrno(mkdirError, "EEXIST"))
+          throw new RetrospectiveTargetError(current, formatFsError(mkdirError));
         try {
           stat = lstatSync(current);
         } catch (inspectError) {
@@ -917,7 +1044,10 @@ function ensureRuntimeLockDirectory(workspaceRoot: string, target: string): void
       if (stat === undefined) continue;
     }
     if (stat.isSymbolicLink() || !stat.isDirectory()) {
-      throw new RetrospectiveRootError(current, "runtime lock path contains a non-regular directory");
+      throw new RetrospectiveRootError(
+        current,
+        "runtime lock path contains a non-regular directory",
+      );
     }
   }
 }
@@ -983,7 +1113,8 @@ function ensureRegular(file: string, display: string): void {
     if (isErrno(error, "ENOENT")) throw new RetrospectiveStoreNotFoundError(display);
     throw new RetrospectiveTargetError(display, `cannot inspect: ${formatFsError(error)}`);
   }
-  if (!stat.isFile() || stat.isSymbolicLink()) throw new RetrospectiveTargetError(display, "is not a regular file");
+  if (!stat.isFile() || stat.isSymbolicLink())
+    throw new RetrospectiveTargetError(display, "is not a regular file");
 }
 
 function ensureRegularDirectory(dir: string, display: string): void {
@@ -994,7 +1125,8 @@ function ensureRegularDirectory(dir: string, display: string): void {
     if (isErrno(error, "ENOENT")) throw new RetrospectiveStoreNotFoundError(display);
     throw new RetrospectiveRootError(display, `cannot inspect: ${formatFsError(error)}`);
   }
-  if (!stat.isDirectory() || stat.isSymbolicLink()) throw new RetrospectiveRootError(display, "is not a regular directory");
+  if (!stat.isDirectory() || stat.isSymbolicLink())
+    throw new RetrospectiveRootError(display, "is not a regular directory");
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -1042,7 +1174,8 @@ function createDirectoryTree(root: string): string[] {
       throw new RetrospectiveRootError(root, `cannot inspect path: ${formatFsError(error)}`);
     }
     if (stat.isSymbolicLink()) throw new RetrospectiveRootError(root, "path contains a symlink");
-    if (!stat.isDirectory()) throw new RetrospectiveRootError(root, "path component is not a directory");
+    if (!stat.isDirectory())
+      throw new RetrospectiveRootError(root, "path component is not a directory");
     break;
   }
 
@@ -1080,7 +1213,10 @@ function nearestExistingDirectory(target: string, displayRoot: string): string {
         current = parent;
         continue;
       }
-      throw new RetrospectiveRootError(displayRoot, `parent cannot be inspected: ${formatFsError(error)}`);
+      throw new RetrospectiveRootError(
+        displayRoot,
+        `parent cannot be inspected: ${formatFsError(error)}`,
+      );
     }
     if (stat.isSymbolicLink()) {
       throw new RetrospectiveRootError(displayRoot, "parent path contains a symlink");
@@ -1091,7 +1227,10 @@ function nearestExistingDirectory(target: string, displayRoot: string): string {
     try {
       return realpathSync(current);
     } catch (error) {
-      throw new RetrospectiveRootError(displayRoot, `parent cannot be resolved: ${formatFsError(error)}`);
+      throw new RetrospectiveRootError(
+        displayRoot,
+        `parent cannot be resolved: ${formatFsError(error)}`,
+      );
     }
   }
 }

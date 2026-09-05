@@ -73,7 +73,11 @@ export function retrospectiveCapture(
   }
   const trigger = values.trigger;
   if (trigger === undefined || !RETROSPECTIVE_TRIGGERS.includes(trigger as RetrospectiveTrigger)) {
-    return retrospectiveFailure(io, json, `--trigger must be one of: ${RETROSPECTIVE_TRIGGERS.join(", ")}`);
+    return retrospectiveFailure(
+      io,
+      json,
+      `--trigger must be one of: ${RETROSPECTIVE_TRIGGERS.join(", ")}`,
+    );
   }
   if (values.harness === undefined || values.harness.trim() === "") {
     return retrospectiveFailure(io, json, "--harness is required");
@@ -89,12 +93,18 @@ export function retrospectiveCapture(
   } else if (values.stdin === true) {
     body = io.stdin?.() ?? "";
   }
-  if (body.trim() === "") return retrospectiveFailure(io, json, "--body, --body-file, or --stdin must provide Markdown body");
+  if (body.trim() === "")
+    return retrospectiveFailure(
+      io,
+      json,
+      "--body, --body-file, or --stdin must provide Markdown body",
+    );
   const bodyProblem = validateCaptureBody(body);
   if (bodyProblem !== null) return retrospectiveFailure(io, json, bodyProblem);
 
   const createdAt = values["created-at"] ?? new Date().toISOString();
-  if (createdAt.trim() === "") return retrospectiveFailure(io, json, "--created-at must be a non-empty string");
+  if (createdAt.trim() === "")
+    return retrospectiveFailure(io, json, "--created-at must be a non-empty string");
   const explicitId = values.id ?? values["retrospective-id"];
   const generated = explicitId === undefined;
   let id = explicitId ?? generatedId(createdAt, values, body);
@@ -121,28 +131,48 @@ export function retrospectiveCapture(
     body,
   };
   try {
-    const record = captureRetrospective(workspace.root, root, retrospective, undefined, { generated });
+    const record = captureRetrospective(workspace.root, root, retrospective, undefined, {
+      generated,
+    });
     if (json) io.stdout(JSON.stringify({ ok: true, retrospective: record }));
     else io.stdout(`Captured ${record.id}`);
     return 0;
   } catch (error) {
-    if (error instanceof RetrospectiveAlreadyExistsError || error instanceof RetrospectiveParseError ||
-      error instanceof RetrospectiveRootError || error instanceof RetrospectiveTargetError) {
+    if (
+      error instanceof RetrospectiveAlreadyExistsError ||
+      error instanceof RetrospectiveParseError ||
+      error instanceof RetrospectiveRootError ||
+      error instanceof RetrospectiveTargetError
+    ) {
       return retrospectiveFailure(io, json, error.message);
     }
     return retrospectiveFailure(io, json, formatRetrospectiveError(error));
   }
 }
 
-function nullableOption(value: string | undefined, flag: string): { value: string | null; error?: string } {
+function nullableOption(
+  value: string | undefined,
+  flag: string,
+): { value: string | null; error?: string } {
   if (value === undefined || value === "null") return { value: null };
-  if (value.trim() === "") return { value: null, error: `${flag} must be null or a non-empty string` };
+  if (value.trim() === "")
+    return { value: null, error: `${flag} must be null or a non-empty string` };
   return { value };
 }
 
 function generatedId(createdAt: string, values: CaptureOptions, body: string): string {
   const digest = createHash("sha256")
-    .update(JSON.stringify({ createdAt, project: values.project ?? null, task: values.task ?? null, trigger: values.trigger, harness: values.harness, model: values.model ?? null, body }))
+    .update(
+      JSON.stringify({
+        createdAt,
+        project: values.project ?? null,
+        task: values.task ?? null,
+        trigger: values.trigger,
+        harness: values.harness,
+        model: values.model ?? null,
+        body,
+      }),
+    )
     .digest("hex")
     .slice(0, 12);
   const timestamp = createdAt.replace(/\D/g, "").slice(0, 14) || "record";
@@ -167,8 +197,12 @@ function validateCaptureBody(body: string): string | null {
   for (const section of REQUIRED_BODY_SECTIONS) {
     const heading = headings.find((candidate) => candidate.title === section);
     if (heading === undefined) return `--body must include a Markdown section: ${section}`;
-    const end = headings.find((candidate) => candidate.index > heading.index)?.index ?? lines.length;
-    const content = lines.slice(heading.index + 1, end).join("\n").trim();
+    const end =
+      headings.find((candidate) => candidate.index > heading.index)?.index ?? lines.length;
+    const content = lines
+      .slice(heading.index + 1, end)
+      .join("\n")
+      .trim();
     if (content === "") return `--body section must be non-empty: ${section}`;
   }
   return null;

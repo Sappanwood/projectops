@@ -6,7 +6,13 @@ import { parseArgs } from "node:util";
 import { isWithinWorkspace } from "../catalog/workspace.js";
 import type { CliIO } from "../io.js";
 import { isPlanId, type Plan } from "../plan/plan.js";
-import { PlanNotFoundError, PlanParseError, planPath, readPlan, updatePlan } from "../plan/planFs.js";
+import {
+  PlanNotFoundError,
+  PlanParseError,
+  planPath,
+  readPlan,
+  updatePlan,
+} from "../plan/planFs.js";
 import { resolvePlansRoot } from "./planContext.js";
 
 type ApproveOptions = {

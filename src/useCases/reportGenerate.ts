@@ -7,8 +7,8 @@ import { ItemNotFoundError, readItemFile } from "../backlog/itemFs.js";
 import { loadStore, StoreNotFoundError, StoreParseError } from "../backlog/storeFs.js";
 import { PLAN_SCHEMA, type Plan } from "../plan/plan.js";
 import { PlanNotFoundError, PlanParseError, readPlan } from "../plan/planFs.js";
-import { listPlanRuns, validatePlanRunCompletion } from '../application/planRunApi.js';
-import { listParallelRuns, validateParallelRunCompletion } from '../application/parallelRunApi.js';
+import { listPlanRuns, validatePlanRunCompletion } from "../application/planRunApi.js";
+import { listParallelRuns, validateParallelRunCompletion } from "../application/parallelRunApi.js";
 
 export type ReportGenerationInput = {
   projectId: string;
@@ -42,7 +42,8 @@ export class ReportGenerationError extends Error {
  */
 export function generateReport(input: ReportGenerationInput): Report {
   const { projectId } = input;
-  if (projectId.trim() === "") throw new ReportGenerationError("project id must be a non-empty string");
+  if (projectId.trim() === "")
+    throw new ReportGenerationError("project id must be a non-empty string");
   const plan = readSourcePlan(input.plansRoot, input.planId);
   return deriveReport({ ...input, plan });
 }
@@ -99,7 +100,9 @@ function deriveReport(input: ReportDerivationInput): Report {
   });
   const items = mappedItems.map(({ item }) => item);
 
-  const unfinished = mappedItems.filter(({ planItem, item }) => planItem.item_type === "task" && item.status !== "done");
+  const unfinished = mappedItems.filter(
+    ({ planItem, item }) => planItem.item_type === "task" && item.status !== "done",
+  );
   const partialAcceptance = input.partialAcceptance?.trim();
   if (unfinished.length > 0 && (partialAcceptance === undefined || partialAcceptance === "")) {
     throw new ReportGenerationError(
@@ -140,29 +143,65 @@ function deriveReport(input: ReportDerivationInput): Report {
  */
 export function writeGeneratedReport(input: GeneratedReportInput): Report {
   const report = generateReport(input);
-  const runs = listPlanRuns({ workspaceDir: input.workspaceRoot, projectId: input.projectId, planId: input.planId });
-  if (!runs.ok) throw new ReportGenerationError(`Plan run records are unavailable: ${runs.error.message}`);
+  const runs = listPlanRuns({
+    workspaceDir: input.workspaceRoot,
+    projectId: input.projectId,
+    planId: input.planId,
+  });
+  if (!runs.ok)
+    throw new ReportGenerationError(`Plan run records are unavailable: ${runs.error.message}`);
   const latest = runs.data.runs[0];
   if (latest) {
-    const validation = validatePlanRunCompletion({ workspaceDir: input.workspaceRoot, projectId: input.projectId, runId: latest.id });
+    const validation = validatePlanRunCompletion({
+      workspaceDir: input.workspaceRoot,
+      projectId: input.projectId,
+      runId: latest.id,
+    });
     if (!validation.ok) {
-      if (!input.partialAcceptance?.trim()) throw new ReportGenerationError(`Plan run is not verified complete: ${validation.error.message}`);
-      report.outcome = 'partial';
-      report.deviations.push(input.partialAcceptance.trim(), `Run ${latest.id}: ${validation.error.message}`);
+      if (!input.partialAcceptance?.trim())
+        throw new ReportGenerationError(
+          `Plan run is not verified complete: ${validation.error.message}`,
+        );
+      report.outcome = "partial";
+      report.deviations.push(
+        input.partialAcceptance.trim(),
+        `Run ${latest.id}: ${validation.error.message}`,
+      );
     }
     report.verification.push(`Plan run: ${latest.id}; state: ${latest.state}`);
   }
-  const parallel = listParallelRuns({ workspaceDir: input.workspaceRoot, projectId: input.projectId, planId: input.planId });
-  if (!parallel.ok) throw new ReportGenerationError(`Parallel run records are unavailable: ${parallel.error.message}`);
-  const latestParallel = parallel.data.runs.toSorted((a,b)=>b.created_at.localeCompare(a.created_at))[0];
+  const parallel = listParallelRuns({
+    workspaceDir: input.workspaceRoot,
+    projectId: input.projectId,
+    planId: input.planId,
+  });
+  if (!parallel.ok)
+    throw new ReportGenerationError(
+      `Parallel run records are unavailable: ${parallel.error.message}`,
+    );
+  const latestParallel = parallel.data.runs.toSorted((a, b) =>
+    b.created_at.localeCompare(a.created_at),
+  )[0];
   if (latestParallel) {
-    const validation = validateParallelRunCompletion({ workspaceDir: input.workspaceRoot, projectId: input.projectId, runId: latestParallel.id });
+    const validation = validateParallelRunCompletion({
+      workspaceDir: input.workspaceRoot,
+      projectId: input.projectId,
+      runId: latestParallel.id,
+    });
     if (!validation.ok) {
-      if (!input.partialAcceptance?.trim()) throw new ReportGenerationError(`Parallel run is not verified complete: ${validation.error.message}`);
-      report.outcome = 'partial';
-      report.deviations.push(input.partialAcceptance.trim(), `Parallel run ${latestParallel.id}: ${validation.error.message}`);
+      if (!input.partialAcceptance?.trim())
+        throw new ReportGenerationError(
+          `Parallel run is not verified complete: ${validation.error.message}`,
+        );
+      report.outcome = "partial";
+      report.deviations.push(
+        input.partialAcceptance.trim(),
+        `Parallel run ${latestParallel.id}: ${validation.error.message}`,
+      );
     }
-    report.verification.push(`Parallel run: ${latestParallel.id}; integration ref: ${latestParallel.workspace.integrationRef}; head: ${latestParallel.integration_head}`);
+    report.verification.push(
+      `Parallel run: ${latestParallel.id}; integration ref: ${latestParallel.workspace.integrationRef}; head: ${latestParallel.integration_head}`,
+    );
   }
   writeReport(input.workspaceRoot, input.reportsRoot, report);
   return report;
@@ -197,7 +236,12 @@ function validateMaterializedPlan(plan: Plan): void {
 
   const itemKeys = new Set(plan.items.map((item) => item.key));
   const mapping = plan.materialization.mapping;
-  if (mapping === undefined || typeof mapping !== "object" || mapping === null || Array.isArray(mapping)) {
+  if (
+    mapping === undefined ||
+    typeof mapping !== "object" ||
+    mapping === null ||
+    Array.isArray(mapping)
+  ) {
     throw new ReportGenerationError("plan materialization mapping is missing");
   }
   for (const item of plan.items) {

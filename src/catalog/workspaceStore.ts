@@ -24,7 +24,10 @@ export class WorkspaceNotFoundError extends Error {
 }
 
 export class ManifestParseError extends Error {
-  constructor(public readonly root: string, cause: unknown) {
+  constructor(
+    public readonly root: string,
+    cause: unknown,
+  ) {
     super(`Invalid workspace manifest at ${root}: ${String(cause)}`);
   }
 }
@@ -64,13 +67,17 @@ function validateManifest(value: unknown): string | null {
   if (!isRecord(value) || value.schema !== WORKSPACE_SCHEMA) return "unexpected schema";
   if (typeof value.name !== "string" || value.name === "") return "invalid name";
   if (!isRecord(value.artifact_layout)) return "invalid artifact_layout";
-  if (!isSafeRelativePath(value.artifact_layout.ops_root)) return "invalid artifact_layout.ops_root";
+  if (!isSafeRelativePath(value.artifact_layout.ops_root))
+    return "invalid artifact_layout.ops_root";
   if (!isRecord(value.artifact_layout.roots)) return "invalid artifact_layout.roots";
   for (const [key, type] of Object.entries(value.artifact_layout.roots)) {
     if (typeof type !== "string") return `invalid artifact type for ${key}`;
   }
-  if (!isRecord(value.retrospectives) || value.retrospectives.type !== RETROSPECTIVE_ARTIFACT_TYPE ||
-      !isSafeRelativePath(value.retrospectives.root)) {
+  if (
+    !isRecord(value.retrospectives) ||
+    value.retrospectives.type !== RETROSPECTIVE_ARTIFACT_TYPE ||
+    !isSafeRelativePath(value.retrospectives.root)
+  ) {
     return "invalid retrospectives descriptor";
   }
   if (!isRecord(value.projects)) return "invalid projects";
@@ -90,7 +97,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function isSafeRelativePath(value: unknown): value is string {
   if (typeof value !== "string" || value === "" || value.includes("\\")) return false;
   const parts = value.split("/");
-  return !value.startsWith("/") && parts.every((part) => part !== "" && part !== "." && part !== "..");
+  return (
+    !value.startsWith("/") && parts.every((part) => part !== "" && part !== "." && part !== "..")
+  );
 }
 
 export function serializeManifest(manifest: WorkspaceManifest): string {

@@ -5,7 +5,11 @@ export const RETROSPECTIVE_STORE_SCHEMA = "retrospective/Store@1";
 export const RETROSPECTIVE_INDEX_SCHEMA = "retrospective/Index@1";
 
 export const RETROSPECTIVE_STATUSES = ["inbox", "active", "archive"] as const;
-export const RETROSPECTIVE_TRIGGERS = ["workflow-friction", "repeated-retry", "major-rework"] as const;
+export const RETROSPECTIVE_TRIGGERS = [
+  "workflow-friction",
+  "repeated-retry",
+  "major-rework",
+] as const;
 
 export type RetrospectiveStatus = (typeof RETROSPECTIVE_STATUSES)[number];
 export type RetrospectiveTrigger = (typeof RETROSPECTIVE_TRIGGERS)[number];
@@ -41,9 +45,24 @@ export type RetrospectiveStoreManifest = {
 
 export type RetrospectiveIndexRecord = Pick<
   Retrospective,
-  "id" | "created_at" | "project" | "task" | "trigger" | "status" | "harness" | "model" |
-  "disposition" | "owner_scope" | "categories" | "next_action" | "related_info" | "canonical" |
-  "action_disposition" | "actioned_at" | "backlog" | "resolution_note"
+  | "id"
+  | "created_at"
+  | "project"
+  | "task"
+  | "trigger"
+  | "status"
+  | "harness"
+  | "model"
+  | "disposition"
+  | "owner_scope"
+  | "categories"
+  | "next_action"
+  | "related_info"
+  | "canonical"
+  | "action_disposition"
+  | "actioned_at"
+  | "backlog"
+  | "resolution_note"
 > & { path: string };
 
 export type RetrospectiveIndex = {
@@ -89,11 +108,21 @@ export function parseRetrospective(value: unknown): Retrospective | string {
     model: input.model as string | null,
     body: input.body as string,
   };
-  for (const field of ["disposition", "owner_scope", "next_action", "canonical", "action_disposition", "actioned_at", "resolution_note"] as const) {
-    if (Object.prototype.hasOwnProperty.call(input, field)) retrospective[field] = input[field] as string;
+  for (const field of [
+    "disposition",
+    "owner_scope",
+    "next_action",
+    "canonical",
+    "action_disposition",
+    "actioned_at",
+    "resolution_note",
+  ] as const) {
+    if (Object.prototype.hasOwnProperty.call(input, field))
+      retrospective[field] = input[field] as string;
   }
   for (const field of ["categories", "related_info", "backlog"] as const) {
-    if (Object.prototype.hasOwnProperty.call(input, field)) retrospective[field] = input[field] as string[];
+    if (Object.prototype.hasOwnProperty.call(input, field))
+      retrospective[field] = input[field] as string[];
   }
   return retrospective;
 }
@@ -112,16 +141,32 @@ export function serializeRetrospective(retrospective: Retrospective): string {
     `status: ${parsed.status}`,
     `harness: ${serializeScalar(parsed.harness)}`,
     `model: ${parsed.model === null ? "null" : serializeScalar(parsed.model)}`,
-    ...(parsed.disposition === undefined ? [] : [`disposition: ${serializeScalar(parsed.disposition)}`]),
-    ...(parsed.owner_scope === undefined ? [] : [`owner_scope: ${serializeScalar(parsed.owner_scope)}`]),
-    ...(parsed.categories === undefined ? [] : [`categories: ${JSON.stringify(parsed.categories)}`]),
-    ...(parsed.next_action === undefined ? [] : [`next_action: ${serializeScalar(parsed.next_action)}`]),
-    ...(parsed.related_info === undefined ? [] : [`related_info: ${JSON.stringify(parsed.related_info)}`]),
+    ...(parsed.disposition === undefined
+      ? []
+      : [`disposition: ${serializeScalar(parsed.disposition)}`]),
+    ...(parsed.owner_scope === undefined
+      ? []
+      : [`owner_scope: ${serializeScalar(parsed.owner_scope)}`]),
+    ...(parsed.categories === undefined
+      ? []
+      : [`categories: ${JSON.stringify(parsed.categories)}`]),
+    ...(parsed.next_action === undefined
+      ? []
+      : [`next_action: ${serializeScalar(parsed.next_action)}`]),
+    ...(parsed.related_info === undefined
+      ? []
+      : [`related_info: ${JSON.stringify(parsed.related_info)}`]),
     ...(parsed.canonical === undefined ? [] : [`canonical: ${serializeScalar(parsed.canonical)}`]),
-    ...(parsed.action_disposition === undefined ? [] : [`action_disposition: ${serializeScalar(parsed.action_disposition)}`]),
-    ...(parsed.actioned_at === undefined ? [] : [`actioned_at: ${serializeScalar(parsed.actioned_at)}`]),
+    ...(parsed.action_disposition === undefined
+      ? []
+      : [`action_disposition: ${serializeScalar(parsed.action_disposition)}`]),
+    ...(parsed.actioned_at === undefined
+      ? []
+      : [`actioned_at: ${serializeScalar(parsed.actioned_at)}`]),
     ...(parsed.backlog === undefined ? [] : [`backlog: ${JSON.stringify(parsed.backlog)}`]),
-    ...(parsed.resolution_note === undefined ? [] : [`resolution_note: ${serializeScalar(parsed.resolution_note)}`]),
+    ...(parsed.resolution_note === undefined
+      ? []
+      : [`resolution_note: ${serializeScalar(parsed.resolution_note)}`]),
     "---",
     "",
     parsed.body,
@@ -161,14 +206,28 @@ function validateRetrospective(value: unknown): string | null {
   if (value.model !== null && (typeof value.model !== "string" || value.model.trim() === "")) {
     return "retrospective model must be null or a non-empty string";
   }
-  for (const field of ["disposition", "owner_scope", "next_action", "canonical", "action_disposition", "actioned_at", "resolution_note"] as const) {
-    if (Object.prototype.hasOwnProperty.call(value, field) && (typeof value[field] !== "string" || value[field].trim() === "")) {
+  for (const field of [
+    "disposition",
+    "owner_scope",
+    "next_action",
+    "canonical",
+    "action_disposition",
+    "actioned_at",
+    "resolution_note",
+  ] as const) {
+    if (
+      Object.prototype.hasOwnProperty.call(value, field) &&
+      (typeof value[field] !== "string" || value[field].trim() === "")
+    ) {
       return `retrospective ${field} must be a non-empty string`;
     }
   }
   for (const field of ["categories", "related_info", "backlog"] as const) {
     if (!Object.prototype.hasOwnProperty.call(value, field)) continue;
-    if (!Array.isArray(value[field]) || value[field].some((entry) => typeof entry !== "string" || entry.trim() === "")) {
+    if (
+      !Array.isArray(value[field]) ||
+      value[field].some((entry) => typeof entry !== "string" || entry.trim() === "")
+    ) {
       return `retrospective ${field} must be an array of non-empty strings`;
     }
   }
@@ -194,13 +253,18 @@ function parseMarkdown(content: string): Record<string, unknown> | string {
       return `invalid frontmatter value: ${key}`;
     }
   }
-  raw.body = lines.slice(end + 1).join("\n").replace(/^\n/, "").replace(/\n$/, "");
+  raw.body = lines
+    .slice(end + 1)
+    .join("\n")
+    .replace(/^\n/, "")
+    .replace(/\n$/, "");
   return raw;
 }
 
 function parseFrontmatterValue(value: string): unknown {
   if (value === "null") return null;
-  if (value.startsWith("[") || value.startsWith("{") || value.startsWith('"')) return JSON.parse(value);
+  if (value.startsWith("[") || value.startsWith("{") || value.startsWith('"'))
+    return JSON.parse(value);
   return value;
 }
 

@@ -44,9 +44,10 @@ export function backlogList(
     ...(status === undefined ? {} : { status }),
   });
   if (!result.ok) {
-    const suffix = result.error.code === "BACKLOG_STORE_NOT_FOUND"
-      ? ` Run "pops backlog init ${projectId}" first.`
-      : "";
+    const suffix =
+      result.error.code === "BACKLOG_STORE_NOT_FOUND"
+        ? ` Run "pops backlog init ${projectId}" first.`
+        : "";
     io.stderr(`Error: ${result.error.message}${suffix}`);
     return 1;
   }

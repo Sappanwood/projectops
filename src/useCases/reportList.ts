@@ -10,14 +10,19 @@ export function reportList(
   io: CliIO,
   cwd: string,
 ): number {
-  if (projectId === undefined) return reportFailure(io, json, "Usage: pops report list <project-id> [--json]");
+  if (projectId === undefined)
+    return reportFailure(io, json, "Usage: pops report list <project-id> [--json]");
   const workspace = resolveReportInput(io, json, (captured) => loadOrReport(cwd, captured));
   if (workspace === null) return 1;
-  const reportsRoot = resolveReportInput(io, json, (captured) => resolveReportsRoot(projectId, captured, cwd));
+  const reportsRoot = resolveReportInput(io, json, (captured) =>
+    resolveReportsRoot(projectId, captured, cwd),
+  );
   if (reportsRoot === null) return 1;
   let reports;
   try {
-    reports = listReportIds(workspace.root, reportsRoot).map((id) => readReport(workspace.root, reportsRoot, id));
+    reports = listReportIds(workspace.root, reportsRoot).map((id) =>
+      readReport(workspace.root, reportsRoot, id),
+    );
   } catch (error) {
     return reportFailure(io, json, formatReportError(error));
   }

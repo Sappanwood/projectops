@@ -18,7 +18,10 @@ export class PlanAlreadyExistsError extends Error {
 }
 
 export class PlanParseError extends Error {
-  constructor(public readonly id: string, problem: string) {
+  constructor(
+    public readonly id: string,
+    problem: string,
+  ) {
     super(`Invalid plan ${id}: ${problem}`);
   }
 }

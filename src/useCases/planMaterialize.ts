@@ -6,7 +6,13 @@ import path from "node:path";
 import { addBacklogItem, BacklogAddError } from "../backlog/add.js";
 import { INDEX_FILE, ITEMS_DIR } from "../backlog/store.js";
 import { materializationOrder, type Plan } from "../plan/plan.js";
-import { PlanNotFoundError, PlanParseError, planPath, readPlan, updatePlan } from "../plan/planFs.js";
+import {
+  PlanNotFoundError,
+  PlanParseError,
+  planPath,
+  readPlan,
+  updatePlan,
+} from "../plan/planFs.js";
 import { isWithinWorkspace } from "../catalog/workspace.js";
 import type { CliIO } from "../io.js";
 import { resolveStoreRoot } from "./backlogContext.js";
@@ -87,8 +93,10 @@ export function planMaterialize(
         category: "feature",
         priority: item.priority,
         item_type: item.item_type,
-        parent_id: item.parent === undefined ? null : mapping[item.parent] ?? null,
-        depends_on: item.depends_on.map((key) => mapping[key]!).filter((id): id is string => id !== undefined),
+        parent_id: item.parent === undefined ? null : (mapping[item.parent] ?? null),
+        depends_on: item.depends_on
+          .map((key) => mapping[key]!)
+          .filter((id): id is string => id !== undefined),
         body: item.body,
         source: `plan:${plan.id}#${item.key}`,
       });
@@ -108,7 +116,11 @@ export function planMaterialize(
   };
   updatePlan(plansRoot, { ...plan, materialization: materialized });
 
-  const receipt = buildReceipt({ ...plan, materialization: materialized }, materialized.mapping, "created");
+  const receipt = buildReceipt(
+    { ...plan, materialization: materialized },
+    materialized.mapping,
+    "created",
+  );
   if (json) io.stdout(JSON.stringify(receipt));
   else io.stdout(`Materialized ${plan.id}`);
   return 0;

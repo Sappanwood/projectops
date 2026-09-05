@@ -106,10 +106,13 @@ test("docs check reports every missing document", () => {
   };
   assert.equal(checked.ok, false);
   assert.equal(checked.project, "repo-a");
-  assert.deepEqual(checked.problems, TARGETS.map((target) => ({
-    path: target,
-    issue: "document is missing",
-  })));
+  assert.deepEqual(
+    checked.problems,
+    TARGETS.map((target) => ({
+      path: target,
+      issue: "document is missing",
+    })),
+  );
   assert.deepEqual(readFileSync(manifest), beforeManifest.bytes);
   assert.equal(lstatSync(manifest).mtimeMs, beforeManifest.mtimeMs);
   assert.equal(lstatSync(project).mtimeMs, beforeProject);
@@ -135,10 +138,13 @@ test("docs check reports every document that lacks a Markdown H1", () => {
   const checked = JSON.parse(result.stdout[0] ?? "null") as {
     problems: { path: string; issue: string }[];
   };
-  assert.deepEqual(checked.problems, TARGETS.map((target) => ({
-    path: target,
-    issue: "document is missing a level-one Markdown heading",
-  })));
+  assert.deepEqual(
+    checked.problems,
+    TARGETS.map((target) => ({
+      path: target,
+      issue: "document is missing a level-one Markdown heading",
+    })),
+  );
   for (const target of TARGETS) {
     const file = path.join(project, target);
     assert.deepEqual(readFileSync(file), before.get(target)?.bytes);
@@ -164,10 +170,12 @@ test("docs check treats a document symlink as non-regular without following it",
   const checked = JSON.parse(result.stdout[0] ?? "null") as {
     problems: { path: string; issue: string }[];
   };
-  assert.deepEqual(checked.problems, [{
-    path: "README.md",
-    issue: "document is not a regular file",
-  }]);
+  assert.deepEqual(checked.problems, [
+    {
+      path: "README.md",
+      issue: "document is not a regular file",
+    },
+  ]);
   assert.deepEqual(readFileSync(path.join(outside, "readme.md")), beforeOutside);
   assert.equal(lstatSync(path.join(project, "README.md")).mtimeMs, beforeLink.mtimeMs);
   rmSync(workspace, { recursive: true, force: true });

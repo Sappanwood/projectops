@@ -18,4 +18,3 @@ test("the CLI exposes its alpha help and version", () => {
   assert.equal(stdout.at(-1), VERSION);
   assert.deepEqual(stderr, []);
 });
-

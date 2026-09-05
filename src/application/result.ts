@@ -25,9 +25,7 @@ export type ApplicationError = {
   message: string;
 };
 
-export type ApplicationResult<T> =
-  | { ok: true; data: T }
-  | { ok: false; error: ApplicationError };
+export type ApplicationResult<T> = { ok: true; data: T } | { ok: false; error: ApplicationError };
 
 export function applicationSuccess<T>(data: T): ApplicationResult<T> {
   return { ok: true, data };

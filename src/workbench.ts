@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { parseArgs } from "node:util";
-import { createPiRunner } from './execution/piRunner.js';
+import { createPiRunner } from "./execution/piRunner.js";
 
 import {
   WorkbenchServerStartError,
@@ -45,9 +45,7 @@ async function main(args: string[]): Promise<number> {
       console.error("Error: --workspace is required.");
       return 1;
     }
-    const port = parsed.values.port === undefined
-      ? undefined
-      : Number(parsed.values.port);
+    const port = parsed.values.port === undefined ? undefined : Number(parsed.values.port);
     options = {
       workspaceDir: parsed.values.workspace,
       ...(parsed.values.pi ? { runner: createPiRunner() } : {}),
@@ -69,9 +67,8 @@ async function main(args: string[]): Promise<number> {
     await server.close();
     return 0;
   } catch (error) {
-    const message = error instanceof WorkbenchServerStartError
-      ? error.message
-      : "Workbench server failed.";
+    const message =
+      error instanceof WorkbenchServerStartError ? error.message : "Workbench server failed.";
     console.error(`Error: ${message}`);
     return 1;
   }

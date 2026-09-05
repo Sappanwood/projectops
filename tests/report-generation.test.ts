@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -20,10 +20,14 @@ function freshDir(): string {
 function run(args: string[], cwd: string): { code: number; stdout: string[]; stderr: string[] } {
   const stdout: string[] = [];
   const stderr: string[] = [];
-  const code = runCli(args, {
-    stdout: (message) => stdout.push(message),
-    stderr: (message) => stderr.push(message),
-  }, cwd);
+  const code = runCli(
+    args,
+    {
+      stdout: (message) => stdout.push(message),
+      stderr: (message) => stderr.push(message),
+    },
+    cwd,
+  );
   return { code, stdout, stderr };
 }
 
@@ -36,47 +40,68 @@ function setupWorkspace(): string {
   return workspace;
 }
 
-function createMaterializedPlan(workspace: string, includeEpic = false): {
+function createMaterializedPlan(
+  workspace: string,
+  includeEpic = false,
+): {
   plan: ReturnType<typeof readPlan>;
   workspaceRoot: string;
   backlogRoot: string;
   reportsRoot: string;
 } {
   const planPath = path.join(workspace, "plan-draft.json");
-  writeFileSync(planPath, `${JSON.stringify({
-    title: "Release workflow",
-    goal: "Publish a repeatable release.",
-    items: [
-      ...(includeEpic ? [{
-        key: "release",
-        title: "Release",
-        item_type: "epic",
-        priority: "P1",
-        body: "Release work.",
-        depends_on: [],
-      }] : []),
+  writeFileSync(
+    planPath,
+    `${JSON.stringify(
       {
-        key: "prepare",
-        title: "Prepare release",
-        item_type: "task",
-        priority: "P1",
-        body: "Update release notes.",
-        ...(includeEpic ? { parent: "release" } : {}),
-        depends_on: [],
+        title: "Release workflow",
+        goal: "Publish a repeatable release.",
+        items: [
+          ...(includeEpic
+            ? [
+                {
+                  key: "release",
+                  title: "Release",
+                  item_type: "epic",
+                  priority: "P1",
+                  body: "Release work.",
+                  depends_on: [],
+                },
+              ]
+            : []),
+          {
+            key: "prepare",
+            title: "Prepare release",
+            item_type: "task",
+            priority: "P1",
+            body: "Update release notes.",
+            ...(includeEpic ? { parent: "release" } : {}),
+            depends_on: [],
+          },
+          {
+            key: "publish",
+            title: "Publish release",
+            item_type: "task",
+            priority: "P1",
+            body: "Publish the package.",
+            ...(includeEpic ? { parent: "release" } : {}),
+            depends_on: ["prepare"],
+          },
+        ],
       },
-      {
-        key: "publish",
-        title: "Publish release",
-        item_type: "task",
-        priority: "P1",
-        body: "Publish the package.",
-        ...(includeEpic ? { parent: "release" } : {}),
-        depends_on: ["prepare"],
-      },
-    ],
-  }, null, 2)}\n`, "utf8");
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
   assert.equal(run(["plan", "create", "repo-a", "--input", planPath], workspace).code, 0);
-  assert.equal(run(["plan", "approve", "repo-a", "plan-release-workflow", "--review-note", "Reviewed."], workspace).code, 0);
+  assert.equal(
+    run(
+      ["plan", "approve", "repo-a", "plan-release-workflow", "--review-note", "Reviewed."],
+      workspace,
+    ).code,
+    0,
+  );
   assert.equal(run(["plan", "materialize", "repo-a", "plan-release-workflow"], workspace).code, 0);
 
   return {
@@ -108,8 +133,16 @@ function writePlanArtifact(values: ReturnType<typeof createMaterializedPlan>, pl
 }
 
 function markDone(workspace: string, id: string): void {
-  const item = JSON.parse(run(["backlog", "show", "repo-a", id, "--json"], workspace).stdout[0] ?? "null") as { revision: string };
-  assert.equal(run(["backlog", "update", "repo-a", id, "--status", "done", "--expected-revision", item.revision], workspace).code, 0);
+  const item = JSON.parse(
+    run(["backlog", "show", "repo-a", id, "--json"], workspace).stdout[0] ?? "null",
+  ) as { revision: string };
+  assert.equal(
+    run(
+      ["backlog", "update", "repo-a", id, "--status", "done", "--expected-revision", item.revision],
+      workspace,
+    ).code,
+    0,
+  );
 }
 
 test("Report generation derives completed from every mapped backlog item and records evidence", () => {
@@ -122,8 +155,18 @@ test("Report generation derives completed from every mapped backlog item and rec
   assert.equal(report.outcome, "completed");
   assert.equal(report.plan, "project-ops:plans/plan-release-workflow.json");
   assert.deepEqual(report.backlog, [
-    { id: "REP-001", status: "done", revision: report.backlog[0]?.revision, uri: "project-ops:backlog/items/REP-001.md" },
-    { id: "REP-002", status: "done", revision: report.backlog[1]?.revision, uri: "project-ops:backlog/items/REP-002.md" },
+    {
+      id: "REP-001",
+      status: "done",
+      revision: report.backlog[0]?.revision,
+      uri: "project-ops:backlog/items/REP-001.md",
+    },
+    {
+      id: "REP-002",
+      status: "done",
+      revision: report.backlog[1]?.revision,
+      uri: "project-ops:backlog/items/REP-002.md",
+    },
   ]);
   assert.deepEqual(report.verification, ["npm test"]);
   rmSync(values.workspaceRoot, { recursive: true, force: true });
@@ -137,19 +180,28 @@ test("Report generation ignores a mapped epic's unfinished status when all mappe
   const report = generateReport(inputFor(values));
 
   assert.equal(report.outcome, "completed");
-  assert.deepEqual(report.backlog.map((item) => ({ id: item.id, status: item.status })), [
-    { id: "REP-001", status: "todo" },
-    { id: "REP-002", status: "done" },
-    { id: "REP-003", status: "done" },
-  ]);
+  assert.deepEqual(
+    report.backlog.map((item) => ({ id: item.id, status: item.status })),
+    [
+      { id: "REP-001", status: "todo" },
+      { id: "REP-002", status: "done" },
+      { id: "REP-003", status: "done" },
+    ],
+  );
   rmSync(values.workspaceRoot, { recursive: true, force: true });
 });
 
 test("Report generation rejects unfinished work without writing a report", () => {
   const values = createMaterializedPlan(setupWorkspace());
   assert.throws(
-    () => writeGeneratedReport({ ...inputFor(values), workspaceRoot: values.workspaceRoot, reportsRoot: values.reportsRoot }),
-    (error: unknown) => error instanceof ReportGenerationError && /unfinished|partial/i.test(error.message),
+    () =>
+      writeGeneratedReport({
+        ...inputFor(values),
+        workspaceRoot: values.workspaceRoot,
+        reportsRoot: values.reportsRoot,
+      }),
+    (error: unknown) =>
+      error instanceof ReportGenerationError && /unfinished|partial/i.test(error.message),
   );
   assert.equal(existsSync(path.join(values.reportsRoot, "report-release-workflow.md")), false);
   rmSync(values.workspaceRoot, { recursive: true, force: true });
@@ -171,7 +223,8 @@ test("Report generation requires explicit non-empty partial acceptance and prese
   const secondValues = createMaterializedPlan(setupWorkspace());
   assert.throws(
     () => generateReport({ ...inputFor(secondValues), partialAcceptance: "  " }),
-    (error: unknown) => error instanceof ReportGenerationError && /non-empty|explanation/i.test(error.message),
+    (error: unknown) =>
+      error instanceof ReportGenerationError && /non-empty|explanation/i.test(error.message),
   );
   rmSync(values.workspaceRoot, { recursive: true, force: true });
   rmSync(secondValues.workspaceRoot, { recursive: true, force: true });
@@ -188,19 +241,29 @@ test("Report generation rejects missing or cross-project mapped backlog referenc
   };
   writePlanArtifact(values, missingPlan);
   assert.throws(
-    () => writeGeneratedReport({ ...inputFor(values), workspaceRoot: values.workspaceRoot, reportsRoot: values.reportsRoot }),
-    (error: unknown) => error instanceof ReportGenerationError && /not found|missing/i.test(error.message),
+    () =>
+      writeGeneratedReport({
+        ...inputFor(values),
+        workspaceRoot: values.workspaceRoot,
+        reportsRoot: values.reportsRoot,
+      }),
+    (error: unknown) =>
+      error instanceof ReportGenerationError && /not found|missing/i.test(error.message),
   );
   assert.equal(existsSync(path.join(values.reportsRoot, "report-release-workflow.md")), false);
 
   const outsideWorkspace = freshDir();
   const outsideBacklogRoot = path.join(outsideWorkspace, "backlog");
   mkdirSync(path.join(outsideBacklogRoot, "items"), { recursive: true });
-  writeFileSync(path.join(outsideBacklogRoot, "backlog.json"), `${JSON.stringify({
-    schema: "backlog/Store@1",
-    project_id: "other-project",
-    id_prefix: "OTH",
-  })}\n`, "utf8");
+  writeFileSync(
+    path.join(outsideBacklogRoot, "backlog.json"),
+    `${JSON.stringify({
+      schema: "backlog/Store@1",
+      project_id: "other-project",
+      id_prefix: "OTH",
+    })}\n`,
+    "utf8",
+  );
   const crossProjectPlan = {
     ...values.plan,
     materialization: {
@@ -210,8 +273,15 @@ test("Report generation rejects missing or cross-project mapped backlog referenc
   };
   writePlanArtifact(values, crossProjectPlan);
   assert.throws(
-    () => writeGeneratedReport({ ...inputFor(values), backlogRoot: outsideBacklogRoot, workspaceRoot: values.workspaceRoot, reportsRoot: values.reportsRoot }),
-    (error: unknown) => error instanceof ReportGenerationError && /project|cross/i.test(error.message),
+    () =>
+      writeGeneratedReport({
+        ...inputFor(values),
+        backlogRoot: outsideBacklogRoot,
+        workspaceRoot: values.workspaceRoot,
+        reportsRoot: values.reportsRoot,
+      }),
+    (error: unknown) =>
+      error instanceof ReportGenerationError && /project|cross/i.test(error.message),
   );
   assert.equal(existsSync(path.join(values.reportsRoot, "report-release-workflow.md")), false);
 
@@ -225,8 +295,14 @@ test("Report generation rejects an unmaterialized Plan before any Report write",
   writePlanArtifact(values, unmaterialized);
 
   assert.throws(
-    () => writeGeneratedReport({ ...inputFor(values), workspaceRoot: values.workspaceRoot, reportsRoot: values.reportsRoot }),
-    (error: unknown) => error instanceof ReportGenerationError && /materialized/i.test(error.message),
+    () =>
+      writeGeneratedReport({
+        ...inputFor(values),
+        workspaceRoot: values.workspaceRoot,
+        reportsRoot: values.reportsRoot,
+      }),
+    (error: unknown) =>
+      error instanceof ReportGenerationError && /materialized/i.test(error.message),
   );
   assert.equal(existsSync(path.join(values.reportsRoot, "report-release-workflow.md")), false);
   rmSync(values.workspaceRoot, { recursive: true, force: true });
@@ -236,8 +312,15 @@ test("Report generation rejects a missing Plan without writing a report", () => 
   const values = createMaterializedPlan(setupWorkspace());
 
   assert.throws(
-    () => writeGeneratedReport({ ...inputFor(values), planId: "plan-missing", workspaceRoot: values.workspaceRoot, reportsRoot: values.reportsRoot }),
-    (error: unknown) => error instanceof ReportGenerationError && /not found|missing/i.test(error.message),
+    () =>
+      writeGeneratedReport({
+        ...inputFor(values),
+        planId: "plan-missing",
+        workspaceRoot: values.workspaceRoot,
+        reportsRoot: values.reportsRoot,
+      }),
+    (error: unknown) =>
+      error instanceof ReportGenerationError && /not found|missing/i.test(error.message),
   );
   assert.equal(existsSync(path.join(values.reportsRoot, "report-release-workflow.md")), false);
   rmSync(values.workspaceRoot, { recursive: true, force: true });
@@ -255,8 +338,14 @@ test("Report generation rejects a materialization mapping that omits a Plan item
   writePlanArtifact(values, malformedPlan);
 
   assert.throws(
-    () => writeGeneratedReport({ ...inputFor(values), workspaceRoot: values.workspaceRoot, reportsRoot: values.reportsRoot }),
-    (error: unknown) => error instanceof ReportGenerationError && /mapping|include|missing/i.test(error.message),
+    () =>
+      writeGeneratedReport({
+        ...inputFor(values),
+        workspaceRoot: values.workspaceRoot,
+        reportsRoot: values.reportsRoot,
+      }),
+    (error: unknown) =>
+      error instanceof ReportGenerationError && /mapping|include|missing/i.test(error.message),
   );
   assert.equal(existsSync(path.join(values.reportsRoot, "report-release-workflow.md")), false);
   rmSync(values.workspaceRoot, { recursive: true, force: true });

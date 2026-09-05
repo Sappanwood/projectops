@@ -5,10 +5,7 @@ import type { Plan } from "../plan/plan.js";
 import type { Report } from "../report/report.js";
 import { PROJECT_DOC_TEMPLATES } from "../docs/projectDocs.js";
 import { DocumentReadError, readProjectDocument } from "../docs/documentReader.js";
-import {
-  ITEM_STATUSES,
-  type ItemStatus,
-} from "../backlog/item.js";
+import { ITEM_STATUSES, type ItemStatus } from "../backlog/item.js";
 import {
   projectArtifactRoots,
   resolveProjectPath,
@@ -26,9 +23,7 @@ import {
 } from "../docs/projectDocsFs.js";
 import { listPlanIds, readPlan } from "../plan/planFs.js";
 import { listReportIds, readReport } from "../report/reportFs.js";
-import {
-  listRetrospectiveRecords,
-} from "../retrospective/retrospectiveFs.js";
+import { listRetrospectiveRecords } from "../retrospective/retrospectiveFs.js";
 import type { RetrospectiveRecord, RetrospectiveStatus } from "../retrospective/retrospective.js";
 import { listBacklogItems, type BacklogItemSummary } from "./backlogApi.js";
 import { applicationFailure, applicationSuccess, type ApplicationResult } from "./result.js";
@@ -58,7 +53,15 @@ export type WorkbenchWorkspaceOverview = {
 
 export type WorkbenchBacklogSummary = Pick<
   BacklogItemSummary,
-  "id" | "title" | "item_type" | "parent_id" | "priority" | "status" | "depends_on" | "updated" | "revision"
+  | "id"
+  | "title"
+  | "item_type"
+  | "parent_id"
+  | "priority"
+  | "status"
+  | "depends_on"
+  | "updated"
+  | "revision"
 >;
 
 export type WorkbenchProjectOverview = {
@@ -73,7 +76,9 @@ export type WorkbenchProjectOverview = {
     title: string;
     status: string;
     item_count: number;
-    execution: Omit<PlanExecution, "items"> & { diagnostics: Array<{ id: string; code: string; message: string }> };
+    execution: Omit<PlanExecution, "items"> & {
+      diagnostics: Array<{ id: string; code: string; message: string }>;
+    };
   }>;
   reports: Array<{
     id: string;
@@ -99,19 +104,21 @@ export type WorkbenchProjectOverview = {
   diagnostics: WorkbenchDiagnostic[];
 };
 
-export function getWorkbenchWorkspaceOverview(
-  request: { workspaceDir: string },
-): ApplicationResult<WorkbenchWorkspaceOverview> {
+export function getWorkbenchWorkspaceOverview(request: {
+  workspaceDir: string;
+}): ApplicationResult<WorkbenchWorkspaceOverview> {
   const summary = getWorkspaceSummary(request);
   if (!summary.ok) return summary;
   const inspection = inspectWorkspace(request);
   if (!inspection.ok) return inspection;
 
-  const diagnostics = inspection.data.problems.map((problem): WorkbenchDiagnostic => ({
-    source: "workspace",
-    code: "WORKSPACE_PROBLEM",
-    message: `${problem.project}: ${problem.issue}`,
-  }));
+  const diagnostics = inspection.data.problems.map(
+    (problem): WorkbenchDiagnostic => ({
+      source: "workspace",
+      code: "WORKSPACE_PROBLEM",
+      message: `${problem.project}: ${problem.issue}`,
+    }),
+  );
   return applicationSuccess({
     workspace: { name: summary.data.name },
     projects: summary.data.projects,
@@ -119,9 +126,10 @@ export function getWorkbenchWorkspaceOverview(
   });
 }
 
-export function getWorkbenchProjectOverview(
-  request: { workspaceDir: string; projectId: string },
-): ApplicationResult<WorkbenchProjectOverview> {
+export function getWorkbenchProjectOverview(request: {
+  workspaceDir: string;
+  projectId: string;
+}): ApplicationResult<WorkbenchProjectOverview> {
   let workspace;
   try {
     workspace = loadWorkspace(request.workspaceDir);
@@ -135,7 +143,10 @@ export function getWorkbenchProjectOverview(
     throw error;
   }
   if (!Object.hasOwn(workspace.manifest.projects, request.projectId)) {
-    return applicationFailure("PROJECT_NOT_FOUND", `Project "${request.projectId}" is not registered.`);
+    return applicationFailure(
+      "PROJECT_NOT_FOUND",
+      `Project "${request.projectId}" is not registered.`,
+    );
   }
   const registration = workspace.manifest.projects[request.projectId]!;
 
@@ -160,15 +171,36 @@ export function getWorkbenchProjectOverview(
   );
   const project = { id: request.projectId, path: registration.path };
   const backlog = readBacklog(request.workspaceDir, request.projectId, diagnostics);
-  const plans = readPlans(roots.plans, diagnostics).map((plan) => {
-    const { items, ...execution } = readPlanExecution(request, plan);
-    return { id: plan.id, title: plan.title, status: plan.status, item_count: plan.items.length,
-      execution: { ...execution, diagnostics: items.flatMap(item => item.diagnostic ? [{id:item.id, ...item.diagnostic}] : []) } };
-  }).sort((a, b) => Number(a.execution.completion_percent === 100) - Number(b.execution.completion_percent === 100) || a.id.localeCompare(b.id));
+  const plans = readPlans(roots.plans, diagnostics)
+    .map((plan) => {
+      const { items, ...execution } = readPlanExecution(request, plan);
+      return {
+        id: plan.id,
+        title: plan.title,
+        status: plan.status,
+        item_count: plan.items.length,
+        execution: {
+          ...execution,
+          diagnostics: items.flatMap((item) =>
+            item.diagnostic ? [{ id: item.id, ...item.diagnostic }] : [],
+          ),
+        },
+      };
+    })
+    .sort(
+      (a, b) =>
+        Number(a.execution.completion_percent === 100) -
+          Number(b.execution.completion_percent === 100) || a.id.localeCompare(b.id),
+    );
   const reports = readReports(workspace.root, roots.reports, diagnostics)
-    .filter(report => report.project === request.projectId)
+    .filter((report) => report.project === request.projectId)
     .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at) || a.id.localeCompare(b.id))
-    .map((report) => ({ id: report.id, title: report.title, outcome: report.outcome, created_at: report.created_at }));
+    .map((report) => ({
+      id: report.id,
+      title: report.title,
+      outcome: report.outcome,
+      created_at: report.created_at,
+    }));
   const docs = readDocs(
     workspace.root,
     resolveProjectPath(workspace.root, registration.path),
@@ -186,7 +218,14 @@ export function getWorkbenchProjectOverview(
     backlog,
     plans,
     reports,
-    docs: { ...docs, documents: readOverviewDocuments(workspace.root, resolveProjectPath(workspace.root, registration.path), docs.problems) },
+    docs: {
+      ...docs,
+      documents: readOverviewDocuments(
+        workspace.root,
+        resolveProjectPath(workspace.root, registration.path),
+        docs.problems,
+      ),
+    },
     retrospectives,
     diagnostics: sortDiagnostics(diagnostics),
   });
@@ -218,26 +257,33 @@ function readBacklog(
     return { counts, mode: "recent", recent: [] };
   }
   for (const item of result.data.items) counts[item.status] += 1;
-  const active = result.data.items.filter(item => item.status === "in_progress" || item.status === "todo");
+  const active = result.data.items.filter(
+    (item) => item.status === "in_progress" || item.status === "todo",
+  );
   const mode = active.length > 0 ? "active" : "recent";
   const recent = (mode === "active" ? active : [...result.data.items])
-    .sort((left, right) => mode === "active"
-      ? Number(right.status === "in_progress") - Number(left.status === "in_progress") || left.priority.localeCompare(right.priority) || left.id.localeCompare(right.id)
-      : right.updated.localeCompare(left.updated) || left.id.localeCompare(right.id))
+    .sort((left, right) =>
+      mode === "active"
+        ? Number(right.status === "in_progress") - Number(left.status === "in_progress") ||
+          left.priority.localeCompare(right.priority) ||
+          left.id.localeCompare(right.id)
+        : right.updated.localeCompare(left.updated) || left.id.localeCompare(right.id),
+    )
     .slice(0, 5)
     .map(toWorkbenchBacklogSummary);
   return { counts, mode, recent };
 }
 
-function readPlans(
-  root: string,
-  diagnostics: WorkbenchDiagnostic[],
-): Plan[] {
+function readPlans(root: string, diagnostics: WorkbenchDiagnostic[]): Plan[] {
   let ids: string[];
   try {
     ids = listPlanIds(root);
   } catch {
-    diagnostics.push({ source: "plans", code: "DOMAIN_UNAVAILABLE", message: "Plans could not be listed." });
+    diagnostics.push({
+      source: "plans",
+      code: "DOMAIN_UNAVAILABLE",
+      message: "Plans could not be listed.",
+    });
     return [];
   }
   const plans: Plan[] = [];
@@ -269,7 +315,11 @@ function readReports(
   try {
     ids = listReportIds(workspaceRoot, root);
   } catch {
-    diagnostics.push({ source: "reports", code: "DOMAIN_UNAVAILABLE", message: "Reports could not be listed." });
+    diagnostics.push({
+      source: "reports",
+      code: "DOMAIN_UNAVAILABLE",
+      message: "Reports could not be listed.",
+    });
     return [];
   }
   const reports: Report[] = [];
@@ -299,18 +349,34 @@ function readDocs(
     return { healthy: problems.length === 0, problems };
   } catch (error) {
     if (!(error instanceof ProjectDocsCheckError)) throw error;
-    diagnostics.push({ source: "docs", code: "DOMAIN_UNAVAILABLE", message: "Project Docs could not be checked." });
+    diagnostics.push({
+      source: "docs",
+      code: "DOMAIN_UNAVAILABLE",
+      message: "Project Docs could not be checked.",
+    });
     return { healthy: false, problems: [] };
   }
 }
 
-function readOverviewDocuments(workspace: string, project: string, problems: ProjectDocsProblem[]): WorkbenchProjectOverview["docs"]["documents"] {
-  return PROJECT_DOC_TEMPLATES.map(({path}) => {
+function readOverviewDocuments(
+  workspace: string,
+  project: string,
+  problems: ProjectDocsProblem[],
+): WorkbenchProjectOverview["docs"]["documents"] {
+  return PROJECT_DOC_TEMPLATES.map(({ path }) => {
     try {
       readProjectDocument(workspace, project, path);
-      return {path, readable:true, issue:problems.find(problem => problem.path === path)?.issue ?? null};
+      return {
+        path,
+        readable: true,
+        issue: problems.find((problem) => problem.path === path)?.issue ?? null,
+      };
     } catch (error) {
-      return {path, readable:false, issue:error instanceof DocumentReadError ? error.message : "文档无法读取。"};
+      return {
+        path,
+        readable: false,
+        issue: error instanceof DocumentReadError ? error.message : "文档无法读取。",
+      };
     }
   });
 }
@@ -322,11 +388,16 @@ function readRetrospectives(
   diagnostics: WorkbenchDiagnostic[],
 ): WorkbenchProjectOverview["retrospectives"] {
   const counts = { inbox: 0, active: 0, archive: 0 };
-  const records = readRetrospectiveRecords(workspaceRoot, root, diagnostics)
-    .filter((record) => record.project === projectId);
+  const records = readRetrospectiveRecords(workspaceRoot, root, diagnostics).filter(
+    (record) => record.project === projectId,
+  );
   for (const record of records) counts[record.status] += 1;
   const recent = records
-    .sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at) || left.id.localeCompare(right.id))
+    .sort(
+      (left, right) =>
+        Date.parse(right.created_at) - Date.parse(left.created_at) ||
+        left.id.localeCompare(right.id),
+    )
     .slice(0, 5)
     .map((record) => ({
       id: record.id,
@@ -339,19 +410,29 @@ function readRetrospectives(
 }
 
 function retrospectiveSummary(body: string, id: string): string {
-  const text = body.replace(/```[^]*?```|~~~[^]*?~~~/g, "")
-    .split(/\r?\n/).filter(line => !/^\s*(#{1,6}\s|[-*_]{3,}\s*$)/.test(line))
-    .join("\n").trim().split(/\n\s*\n/)[0]!
+  const text = body
+    .replace(/```[^]*?```|~~~[^]*?~~~/g, "")
+    .split(/\r?\n/)
+    .filter((line) => !/^\s*(#{1,6}\s|[-*_]{3,}\s*$)/.test(line))
+    .join("\n")
+    .trim()
+    .split(/\n\s*\n/)[0]!
     .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
     .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
-    .replace(/<[^>]*>/g, "").replace(/^[\s>*+-]+/gm, "")
-    .replace(/[*_`]/g, "").replace(/\s+/g, " ").trim();
+    .replace(/<[^>]*>/g, "")
+    .replace(/^[\s>*+-]+/gm, "")
+    .replace(/[*_`]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
   const characters = Array.from(text);
   return characters.length > 160 ? characters.slice(0, 160).join("") + "…" : text || id;
 }
 
 function emptyBacklogCounts(): Record<ItemStatus, number> {
-  return Object.fromEntries(ITEM_STATUSES.map((status) => [status, 0])) as Record<ItemStatus, number>;
+  return Object.fromEntries(ITEM_STATUSES.map((status) => [status, 0])) as Record<
+    ItemStatus,
+    number
+  >;
 }
 
 function toWorkbenchBacklogSummary(item: BacklogItemSummary): WorkbenchBacklogSummary {
@@ -410,35 +491,66 @@ export type WorkbenchReadPages = {
   diagnostics: WorkbenchDiagnostic[];
 };
 
-export function getWorkbenchReadPages(
-  request: { workspaceDir: string; projectId: string },
-): ApplicationResult<WorkbenchReadPages> {
+export function getWorkbenchReadPages(request: {
+  workspaceDir: string;
+  projectId: string;
+}): ApplicationResult<WorkbenchReadPages> {
   const summary = getWorkspaceSummary(request);
   if (!summary.ok) return summary;
   const project = summary.data.projects.find((entry) => entry.id === request.projectId);
   if (project === undefined) {
-    return applicationFailure("PROJECT_NOT_FOUND", `Project "${request.projectId}" is not registered.`);
+    return applicationFailure(
+      "PROJECT_NOT_FOUND",
+      `Project "${request.projectId}" is not registered.`,
+    );
   }
   const workspace = loadWorkspace(request.workspaceDir);
-  const roots = projectArtifactRoots(workspace.root, request.projectId, workspace.manifest.artifact_layout);
+  const roots = projectArtifactRoots(
+    workspace.root,
+    request.projectId,
+    workspace.manifest.artifact_layout,
+  );
   const diagnostics: WorkbenchDiagnostic[] = [];
   const reports = readReports(workspace.root, roots.reports, diagnostics);
   const plans = readPlans(roots.plans, diagnostics).map((plan) => ({
-    ...plan, revision: computePlanRevision(plan), execution: readPlanExecution(request, plan), next_tasks: readPlanNext(request, plan),
+    ...plan,
+    revision: computePlanRevision(plan),
+    execution: readPlanExecution(request, plan),
+    next_tasks: readPlanNext(request, plan),
     delivery_reports: reports
-      .filter(report => report.project === request.projectId && report.plan === `project-ops:plans/${plan.id}.json`)
-      .sort((a, b) => ((Date.parse(b.created_at) || 0) - (Date.parse(a.created_at) || 0)) || a.id.localeCompare(b.id))
+      .filter(
+        (report) =>
+          report.project === request.projectId &&
+          report.plan === `project-ops:plans/${plan.id}.json`,
+      )
+      .sort(
+        (a, b) =>
+          (Date.parse(b.created_at) || 0) - (Date.parse(a.created_at) || 0) ||
+          a.id.localeCompare(b.id),
+      )
       .map(({ id, title, outcome, created_at }) => ({ id, title, outcome, created_at })),
   }));
-  const docs = readDocs(workspace.root, resolveProjectPath(workspace.root, project.path), diagnostics);
+  const docs = readDocs(
+    workspace.root,
+    resolveProjectPath(workspace.root, project.path),
+    diagnostics,
+  );
   const documents = PROJECT_DOC_TEMPLATES.map(({ path }) => ({
     path,
-    issue: docs.problems.find((problem) => problem.path === path)?.issue ?? (docs.healthy || docs.problems.length > 0 ? null : "unavailable"),
+    issue:
+      docs.problems.find((problem) => problem.path === path)?.issue ??
+      (docs.healthy || docs.problems.length > 0 ? null : "unavailable"),
   }));
   const retrospectives = readRetrospectiveRecords(
     workspace.root,
     workspaceRetrospectiveRoot(workspace.root, workspace.manifest.retrospectives),
     diagnostics,
   );
-  return applicationSuccess({ plans, reports, documents, retrospectives, diagnostics: sortDiagnostics(diagnostics) });
+  return applicationSuccess({
+    plans,
+    reports,
+    documents,
+    retrospectives,
+    diagnostics: sortDiagnostics(diagnostics),
+  });
 }

@@ -47,7 +47,16 @@ test("backlog update transitions status and rewrites the item file", () => {
   const { ws, revision } = setupItem();
 
   const { code } = run(
-    ["backlog", "update", "repo-a", "REP-001", "--status", "in_progress", "--expected-revision", revision],
+    [
+      "backlog",
+      "update",
+      "repo-a",
+      "REP-001",
+      "--status",
+      "in_progress",
+      "--expected-revision",
+      revision,
+    ],
     ws,
   );
 
@@ -60,7 +69,17 @@ test("backlog update --json returns a mutation receipt", () => {
   const { ws, revision } = setupItem();
 
   const { code, stdout } = run(
-    ["backlog", "update", "repo-a", "REP-001", "--status", "in_progress", "--expected-revision", revision, "--json"],
+    [
+      "backlog",
+      "update",
+      "repo-a",
+      "REP-001",
+      "--status",
+      "in_progress",
+      "--expected-revision",
+      revision,
+      "--json",
+    ],
     ws,
   );
 
@@ -87,7 +106,16 @@ test("backlog update refuses a stale revision and does not write", () => {
   const before = readFileSync(itemFile(ws, "REP-001"), "utf8");
 
   const { code, stderr } = run(
-    ["backlog", "update", "repo-a", "REP-001", "--status", "in_progress", "--expected-revision", "deadbeef"],
+    [
+      "backlog",
+      "update",
+      "repo-a",
+      "REP-001",
+      "--status",
+      "in_progress",
+      "--expected-revision",
+      "deadbeef",
+    ],
     ws,
   );
 
@@ -109,7 +137,17 @@ test("backlog update reports no_op for a redundant transition", () => {
   const { ws, revision } = setupItem();
 
   const { code, stdout } = run(
-    ["backlog", "update", "repo-a", "REP-001", "--status", "todo", "--expected-revision", revision, "--json"],
+    [
+      "backlog",
+      "update",
+      "repo-a",
+      "REP-001",
+      "--status",
+      "todo",
+      "--expected-revision",
+      revision,
+      "--json",
+    ],
     ws,
   );
 
@@ -121,11 +159,24 @@ test("backlog update reports no_op for a redundant transition", () => {
 test("backlog update reports no_op for an item last updated on an earlier day", () => {
   const { ws, revision } = setupItem();
   const file = itemFile(ws, "REP-001");
-  const aged = readFileSync(file, "utf8").replace(/updated: \d{4}-\d{2}-\d{2}/, "updated: 2000-01-01");
+  const aged = readFileSync(file, "utf8").replace(
+    /updated: \d{4}-\d{2}-\d{2}/,
+    "updated: 2000-01-01",
+  );
   writeFileSync(file, aged, "utf8");
 
   const { code, stdout } = run(
-    ["backlog", "update", "repo-a", "REP-001", "--status", "todo", "--expected-revision", revision, "--json"],
+    [
+      "backlog",
+      "update",
+      "repo-a",
+      "REP-001",
+      "--status",
+      "todo",
+      "--expected-revision",
+      revision,
+      "--json",
+    ],
     ws,
   );
 
@@ -166,7 +217,17 @@ test("backlog update marks done items with a fixed date", () => {
   const { ws, revision } = setupItem();
 
   const { code, stdout } = run(
-    ["backlog", "update", "repo-a", "REP-001", "--status", "done", "--expected-revision", revision, "--json"],
+    [
+      "backlog",
+      "update",
+      "repo-a",
+      "REP-001",
+      "--status",
+      "done",
+      "--expected-revision",
+      revision,
+      "--json",
+    ],
     ws,
   );
 
@@ -181,7 +242,16 @@ test("backlog update validates the new status", () => {
   const { ws, revision } = setupItem();
 
   const { code, stderr } = run(
-    ["backlog", "update", "repo-a", "REP-001", "--status", "bogus", "--expected-revision", revision],
+    [
+      "backlog",
+      "update",
+      "repo-a",
+      "REP-001",
+      "--status",
+      "bogus",
+      "--expected-revision",
+      revision,
+    ],
     ws,
   );
 

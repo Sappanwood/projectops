@@ -18,19 +18,28 @@ export class ReportAlreadyExistsError extends Error {
 }
 
 export class ReportParseError extends Error {
-  constructor(public readonly id: string, problem: string) {
+  constructor(
+    public readonly id: string,
+    problem: string,
+  ) {
     super(`Invalid report ${id}: ${problem}`);
   }
 }
 
 export class ReportRootError extends Error {
-  constructor(public readonly root: string, problem: string) {
+  constructor(
+    public readonly root: string,
+    problem: string,
+  ) {
     super(`Invalid reports root ${root}: ${problem}`);
   }
 }
 
 export class ReportTargetError extends Error {
-  constructor(public readonly target: string, problem: string) {
+  constructor(
+    public readonly target: string,
+    problem: string,
+  ) {
     super(`Invalid report target ${target}: ${problem}`);
   }
 }
@@ -109,7 +118,10 @@ function validateReportsRoot(workspaceRoot: string, reportsRoot: string): string
   try {
     canonicalStat = lstatSync(canonicalRoot);
   } catch (error) {
-    throw new ReportRootError(reportsRoot, `cannot inspect resolved directory: ${formatFsError(error)}`);
+    throw new ReportRootError(
+      reportsRoot,
+      `cannot inspect resolved directory: ${formatFsError(error)}`,
+    );
   }
   if (!canonicalStat.isDirectory()) throw new ReportRootError(reportsRoot, "is not a directory");
   return canonicalRoot;

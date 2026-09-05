@@ -74,10 +74,7 @@ export function projectArtifactRoots(
   layout: ArtifactLayout,
 ): Record<ArtifactKey, string> {
   const base = projectOpsRoot(workspaceRoot, projectId, layout);
-  const entries = ARTIFACT_KEYS.map((key) => [
-    key,
-    path.join(base, key),
-  ]);
+  const entries = ARTIFACT_KEYS.map((key) => [key, path.join(base, key)]);
   return Object.fromEntries(entries) as Record<ArtifactKey, string>;
 }
 

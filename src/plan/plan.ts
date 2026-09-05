@@ -56,7 +56,10 @@ export function planIdForTitle(title: string): string | null {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
   if (slug !== "") return `plan-${slug}`;
-  const codePoints = Array.from(title, (character) => `u${character.codePointAt(0)?.toString(16)}`).join("-");
+  const codePoints = Array.from(
+    title,
+    (character) => `u${character.codePointAt(0)?.toString(16)}`,
+  ).join("-");
   return `plan-${codePoints}`;
 }
 
@@ -75,7 +78,12 @@ export function parsePlanDraft(value: unknown): PlanDraft | string {
 }
 
 export function parsePlan(value: unknown): Plan | string {
-  if (!isRecord(value) || value.schema !== PLAN_SCHEMA || typeof value.id !== "string" || !isPlanId(value.id)) {
+  if (
+    !isRecord(value) ||
+    value.schema !== PLAN_SCHEMA ||
+    typeof value.id !== "string" ||
+    !isPlanId(value.id)
+  ) {
     return "unexpected plan schema";
   }
   const draft = parsePlanDraft({
@@ -101,7 +109,8 @@ export function parsePlan(value: unknown): Plan | string {
     if (typeof approval === "string") return approval;
     const materialization = parseMaterialization(value.materialization, draft.items);
     if (typeof materialization === "string") return materialization;
-    if (status === "done" && !materialization) return "done plan must have a materialization record";
+    if (status === "done" && !materialization)
+      return "done plan must have a materialization record";
     return {
       schema: PLAN_SCHEMA,
       id: value.id,
@@ -127,9 +136,12 @@ export function materializationOrder(items: PlanItem[]): PlanItem[] | string {
   const ordered: PlanItem[] = [];
   const available = new Set<string>();
   while (pending.size > 0) {
-    const next = items.find((item) => pending.has(item.key) &&
-      (item.parent === undefined || available.has(item.parent)) &&
-      (item.depends_on ?? []).every((dependency) => available.has(dependency)));
+    const next = items.find(
+      (item) =>
+        pending.has(item.key) &&
+        (item.parent === undefined || available.has(item.parent)) &&
+        (item.depends_on ?? []).every((dependency) => available.has(dependency)),
+    );
     if (next === undefined) return "plan item parent or dependency graph cannot be materialized";
     pending.delete(next.key);
     available.add(next.key);
@@ -140,10 +152,16 @@ export function materializationOrder(items: PlanItem[]): PlanItem[] | string {
 
 function validateDraft(value: unknown): string | null {
   if (!isRecord(value)) return "plan input must be an object";
-  if (typeof value.title !== "string" || value.title === "") return "plan title must be a non-empty string";
-  if (typeof value.goal !== "string" || value.goal === "") return "plan goal must be a non-empty string";
+  if (typeof value.title !== "string" || value.title === "")
+    return "plan title must be a non-empty string";
+  if (typeof value.goal !== "string" || value.goal === "")
+    return "plan goal must be a non-empty string";
   if (!Array.isArray(value.items)) return "plan items must be an array";
-  if (value.execution_policy !== undefined && (!isRecord(value.execution_policy) || value.execution_policy.max_parallel !== 2)) return "execution_policy.max_parallel must be 2 when parallel execution is explicitly enabled";
+  if (
+    value.execution_policy !== undefined &&
+    (!isRecord(value.execution_policy) || value.execution_policy.max_parallel !== 2)
+  )
+    return "execution_policy.max_parallel must be 2 when parallel execution is explicitly enabled";
 
   const keys = new Set<string>();
   for (const item of value.items) {
@@ -156,7 +174,8 @@ function validateDraft(value: unknown): string | null {
     if (item.parent !== undefined) {
       if (!keys.has(item.parent)) return `plan item parent not found: ${item.parent}`;
       if (item.item_type === "epic") return `plan item ${item.key} cannot have a parent`;
-      if (itemsByKey.get(item.parent)?.item_type !== "epic") return `plan item parent must be an epic: ${item.parent}`;
+      if (itemsByKey.get(item.parent)?.item_type !== "epic")
+        return `plan item parent must be an epic: ${item.parent}`;
     }
     for (const dependency of item.depends_on ?? []) {
       if (!keys.has(dependency)) return `plan item dependency not found: ${dependency}`;
@@ -171,7 +190,9 @@ function normalizeDraft(draft: PlanDraft): PlanDraft {
   return {
     title: draft.title,
     goal: draft.goal,
-    ...(draft.execution_policy === undefined ? {} : { execution_policy: { max_parallel: 2 as const } }),
+    ...(draft.execution_policy === undefined
+      ? {}
+      : { execution_policy: { max_parallel: 2 as const } }),
     items: draft.items.map((item) => ({
       key: item.key,
       title: item.title,
@@ -192,7 +213,8 @@ function validateItem(value: unknown, keys: Set<string>): string | null {
     return "plan item key must use lowercase letters, digits, and hyphens";
   }
   if (keys.has(value.key)) return `duplicate plan item key: ${value.key}`;
-  if (typeof value.title !== "string" || value.title === "") return `plan item ${value.key} title must be a non-empty string`;
+  if (typeof value.title !== "string" || value.title === "")
+    return `plan item ${value.key} title must be a non-empty string`;
   if (!PLAN_ITEM_TYPES.includes(value.item_type as PlanItemType)) {
     return `plan item ${value.key} type must be one of: ${PLAN_ITEM_TYPES.join(", ")}`;
   }
@@ -200,20 +222,43 @@ function validateItem(value: unknown, keys: Set<string>): string | null {
     return `plan item ${value.key} priority must be one of: ${PLAN_PRIORITIES.join(", ")}`;
   }
   if (typeof value.body !== "string") return `plan item ${value.key} body must be a string`;
-  if (value.parallel !== undefined && typeof value.parallel !== 'boolean') return `plan item ${value.key} parallel must be boolean`;
-  if (value.resources !== undefined && (!Array.isArray(value.resources) || !value.resources.every(resource => typeof resource === 'string' && /^[a-z][a-z0-9-]*$/.test(resource)) || new Set(value.resources).size !== value.resources.length)) return `plan item ${value.key} resources must contain unique resource names`;
-  if (value.parent !== undefined && (typeof value.parent !== "string" || !/^[a-z][a-z0-9-]*$/.test(value.parent))) {
+  if (value.parallel !== undefined && typeof value.parallel !== "boolean")
+    return `plan item ${value.key} parallel must be boolean`;
+  if (
+    value.resources !== undefined &&
+    (!Array.isArray(value.resources) ||
+      !value.resources.every(
+        (resource) => typeof resource === "string" && /^[a-z][a-z0-9-]*$/.test(resource),
+      ) ||
+      new Set(value.resources).size !== value.resources.length)
+  )
+    return `plan item ${value.key} resources must contain unique resource names`;
+  if (
+    value.parent !== undefined &&
+    (typeof value.parent !== "string" || !/^[a-z][a-z0-9-]*$/.test(value.parent))
+  ) {
     return `plan item ${value.key} parent must be a local key`;
   }
-  if (value.depends_on !== undefined && (!Array.isArray(value.depends_on) || !value.depends_on.every((dependency) => typeof dependency === "string"))) {
+  if (
+    value.depends_on !== undefined &&
+    (!Array.isArray(value.depends_on) ||
+      !value.depends_on.every((dependency) => typeof dependency === "string"))
+  ) {
     return `plan item ${value.key} depends_on must be an array of keys`;
   }
   return null;
 }
 
-function parseMaterialization(value: unknown, items: PlanItem[]): PlanMaterialization | string | undefined {
+function parseMaterialization(
+  value: unknown,
+  items: PlanItem[],
+): PlanMaterialization | string | undefined {
   if (value === undefined) return undefined;
-  if (!isRecord(value) || typeof value.materialized_at !== "string" || value.materialized_at.trim() === "") {
+  if (
+    !isRecord(value) ||
+    typeof value.materialized_at !== "string" ||
+    value.materialized_at.trim() === ""
+  ) {
     return "plan materialization must have a timestamp";
   }
   if (!isRecord(value.mapping)) return "plan materialization mapping must be an object";

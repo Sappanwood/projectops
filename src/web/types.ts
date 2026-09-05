@@ -10,13 +10,7 @@ import type { WorkspaceProjectSummary } from "../application/workspaceApi.js";
 import type { BacklogViewState } from "./backlogController.js";
 import type { DocsState } from "./docsView.js";
 
-export type ViewType =
-  | "overview"
-  | "backlog"
-  | "plans"
-  | "reports"
-  | "docs"
-  | "retrospectives";
+export type ViewType = "overview" | "backlog" | "plans" | "reports" | "docs" | "retrospectives";
 
 export const VIEW_TYPES: readonly ViewType[] = [
   "overview",
@@ -52,7 +46,7 @@ export type AppError = {
 };
 
 export type AppState = {
-  modelSelection: import('./modelSelector.js').ModelSelectionState;
+  modelSelection: import("./modelSelector.js").ModelSelectionState;
   route: RouteState;
   docs: DocsState;
   selectedPlanId: string | null;

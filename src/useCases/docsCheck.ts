@@ -1,10 +1,7 @@
 // Application use case: check the fixed Project Docs set for a registered project.
 
 import type { CliIO } from "../io.js";
-import {
-  checkProjectDocs,
-  ProjectDocsCheckError,
-} from "../docs/projectDocsFs.js";
+import { checkProjectDocs, ProjectDocsCheckError } from "../docs/projectDocsFs.js";
 import { resolveProjectPath } from "../catalog/workspace.js";
 import { loadOrReport } from "./workspaceContext.js";
 

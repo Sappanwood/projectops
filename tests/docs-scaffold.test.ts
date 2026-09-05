@@ -84,7 +84,9 @@ test("docs scaffold skips existing regular files byte-for-byte", () => {
     created: [path.join("docs", "PRODUCT_SPEC.md"), path.join("docs", "ARCHITECTURE.md")],
     skipped: ["README.md", "AGENTS.md"],
   });
-  const before = new Map(TARGETS.map((target) => [target, readFileSync(path.join(project, target), "utf8")]));
+  const before = new Map(
+    TARGETS.map((target) => [target, readFileSync(path.join(project, target), "utf8")]),
+  );
 
   const second = run(["docs", "scaffold", "repo-a", "--json"], workspace);
 
@@ -139,7 +141,10 @@ test("docs scaffold accepts a registered project symlink that stays inside the w
   const result = run(["docs", "scaffold", "repo-link", "--json"], workspace);
 
   assert.equal(result.code, 0, result.stderr.join("\n"));
-  const receipt = JSON.parse(result.stdout[0] ?? "null") as { created: string[]; skipped: string[] };
+  const receipt = JSON.parse(result.stdout[0] ?? "null") as {
+    created: string[];
+    skipped: string[];
+  };
   assert.deepEqual(receipt.created, TARGETS);
   assert.deepEqual(receipt.skipped, []);
   for (const target of TARGETS) assert.ok(lstatSync(path.join(project, target)).isFile());

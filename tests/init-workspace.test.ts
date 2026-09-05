@@ -17,10 +17,7 @@ function manifestPath(dir: string): string {
   return path.join(dir, MANIFEST_DIR, MANIFEST_FILE);
 }
 
-function run(
-  args: string[],
-  cwd: string,
-): { code: number; stdout: string[]; stderr: string[] } {
+function run(args: string[], cwd: string): { code: number; stdout: string[]; stderr: string[] } {
   const stdout: string[] = [];
   const stderr: string[] = [];
   const code = runCli(
@@ -105,14 +102,19 @@ for (const placement of ["implicit", "before", "after"] as const) {
   test(`init JSON receipt uses the intended directory (${placement})`, () => {
     const parent = freshDir();
     const dir = placement === "implicit" ? parent : path.join(parent, "target");
-    const args = placement === "implicit" ? ["init", "--json"]
-      : placement === "before" ? ["init", "--json", dir] : ["init", dir, "--json"];
+    const args =
+      placement === "implicit"
+        ? ["init", "--json"]
+        : placement === "before"
+          ? ["init", "--json", dir]
+          : ["init", dir, "--json"];
     const result = run(args, parent);
     assert.equal(result.code, 0);
     assert.deepEqual(result.stderr, []);
     assert.equal(result.stdout.length, 1);
     assert.deepEqual(JSON.parse(result.stdout[0]!), {
-      ok: true, workspace: { name: path.basename(dir), manifest: ".pops/workspace.json" },
+      ok: true,
+      workspace: { name: path.basename(dir), manifest: ".pops/workspace.json" },
     });
     assert.ok(existsSync(manifestPath(dir)));
     assert.equal(existsSync(path.join(parent, "--json")), false);

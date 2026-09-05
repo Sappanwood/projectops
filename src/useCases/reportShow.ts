@@ -17,7 +17,9 @@ export function reportShow(
   }
   const workspace = resolveReportInput(io, json, (captured) => loadOrReport(cwd, captured));
   if (workspace === null) return 1;
-  const reportsRoot = resolveReportInput(io, json, (captured) => resolveReportsRoot(projectId, captured, cwd));
+  const reportsRoot = resolveReportInput(io, json, (captured) =>
+    resolveReportsRoot(projectId, captured, cwd),
+  );
   if (reportsRoot === null) return 1;
   if (!isReportId(reportId)) return reportFailure(io, json, `invalid report id: ${reportId}`);
 
@@ -30,7 +32,12 @@ export function reportShow(
   if (json) {
     io.stdout(JSON.stringify(report));
   } else {
-    const details = [`${report.id}  [${report.outcome}]  ${report.title}`, `Project: ${report.project}`, `Plan: ${report.plan}`, ""];
+    const details = [
+      `${report.id}  [${report.outcome}]  ${report.title}`,
+      `Project: ${report.project}`,
+      `Plan: ${report.plan}`,
+      "",
+    ];
     if (report.body !== "") details.push(report.body);
     io.stdout(details.join("\n"));
   }

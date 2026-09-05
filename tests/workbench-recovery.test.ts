@@ -10,11 +10,17 @@ test("workspace retry survives navigation with a previously loaded workspace", a
   let notify!: (route: RouteState) => void;
   let calls = 0;
   let finishRetry!: (value: any) => void;
-  const workspace = { workspace: { name: "test" }, projects: [{ id: "alpha", path: "alpha" }], diagnostics: [] };
+  const workspace = {
+    workspace: { name: "test" },
+    projects: [{ id: "alpha", path: "alpha" }],
+    diagnostics: [],
+  };
   const handlers: Record<string, (event: any) => void> = {};
   const container = {
     innerHTML: "",
-    addEventListener: (name: string, handler: any) => { handlers[name] = handler; },
+    addEventListener: (name: string, handler: any) => {
+      handlers[name] = handler;
+    },
     removeEventListener() {},
   };
   const app = createWorkbenchApp({
@@ -25,7 +31,9 @@ test("workspace retry survives navigation with a previously loaded workspace", a
         calls++;
         if (calls === 1) return { ok: true, data: workspace };
         if (calls === 2) return { ok: false, error: { message: "disconnected" } };
-        return new Promise((resolve) => { finishRetry = resolve; });
+        return new Promise((resolve) => {
+          finishRetry = resolve;
+        });
       },
       getProjectOverview: async () => ({ ok: false, error: { message: "project unavailable" } }),
     },
@@ -37,7 +45,10 @@ test("workspace retry survives navigation with a previously loaded workspace", a
   try {
     await new Promise((resolve) => setImmediate(resolve));
     await app.refresh();
-    handlers.click!({ target: { closest: (selector: string) => selector === "#btn-retry" ? {} : null }, preventDefault() {} });
+    handlers.click!({
+      target: { closest: (selector: string) => (selector === "#btn-retry" ? {} : null) },
+      preventDefault() {},
+    });
     route = { projectId: "alpha", view: "overview" };
     notify(route);
     await new Promise((resolve) => setImmediate(resolve));
@@ -52,7 +63,16 @@ test("workspace retry survives navigation with a previously loaded workspace", a
 });
 
 test("Backlog parser rejects malformed typed fields before they reach Workbench", () => {
-  for (const field of ["depends_on: [123]", "title: [123]", "status: unknown", 'title: "unterminated']) {
-    assert.throws(() => parseItemFile(`---\nid: A-001\n${field}\n---\nbody`), ItemParseError, field);
+  for (const field of [
+    "depends_on: [123]",
+    "title: [123]",
+    "status: unknown",
+    'title: "unterminated',
+  ]) {
+    assert.throws(
+      () => parseItemFile(`---\nid: A-001\n${field}\n---\nbody`),
+      ItemParseError,
+      field,
+    );
   }
 });

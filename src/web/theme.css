@@ -46,7 +46,9 @@
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
-*, *::before, *::after {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
@@ -64,7 +66,7 @@ body {
 :where(a:any-link) {
   color: var(--link);
   text-decoration: underline;
-  text-underline-offset: .2em;
+  text-underline-offset: 0.2em;
   text-decoration-thickness: 1px;
 }
 
@@ -78,4 +80,3 @@ body {
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
-

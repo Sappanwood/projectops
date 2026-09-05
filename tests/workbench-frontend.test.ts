@@ -7,7 +7,6 @@ import {
   escapeHtml,
   renderApp,
   renderDiagnostics,
-  renderDomainTabs,
   renderHeader,
   renderProjectNav,
 } from "../src/web/render.js";
@@ -16,18 +15,13 @@ import {
   createInitialState,
   selectProject,
   selectView,
-  setProjectError,
-  setProjectLoading,
   setProjectSuccess,
   setRefreshing,
   setWorkspaceError,
-  setWorkspaceLoading,
   setWorkspaceSuccess,
 } from "../src/web/state.js";
 import type {
   AppState,
-  WorkbenchBacklogSummary,
-  WorkbenchDiagnostic,
   WorkbenchProjectOverview,
   WorkbenchWorkspaceOverview,
 } from "../src/web/types.js";
@@ -79,7 +73,20 @@ const mockProjectOverview: WorkbenchProjectOverview = {
       title: "Core Infrastructure",
       status: "approved",
       item_count: 4,
-      execution: {materialized:false, counts:{total:0,todo:0,in_progress:0,done:0,blocked:0,cancelled:0,unreadable:0}, completion_percent:null, diagnostics:[]},
+      execution: {
+        materialized: false,
+        counts: {
+          total: 0,
+          todo: 0,
+          in_progress: 0,
+          done: 0,
+          blocked: 0,
+          cancelled: 0,
+          unreadable: 0,
+        },
+        completion_percent: null,
+        diagnostics: [],
+      },
     },
   ],
   reports: [
@@ -260,10 +267,13 @@ test("Workbench ApiClient handles success, non-JSON errors, and network failures
         headers: { "content-type": "application/json" },
       });
     }
-    return new Response(JSON.stringify({ ok: false, error: { code: "NOT_FOUND", message: "Not found" } }), {
-      status: 404,
-      headers: { "content-type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify({ ok: false, error: { code: "NOT_FOUND", message: "Not found" } }),
+      {
+        status: 404,
+        headers: { "content-type": "application/json" },
+      },
+    );
   };
 
   const client = createApiClient({ fetchFn: mockFetchSuccess });
@@ -412,8 +422,17 @@ test("Workbench HTML Rendering covers loading, error, empty, header, and domain 
   const docsState: AppState = {
     ...readyState,
     currentView: "docs",
-    route: {projectId:"alpha",view:"docs",documentPath:"docs/PRODUCT_SPEC.md"},
-    docs: {loading:false,error:null,listError:null,list:{documents:mockProjectOverview.docs.problems.map(d => ({...d,standard:true})),diagnostics:[]},document:{path:"docs/PRODUCT_SPEC.md",body:"Readable even without a heading"}},
+    route: { projectId: "alpha", view: "docs", documentPath: "docs/PRODUCT_SPEC.md" },
+    docs: {
+      loading: false,
+      error: null,
+      listError: null,
+      list: {
+        documents: mockProjectOverview.docs.problems.map((d) => ({ ...d, standard: true })),
+        diagnostics: [],
+      },
+      document: { path: "docs/PRODUCT_SPEC.md", body: "Readable even without a heading" },
+    },
   };
   const docsHtml = renderApp(docsState);
   assert.match(docsHtml, /Readable even without a heading/);
@@ -425,10 +444,28 @@ test("Workbench HTML Rendering covers loading, error, empty, header, and domain 
   const retroState: AppState = {
     ...readyState,
     currentView: "retrospectives",
-    readPages: { plans: [], reports: [], documents: [], diagnostics: [], retrospectives: [{
-      schema: "retrospective/Retrospective@1", id: "2026-09-04-retro-1", status: "inbox", project: "alpha", task: null,
-      created_at: "2026-09-04", trigger: "workflow-friction", harness: "test", model: null, body: "Evidence", path: "inbox/2026-09-04-retro-1.md", revision: "test",
-    }] },
+    readPages: {
+      plans: [],
+      reports: [],
+      documents: [],
+      diagnostics: [],
+      retrospectives: [
+        {
+          schema: "retrospective/Retrospective@1",
+          id: "2026-09-04-retro-1",
+          status: "inbox",
+          project: "alpha",
+          task: null,
+          created_at: "2026-09-04",
+          trigger: "workflow-friction",
+          harness: "test",
+          model: null,
+          body: "Evidence",
+          path: "inbox/2026-09-04-retro-1.md",
+          revision: "test",
+        },
+      ],
+    },
   };
   const retroHtml = renderApp(retroState);
   assert.match(retroHtml, /2026-09-04-retro-1/);
@@ -445,7 +482,9 @@ test("Workbench App discards out-of-order project responses when route changes",
   type Deferred<T> = { promise: Promise<T>; resolve: (value: T) => void };
   function defer<T>(): Deferred<T> {
     let resolve!: (value: T) => void;
-    const promise = new Promise<T>((res) => { resolve = res; });
+    const promise = new Promise<T>((res) => {
+      resolve = res;
+    });
     return { promise, resolve };
   }
 
@@ -463,7 +502,9 @@ test("Workbench App discards out-of-order project responses when route changes",
 
   let notifyRoute!: (route: { projectId: string | null; view: "overview" }) => void;
   let currentRoute = { projectId: "alpha", view: "overview" as const };
-  const routerFactory = (onChange: (route: { projectId: string | null; view: "overview" }) => void) => {
+  const routerFactory = (
+    onChange: (route: { projectId: string | null; view: "overview" }) => void,
+  ) => {
     notifyRoute = onChange;
     return {
       getCurrentRoute: () => currentRoute,
@@ -477,8 +518,12 @@ test("Workbench App discards out-of-order project responses when route changes",
 
   let containerHtml = "";
   const fakeContainer: any = {
-    set innerHTML(val: string) { containerHtml = val; },
-    get innerHTML() { return containerHtml; },
+    set innerHTML(val: string) {
+      containerHtml = val;
+    },
+    get innerHTML() {
+      return containerHtml;
+    },
     addEventListener: () => {},
     removeEventListener: () => {},
   };
@@ -528,7 +573,9 @@ test("Workbench App discards out-of-order project responses when route changes",
 test("Workbench App handles route change while initial workspace is loading without dropping workspace", async () => {
   function defer<T>() {
     let resolve!: (val: T) => void;
-    const promise = new Promise<T>((r) => { resolve = r; });
+    const promise = new Promise<T>((r) => {
+      resolve = r;
+    });
     return { promise, resolve };
   }
 
@@ -544,8 +591,13 @@ test("Workbench App handles route change while initial workspace is loading with
   };
 
   let notifyRoute!: (route: { projectId: string | null; view: "overview" }) => void;
-  let currentRoute: { projectId: string | null; view: "overview" } = { projectId: null, view: "overview" };
-  const routerFactory = (onChange: (route: { projectId: string | null; view: "overview" }) => void) => {
+  let currentRoute: { projectId: string | null; view: "overview" } = {
+    projectId: null,
+    view: "overview",
+  };
+  const routerFactory = (
+    onChange: (route: { projectId: string | null; view: "overview" }) => void,
+  ) => {
     notifyRoute = onChange;
     return {
       getCurrentRoute: () => currentRoute,
@@ -559,8 +611,12 @@ test("Workbench App handles route change while initial workspace is loading with
 
   let containerHtml = "";
   const fakeContainer: any = {
-    set innerHTML(val: string) { containerHtml = val; },
-    get innerHTML() { return containerHtml; },
+    set innerHTML(val: string) {
+      containerHtml = val;
+    },
+    get innerHTML() {
+      return containerHtml;
+    },
     addEventListener: () => {},
     removeEventListener: () => {},
   };
@@ -606,7 +662,9 @@ test("Workbench App handles route change while initial workspace is loading with
 test("Workbench App clears refreshing state when navigating to home", async () => {
   function defer<T>() {
     let resolve!: (val: T) => void;
-    const promise = new Promise<T>((r) => { resolve = r; });
+    const promise = new Promise<T>((r) => {
+      resolve = r;
+    });
     return { promise, resolve };
   }
 
@@ -625,8 +683,13 @@ test("Workbench App clears refreshing state when navigating to home", async () =
   };
 
   let notifyRoute!: (route: { projectId: string | null; view: "overview" }) => void;
-  let currentRoute: { projectId: string | null; view: "overview" } = { projectId: "alpha", view: "overview" };
-  const routerFactory = (onChange: (route: { projectId: string | null; view: "overview" }) => void) => {
+  let currentRoute: { projectId: string | null; view: "overview" } = {
+    projectId: "alpha",
+    view: "overview",
+  };
+  const routerFactory = (
+    onChange: (route: { projectId: string | null; view: "overview" }) => void,
+  ) => {
     notifyRoute = onChange;
     return {
       getCurrentRoute: () => currentRoute,
@@ -641,8 +704,12 @@ test("Workbench App clears refreshing state when navigating to home", async () =
   let containerHtml = "";
   let clickHandler!: (e: any) => void;
   const fakeContainer: any = {
-    set innerHTML(val: string) { containerHtml = val; },
-    get innerHTML() { return containerHtml; },
+    set innerHTML(val: string) {
+      containerHtml = val;
+    },
+    get innerHTML() {
+      return containerHtml;
+    },
     addEventListener: (type: string, handler: any) => {
       if (type === "click") clickHandler = handler;
     },
@@ -662,7 +729,7 @@ test("Workbench App clears refreshing state when navigating to home", async () =
   // Trigger refresh
   clickHandler({
     target: {
-      closest: (sel: string) => sel === "#btn-refresh" ? {} : null,
+      closest: (sel: string) => (sel === "#btn-refresh" ? {} : null),
     },
     preventDefault: () => {},
   });

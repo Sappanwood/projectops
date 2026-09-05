@@ -38,11 +38,17 @@ function setupWorkspace(): { workspaceDir: string; itemId: string; revision: str
   assert.equal(run(["backlog", "init", "repo-a"], workspaceDir).code, 0);
   const added = run(
     [
-      "backlog", "add", "repo-a",
-      "-T", "Serve Workbench",
-      "-c", "feature",
-      "--priority", "P1",
-      "-b", "Expose the local API.",
+      "backlog",
+      "add",
+      "repo-a",
+      "-T",
+      "Serve Workbench",
+      "-c",
+      "feature",
+      "--priority",
+      "P1",
+      "-b",
+      "Expose the local API.",
       "--json",
     ],
     workspaceDir,
@@ -76,12 +82,16 @@ function request(
       (response) => {
         let body = "";
         response.setEncoding("utf8");
-        response.on("data", (chunk: string) => { body += chunk; });
-        response.on("end", () => resolve({
-          status: response.statusCode ?? 0,
-          headers: response.headers,
-          body,
-        }));
+        response.on("data", (chunk: string) => {
+          body += chunk;
+        });
+        response.on("end", () =>
+          resolve({
+            status: response.statusCode ?? 0,
+            headers: response.headers,
+            body,
+          }),
+        );
       },
     );
     request.on("error", reject);
@@ -120,7 +130,10 @@ test("Workbench server exposes fixed-workspace overview and Backlog routes", asy
     const listResponse = await request(server.origin, "/api/projects/repo-a/backlog");
     assert.equal(listResponse.status, 200);
     const list = json(listResponse) as { ok: boolean; data: { items: Array<{ id: string }> } };
-    assert.deepEqual(list.data.items.map((item) => item.id), [itemId]);
+    assert.deepEqual(
+      list.data.items.map((item) => item.id),
+      [itemId],
+    );
 
     const showResponse = await request(server.origin, `/api/projects/repo-a/backlog/${itemId}`);
     assert.equal(showResponse.status, 200);
@@ -131,14 +144,21 @@ test("Workbench server exposes fixed-workspace overview and Backlog routes", asy
     assert.equal(shown.data.item.revision, revision);
 
     // Corrupted item file returns 422 ITEM_INVALID instead of 500
-    writeFileSync(path.join(workspaceDir, "ops", "repo-a", "backlog", "items", `${itemId}.md`), "bad markdown without frontmatter", "utf8");
+    writeFileSync(
+      path.join(workspaceDir, "ops", "repo-a", "backlog", "items", `${itemId}.md`),
+      "bad markdown without frontmatter",
+      "utf8",
+    );
     const corruptListResponse = await request(server.origin, "/api/projects/repo-a/backlog");
     assert.equal(corruptListResponse.status, 422);
     const corruptList = json(corruptListResponse) as { ok: boolean; error: { code: string } };
     assert.equal(corruptList.ok, false);
     assert.equal(corruptList.error.code, "ITEM_INVALID");
 
-    const corruptShowResponse = await request(server.origin, `/api/projects/repo-a/backlog/${itemId}`);
+    const corruptShowResponse = await request(
+      server.origin,
+      `/api/projects/repo-a/backlog/${itemId}`,
+    );
     assert.equal(corruptShowResponse.status, 422);
     const corruptShow = json(corruptShowResponse) as { ok: boolean; error: { code: string } };
     assert.equal(corruptShow.ok, false);
@@ -155,18 +175,14 @@ test("Workbench server protects mutations and maps stale revisions", async () =>
   const server = await startWorkbenchServer({ workspaceDir, port: 0 });
 
   try {
-    const updateResponse = await request(
-      server.origin,
-      `/api/projects/repo-a/backlog/${itemId}`,
-      {
-        method: "PATCH",
-        headers: {
-          "content-type": "application/json; charset=utf-8",
-          origin: server.origin,
-        },
-        body: JSON.stringify({ status: "in_progress", expected_revision: revision }),
+    const updateResponse = await request(server.origin, `/api/projects/repo-a/backlog/${itemId}`, {
+      method: "PATCH",
+      headers: {
+        "content-type": "application/json; charset=utf-8",
+        origin: server.origin,
       },
-    );
+      body: JSON.stringify({ status: "in_progress", expected_revision: revision }),
+    });
     assert.equal(updateResponse.status, 200);
     const updated = json(updateResponse) as {
       ok: boolean;
@@ -175,15 +191,11 @@ test("Workbench server protects mutations and maps stale revisions", async () =>
     assert.equal(updated.data.result.status, "in_progress");
     assert.notEqual(updated.data.result.revision, revision);
 
-    const staleResponse = await request(
-      server.origin,
-      `/api/projects/repo-a/backlog/${itemId}`,
-      {
-        method: "PATCH",
-        headers: { "content-type": "application/json", origin: server.origin },
-        body: JSON.stringify({ status: "done", expected_revision: revision }),
-      },
-    );
+    const staleResponse = await request(server.origin, `/api/projects/repo-a/backlog/${itemId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", origin: server.origin },
+      body: JSON.stringify({ status: "done", expected_revision: revision }),
+    });
     assert.equal(staleResponse.status, 409);
     const stale = json(staleResponse) as {
       ok: boolean;

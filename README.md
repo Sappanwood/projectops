@@ -83,17 +83,37 @@ loopback 地址，`--port 0` 仅适合测试或一次性隔离运行。使用 `C
 新初始化的 ProjectOps 项目列表为空，后续使用 `pops project add <子目录>` 显式登记，
 不会自动导入 Workspace Control Catalog 中的项目或过程数据。
 
+## 开发质量检查
+
+```bash
+npm run quality       # lint、格式检查、TypeScript 检查；不构建、不写文件
+npm run format        # 写入统一格式，提交前检查 diff
+npm run quality:full  # quality、一次 build、Node 测试、Chromium E2E
+```
+
+[biome.json](biome.json) 是格式与基本静态规则的唯一配置，覆盖全部 `src/**/*.ts`、
+`src/**/*.css`、`tests/**/*.ts`、`scripts/**/*.mjs`、根目录 JSON 和 `playwright.config.ts`。
+生成物 `dist/`、依赖、测试输出及 npm 维护的 `package-lock.json` 不参与；Markdown 与 HTML 目前人工检查。
+格式为两空格缩进、100 列换行；显式启用未使用 import/变量、不可达代码、非法赋值、debugger、
+重复 case/参数等错误规则，不启用与现有 Alpha 开发无关的整套风格要求，也不设置 coverage 或行数门槛。
+工具依据 [Biome 配置文档](https://biomejs.dev/reference/configuration/) 和
+[CLI 文档](https://biomejs.dev/reference/cli/)，版本由开发依赖和 lockfile 固定。
+
+低风险文案、样式和配置可实现后验证；Bug、数据或状态逻辑先用失败测试锁定行为；
+CLI/API、权限、路径及并发契约变更使用 Red-Green-Refactor。具体必跑门禁见 [AGENTS.md](AGENTS.md#完工验收)。
+格式修正与行为或结构重构分开提交，避免机械 diff 隐藏行为变化。
+
 ## 验证 Workbench
 
 ```bash
 npm ci
 npx playwright install chromium
-npm test
-npm run typecheck
-npm run test:e2e
+npm run quality:full
 ```
 
-`npm run test:e2e` 先生成生产 build，再用 headless Chromium 运行浏览器 smoke：选择项目、浏览详情、
+`npm test` 和 `npm run test:e2e` 可独立运行，分别先构建再执行 Node 测试和浏览器测试。
+已有当前 build 时可用 `npm run test:unit` 或 `npm run test:browser`；这两个底层入口不构建，
+不应用旧 build 验证新源码。`quality:full` 复用它们以避免重复构建。浏览器测试用 headless Chromium 运行 smoke：选择项目、浏览详情、
 更新 Backlog、revision 冲突后刷新重试，以及领域阅读页的正常、空和 diagnostic 页面；还覆盖内容修订、执行控制及验收。
 它也验证未知项目和 server 断连不会修改 authority 文件。每个测试自动创建并清理临时 workspace，
 server 使用隔离端口，不需要运行真实开发服务。整套 E2E 上限 120 秒，单项 30 秒；失败 trace 保留在

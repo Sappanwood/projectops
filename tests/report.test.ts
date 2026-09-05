@@ -4,12 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import {
-  REPORT_SCHEMA,
-  parseReport,
-  serializeReport,
-  type Report,
-} from "../src/report/report.js";
+import { REPORT_SCHEMA, parseReport, serializeReport, type Report } from "../src/report/report.js";
 import {
   ReportAlreadyExistsError,
   ReportParseError,
@@ -28,7 +23,11 @@ function freshDir(): string {
 
 function run(args: string[], cwd: string): { code: number; stderr: string[] } {
   const stderr: string[] = [];
-  const code = runCli(args, { stdout: () => undefined, stderr: (message) => stderr.push(message) }, cwd);
+  const code = runCli(
+    args,
+    { stdout: () => undefined, stderr: (message) => stderr.push(message) },
+    cwd,
+  );
   return { code, stderr };
 }
 
@@ -41,9 +40,7 @@ function validReport(): Report {
     created_at: "2026-09-04T12:00:00+09:00",
     outcome: "completed",
     plan: "project-ops:plans/plan-release-workflow.json",
-    backlog: [
-      { id: "REPO-001", status: "done", revision: "abc12345" },
-    ],
+    backlog: [{ id: "REPO-001", status: "done", revision: "abc12345" }],
     verification: ["npm test", "npm run typecheck"],
     deviations: [],
     workarounds: [],
@@ -99,7 +96,10 @@ test("Report adapter rejects missing, non-directory, non-regular, and escaping r
     (error: unknown) => error instanceof ReportRootError && /does not exist/i.test(error.message),
   );
   assert.throws(() => listReportIds(workspace, path.join(workspace, "missing")), ReportRootError);
-  assert.throws(() => readReport(workspace, path.join(workspace, "missing"), report.id), ReportRootError);
+  assert.throws(
+    () => readReport(workspace, path.join(workspace, "missing"), report.id),
+    ReportRootError,
+  );
 
   const fileRoot = path.join(workspace, "file-root");
   writeFileSync(fileRoot, "not a directory", "utf8");
@@ -128,7 +128,11 @@ test("Report adapter does not treat malformed files as valid records", () => {
   const root = path.join(workspace, "reports");
   mkdirSync(root, { recursive: true });
   const id = "report-broken";
-  writeFileSync(path.join(root, `${id}.md`), "---\nschema: report/Report@1\nid: report-broken\n---\n", "utf8");
+  writeFileSync(
+    path.join(root, `${id}.md`),
+    "---\nschema: report/Report@1\nid: report-broken\n---\n",
+    "utf8",
+  );
 
   assert.throws(() => readReport(workspace, root, id), ReportParseError);
   assert.deepEqual(listReportIds(workspace, root), [id]);
@@ -137,18 +141,30 @@ test("Report adapter does not treat malformed files as valid records", () => {
 
 test("Report serialization rejects absolute logical references", () => {
   const report = validReport();
-  assert.throws(() => serializeReport({ ...report, plan: "/home/ling/plan.json" }), /logical reference/i);
   assert.throws(
-    () => serializeReport({ ...report, backlog: [{ id: "REPO-001", status: "done", revision: "abc12345", uri: "/tmp/item.md" }] }),
+    () => serializeReport({ ...report, plan: "/home/ling/plan.json" }),
+    /logical reference/i,
+  );
+  assert.throws(
+    () =>
+      serializeReport({
+        ...report,
+        backlog: [{ id: "REPO-001", status: "done", revision: "abc12345", uri: "/tmp/item.md" }],
+      }),
     /logical reference|absolute path/i,
   );
 });
 
 test("Report repo docs are repository-relative paths and reject namespaced references", () => {
-  assert.deepEqual(parseReport(serializeReport({ ...validReport(), repo_docs: ["README.md", "docs/ARCHITECTURE.md"] })), {
-    ...validReport(),
-    repo_docs: ["README.md", "docs/ARCHITECTURE.md"],
-  });
+  assert.deepEqual(
+    parseReport(
+      serializeReport({ ...validReport(), repo_docs: ["README.md", "docs/ARCHITECTURE.md"] }),
+    ),
+    {
+      ...validReport(),
+      repo_docs: ["README.md", "docs/ARCHITECTURE.md"],
+    },
+  );
   assert.throws(
     () => serializeReport({ ...validReport(), repo_docs: ["project-ops:repo/README.md"] }),
     /repo-relative logical reference/i,
@@ -156,21 +172,27 @@ test("Report repo docs are repository-relative paths and reject namespaced refer
 });
 
 test("Report rejects machine absolute paths in all persisted string fields", () => {
-  const fields = [
-    "title",
-    "project",
-    "verification",
-    "deviations",
-    "workarounds",
-    "body",
-  ] as const;
+  const fields = ["title", "project", "verification", "deviations", "workarounds", "body"] as const;
   for (const field of fields) {
     const value = Array.isArray(validReport()[field]) ? ["/tmp/secret"] : "/tmp/secret";
-    assert.throws(() => serializeReport({ ...validReport(), [field]: value }), /absolute path/i, field);
+    assert.throws(
+      () => serializeReport({ ...validReport(), [field]: value }),
+      /absolute path/i,
+      field,
+    );
   }
-  assert.throws(() => serializeReport({ ...validReport(), title: "C:/Users/ling/report.md" }), /absolute path/i);
-  assert.throws(() => serializeReport({ ...validReport(), body: "See C:\\Users\\ling\\report.md" }), /absolute path/i);
-  assert.throws(() => serializeReport({ ...validReport(), repo_docs: ["/repo/docs/README.md"] }), /logical reference|absolute path/i);
+  assert.throws(
+    () => serializeReport({ ...validReport(), title: "C:/Users/ling/report.md" }),
+    /absolute path/i,
+  );
+  assert.throws(
+    () => serializeReport({ ...validReport(), body: "See C:\\Users\\ling\\report.md" }),
+    /absolute path/i,
+  );
+  assert.throws(
+    () => serializeReport({ ...validReport(), repo_docs: ["/repo/docs/README.md"] }),
+    /logical reference|absolute path/i,
+  );
   assert.throws(() => serializeReport({ ...validReport(), repo_docs: [""] }), /logical reference/i);
 });
 
@@ -191,7 +213,12 @@ test("Report accepts Unicode word separators and still rejects embedded absolute
     const report = { ...validReport(), body, verification: [body] };
     assert.deepEqual(parseReport(serializeReport(report)), report, body);
   }
-  for (const body of ["文件：/tmp/report.md", "文件 /home/user/report.md", "路径 `/tmp/report.md`", "路径 C:\\Users\\user\\report.md"]) {
+  for (const body of [
+    "文件：/tmp/report.md",
+    "文件 /home/user/report.md",
+    "路径 `/tmp/report.md`",
+    "路径 C:\\Users\\user\\report.md",
+  ]) {
     assert.throws(() => serializeReport({ ...validReport(), body }), /absolute path/i, body);
   }
 });

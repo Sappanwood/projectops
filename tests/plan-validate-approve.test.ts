@@ -1,5 +1,13 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -77,15 +85,18 @@ test("plan validate and approve record a single approval with a review note", ()
     plan: { ...validPlan(), status: "draft" },
   });
 
-  const approved = run([
-    "plan",
-    "approve",
-    "repo-a",
-    "plan-release-workflow",
-    "--review-note",
-    "Reviewed for the release milestone.",
-    "--json",
-  ], ws);
+  const approved = run(
+    [
+      "plan",
+      "approve",
+      "repo-a",
+      "plan-release-workflow",
+      "--review-note",
+      "Reviewed for the release milestone.",
+      "--json",
+    ],
+    ws,
+  );
   assert.equal(approved.code, 0);
   const result = JSON.parse(approved.stdout[0] ?? "null") as {
     ok: boolean;
@@ -166,14 +177,10 @@ test("plan validate and approve reject dependency cycles without writing", () =>
     assert.match(validated.stderr.join("\n"), /cannot be materialized/i);
     assert.equal(readFileSync(planPath, "utf8"), original);
 
-    const approved = run([
-      "plan",
-      "approve",
-      "repo-a",
-      "plan-release-workflow",
-      "--review-note",
-      "Approved.",
-    ], ws);
+    const approved = run(
+      ["plan", "approve", "repo-a", "plan-release-workflow", "--review-note", "Approved."],
+      ws,
+    );
     assert.equal(approved.code, 1, candidate.name);
     assert.match(approved.stderr.join("\n"), /cannot be materialized/i);
     assert.equal(readFileSync(planPath, "utf8"), original);
@@ -185,37 +192,32 @@ test("plan approve rejects invalid plans, blank notes, and re-approval without w
   const planPath = writePlan(ws, { ...validPlan(), status: "draft" });
   const original = readFileSync(planPath, "utf8");
 
-  const blankNote = run([
-    "plan",
-    "approve",
-    "repo-a",
-    "plan-release-workflow",
-    "--review-note",
-    "   ",
-  ], ws);
+  const blankNote = run(
+    ["plan", "approve", "repo-a", "plan-release-workflow", "--review-note", "   "],
+    ws,
+  );
   assert.equal(blankNote.code, 1);
   assert.match(blankNote.stderr.join("\n"), /review-note.*non-empty/i);
   assert.equal(readFileSync(planPath, "utf8"), original);
 
-  const approved = run([
-    "plan",
-    "approve",
-    "repo-a",
-    "plan-release-workflow",
-    "--review-note",
-    "Approved after review.",
-  ], ws);
+  const approved = run(
+    [
+      "plan",
+      "approve",
+      "repo-a",
+      "plan-release-workflow",
+      "--review-note",
+      "Approved after review.",
+    ],
+    ws,
+  );
   assert.equal(approved.code, 0);
   const approvedContent = readFileSync(planPath, "utf8");
 
-  const again = run([
-    "plan",
-    "approve",
-    "repo-a",
-    "plan-release-workflow",
-    "--review-note",
-    "A second review.",
-  ], ws);
+  const again = run(
+    ["plan", "approve", "repo-a", "plan-release-workflow", "--review-note", "A second review."],
+    ws,
+  );
   assert.equal(again.code, 1);
   assert.match(again.stderr.join("\n"), /already approved/i);
   assert.equal(readFileSync(planPath, "utf8"), approvedContent);
@@ -224,21 +226,22 @@ test("plan approve rejects invalid plans, blank notes, and re-approval without w
 test("plan create never overwrites an approved plan", () => {
   const ws = setupWorkspace();
   const draftPath = path.join(ws, "release-workflow.json");
-  writeFileSync(draftPath, JSON.stringify({
-    title: "Release workflow",
-    goal: "Publish a repeatable release.",
-    items: [],
-  }), "utf8");
+  writeFileSync(
+    draftPath,
+    JSON.stringify({
+      title: "Release workflow",
+      goal: "Publish a repeatable release.",
+      items: [],
+    }),
+    "utf8",
+  );
   assert.equal(run(["plan", "create", "repo-a", "--input", draftPath], ws).code, 0);
   const planPath = path.join(ws, "ops", "repo-a", "plans", "plan-release-workflow.json");
-  assert.equal(run([
-    "plan",
-    "approve",
-    "repo-a",
-    "plan-release-workflow",
-    "--review-note",
-    "Approved.",
-  ], ws).code, 0);
+  assert.equal(
+    run(["plan", "approve", "repo-a", "plan-release-workflow", "--review-note", "Approved."], ws)
+      .code,
+    0,
+  );
   const original = readFileSync(planPath, "utf8");
 
   const duplicate = run(["plan", "create", "repo-a", "--input", draftPath], ws);
@@ -259,14 +262,10 @@ test("plan approve rejects a plan leaf symlink escaping the workspace without ch
   symlinkSync(outsidePlanPath, planPath, "file");
 
   try {
-    const result = run([
-      "plan",
-      "approve",
-      "repo-a",
-      "plan-release-workflow",
-      "--review-note",
-      "Approved.",
-    ], ws);
+    const result = run(
+      ["plan", "approve", "repo-a", "plan-release-workflow", "--review-note", "Approved."],
+      ws,
+    );
 
     assert.equal(result.code, 1);
     assert.match(result.stderr.join("\n"), /plan.*outside|canonical.*plan/i);
@@ -280,7 +279,10 @@ test("plan approve rejects a plan leaf symlink escaping the workspace without ch
 test("plan approve rejects malformed JSON and schema-invalid plans without writing", () => {
   const cases = [
     { content: "{ not valid json\n", error: /invalid JSON/i },
-    { content: `${JSON.stringify({ ...validPlan(), schema: "plan/Plan@999" }, null, 2)}\n`, error: /unexpected plan schema/i },
+    {
+      content: `${JSON.stringify({ ...validPlan(), schema: "plan/Plan@999" }, null, 2)}\n`,
+      error: /unexpected plan schema/i,
+    },
   ];
 
   for (const candidate of cases) {
@@ -288,14 +290,10 @@ test("plan approve rejects malformed JSON and schema-invalid plans without writi
     const planPath = path.join(ws, "ops", "repo-a", "plans", "plan-release-workflow.json");
     writeFileSync(planPath, candidate.content, "utf8");
 
-    const result = run([
-      "plan",
-      "approve",
-      "repo-a",
-      "plan-release-workflow",
-      "--review-note",
-      "Approved.",
-    ], ws);
+    const result = run(
+      ["plan", "approve", "repo-a", "plan-release-workflow", "--review-note", "Approved."],
+      ws,
+    );
 
     assert.equal(result.code, 1);
     assert.match(result.stderr.join("\n"), candidate.error);

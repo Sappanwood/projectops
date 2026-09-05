@@ -71,7 +71,10 @@ test("backlog add assigns sequential ids", () => {
 test("backlog add rebuilds the readable index", () => {
   const ws = setupStore();
 
-  assert.equal(run([...ADD_BASE, "-T", "Indexed", "-c", "feature", "--priority", "P1"], ws).code, 0);
+  assert.equal(
+    run([...ADD_BASE, "-T", "Indexed", "-c", "feature", "--priority", "P1"], ws).code,
+    0,
+  );
 
   const index = readFileSync(path.join(ws, "ops", "repo-a", "backlog", "INDEX.md"), "utf8");
   assert.match(index, /> Total items: 1/);
@@ -82,12 +85,22 @@ test("backlog add rebuilds the readable index", () => {
 test("backlog add reads a multi-line body from a file", () => {
   const ws = setupStore();
   const bodyFile = path.join(ws, "body.md");
-  writeFileSync(bodyFile, "## Intent\n\nDo the thing.\n\n## Acceptance Criteria\n\n- works\n", "utf8");
+  writeFileSync(
+    bodyFile,
+    "## Intent\n\nDo the thing.\n\n## Acceptance Criteria\n\n- works\n",
+    "utf8",
+  );
 
-  const { code } = run([...ADD_BASE, "-T", "Task", "-c", "feature", "--priority", "P1", "--body-file", bodyFile], ws);
+  const { code } = run(
+    [...ADD_BASE, "-T", "Task", "-c", "feature", "--priority", "P1", "--body-file", bodyFile],
+    ws,
+  );
 
   assert.equal(code, 0);
-  const content = readFileSync(path.join(ws, "ops", "repo-a", "backlog", "items", "REP-001.md"), "utf8");
+  const content = readFileSync(
+    path.join(ws, "ops", "repo-a", "backlog", "items", "REP-001.md"),
+    "utf8",
+  );
   assert.match(content, /## Acceptance Criteria/);
 });
 
@@ -101,7 +114,10 @@ test("backlog add reads the body from stdin", () => {
   );
 
   assert.equal(code, 0);
-  const content = readFileSync(path.join(ws, "ops", "repo-a", "backlog", "items", "REP-001.md"), "utf8");
+  const content = readFileSync(
+    path.join(ws, "ops", "repo-a", "backlog", "items", "REP-001.md"),
+    "utf8",
+  );
   assert.match(content, /Body from stdin/);
 });
 
@@ -124,15 +140,34 @@ test("backlog add requires title, category and priority", () => {
 test("backlog add supports epics and one-level parent links", () => {
   const ws = setupStore();
   assert.equal(
-    run([...ADD_BASE, "-T", "Epic one", "-c", "feature", "--priority", "P1", "--item-type", "epic"], ws).code,
+    run(
+      [...ADD_BASE, "-T", "Epic one", "-c", "feature", "--priority", "P1", "--item-type", "epic"],
+      ws,
+    ).code,
     0,
   );
   assert.equal(
-    run([...ADD_BASE, "-T", "Child task", "-c", "feature", "--priority", "P1", "--parent-id", "REP-001"], ws).code,
+    run(
+      [
+        ...ADD_BASE,
+        "-T",
+        "Child task",
+        "-c",
+        "feature",
+        "--priority",
+        "P1",
+        "--parent-id",
+        "REP-001",
+      ],
+      ws,
+    ).code,
     0,
   );
 
-  const child = readFileSync(path.join(ws, "ops", "repo-a", "backlog", "items", "REP-002.md"), "utf8");
+  const child = readFileSync(
+    path.join(ws, "ops", "repo-a", "backlog", "items", "REP-002.md"),
+    "utf8",
+  );
   assert.match(child, /parent_id: REP-001/);
   assert.match(child, /item_type: task/);
 });
@@ -147,10 +182,7 @@ test("backlog add rejects invalid parent links", () => {
   assert.equal(missingParent.code, 1);
   assert.match(missingParent.stderr.join("\n"), /parent/i);
 
-  const taskAsParent = run(
-    [...ADD_BASE, "-T", "T", "-c", "feature", "--priority", "P1"],
-    ws,
-  );
+  const taskAsParent = run([...ADD_BASE, "-T", "T", "-c", "feature", "--priority", "P1"], ws);
   assert.equal(taskAsParent.code, 0);
   const parentOnTask = run(
     [...ADD_BASE, "-T", "T2", "-c", "feature", "--priority", "P1", "--parent-id", "REP-001"],
@@ -160,7 +192,19 @@ test("backlog add rejects invalid parent links", () => {
   assert.match(parentOnTask.stderr.join("\n"), /epic/i);
 
   const epicWithParent = run(
-    [...ADD_BASE, "-T", "E", "-c", "feature", "--priority", "P1", "--item-type", "epic", "--parent-id", "REP-001"],
+    [
+      ...ADD_BASE,
+      "-T",
+      "E",
+      "-c",
+      "feature",
+      "--priority",
+      "P1",
+      "--item-type",
+      "epic",
+      "--parent-id",
+      "REP-001",
+    ],
     ws,
   );
   assert.equal(epicWithParent.code, 1);
@@ -211,7 +255,10 @@ test("backlog list works in human-readable mode and for empty stores", () => {
 test("backlog show prints the full item including body", () => {
   const ws = setupStore();
   assert.equal(
-    run([...ADD_BASE, "-T", "Show me", "-c", "feature", "--priority", "P1", "-b", "Detail body"], ws).code,
+    run(
+      [...ADD_BASE, "-T", "Show me", "-c", "feature", "--priority", "P1", "-b", "Detail body"],
+      ws,
+    ).code,
     0,
   );
 
@@ -225,7 +272,10 @@ test("backlog show prints the full item including body", () => {
 
 test("backlog show --json returns the full item as JSON", () => {
   const ws = setupStore();
-  assert.equal(run([...ADD_BASE, "-T", "Json item", "-c", "feature", "--priority", "P1"], ws).code, 0);
+  assert.equal(
+    run([...ADD_BASE, "-T", "Json item", "-c", "feature", "--priority", "P1"], ws).code,
+    0,
+  );
 
   const { code, stdout } = run(["backlog", "show", "repo-a", "REP-001", "--json"], ws);
 
@@ -239,8 +289,14 @@ test("backlog show --json returns the full item as JSON", () => {
 
 test("item files round-trip through show without corruption", () => {
   const ws = setupStore();
-  assert.equal(run([...ADD_BASE, "-T", "Round trip", "-c", "feature", "--priority", "P1"], ws).code, 0);
-  const onDisk = readFileSync(path.join(ws, "ops", "repo-a", "backlog", "items", "REP-001.md"), "utf8");
+  assert.equal(
+    run([...ADD_BASE, "-T", "Round trip", "-c", "feature", "--priority", "P1"], ws).code,
+    0,
+  );
+  const onDisk = readFileSync(
+    path.join(ws, "ops", "repo-a", "backlog", "items", "REP-001.md"),
+    "utf8",
+  );
 
   const { code, stdout } = run(["backlog", "show", "repo-a", "REP-001", "--json"], ws);
 

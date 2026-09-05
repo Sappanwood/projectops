@@ -15,7 +15,11 @@ test("Workbench Backlog lists, reads, updates and recovers from a real HTTP revi
   function run(args: string[]) {
     const out: string[] = [];
     const errors: string[] = [];
-    const code = runCli(args, { stdout: (text) => out.push(text), stderr: (text) => errors.push(text) }, workspace);
+    const code = runCli(
+      args,
+      { stdout: (text) => out.push(text), stderr: (text) => errors.push(text) },
+      workspace,
+    );
     assert.equal(code, 0, errors.join("\n"));
     return out[0]?.startsWith("{") ? JSON.parse(out[0]) : null;
   }
@@ -27,16 +31,35 @@ test("Workbench Backlog lists, reads, updates and recovers from a real HTTP revi
     run(["backlog", "init", "alpha", "--json"]);
     const ids: string[] = [];
     for (let i = 0; i < 7; i++) {
-      ids.push(run(["backlog", "add", "alpha", "-T", `Task ${i}`, "-c", "feature", "--priority", "P1", "-b", "## Intent\n\n<script>unsafe</script>", "--json"]).item.id);
+      ids.push(
+        run([
+          "backlog",
+          "add",
+          "alpha",
+          "-T",
+          `Task ${i}`,
+          "-c",
+          "feature",
+          "--priority",
+          "P1",
+          "-b",
+          "## Intent\n\n<script>unsafe</script>",
+          "--json",
+        ]).item.id,
+      );
     }
     server = await startWorkbenchServer({ workspaceDir: workspace, port: 0 });
     let overviewDone = 0;
     const api = createApiClient({ baseUrl: server.origin });
-    const controller = createBacklogController(api, () => {}, async () => {
-      const result = await api.getProjectOverview("alpha");
-      assert.equal(result.ok, true);
-      if (result.ok) overviewDone = result.data.backlog.counts.done;
-    });
+    const controller = createBacklogController(
+      api,
+      () => {},
+      async () => {
+        const result = await api.getProjectOverview("alpha");
+        assert.equal(result.ok, true);
+        if (result.ok) overviewDone = result.data.backlog.counts.done;
+      },
+    );
     await controller.load("alpha");
     assert.equal(controller.getState().error, null);
     assert.equal(controller.getState().items.length, 7);
@@ -48,7 +71,17 @@ test("Workbench Backlog lists, reads, updates and recovers from a real HTTP revi
     assert.equal(controller.getState().item!.status, "done");
     assert.equal(overviewDone, 1);
     const beforeConflict = controller.getState().item!;
-    run(["backlog", "update", "alpha", ids[0]!, "--status", "in_progress", "--expected-revision", beforeConflict.revision, "--json"]);
+    run([
+      "backlog",
+      "update",
+      "alpha",
+      ids[0]!,
+      "--status",
+      "in_progress",
+      "--expected-revision",
+      beforeConflict.revision,
+      "--json",
+    ]);
     await controller.update("todo");
     assert.equal(controller.getState().detailError?.code, "REVISION_MISMATCH");
     assert.equal(controller.getState().selectedItemId, ids[0]);
@@ -64,10 +97,26 @@ test("Workbench Backlog lists, reads, updates and recovers from a real HTTP revi
     controller.destroy();
 
     const handlers: Record<string, (event: any) => void> = {};
-    const container = { innerHTML: "", addEventListener: (name: string, handler: any) => { handlers[name] = handler; }, removeEventListener() {} };
+    const container = {
+      innerHTML: "",
+      addEventListener: (name: string, handler: any) => {
+        handlers[name] = handler;
+      },
+      removeEventListener() {},
+    };
     let route: import("../src/web/types.js").RouteState = { projectId: "alpha", view: "backlog" };
-    const app = createWorkbenchApp({ container: container as unknown as HTMLElement, apiClient: api,
-      router: (onChange) => ({ getCurrentRoute: () => route, navigate(next) { route = next; onChange(next); }, cleanup() {} }) });
+    const app = createWorkbenchApp({
+      container: container as unknown as HTMLElement,
+      apiClient: api,
+      router: (onChange) => ({
+        getCurrentRoute: () => route,
+        navigate(next) {
+          route = next;
+          onChange(next);
+        },
+        cleanup() {},
+      }),
+    });
     async function until(predicate: () => boolean) {
       const deadline = Date.now() + 3000;
       while (!predicate()) {
@@ -76,7 +125,9 @@ test("Workbench Backlog lists, reads, updates and recovers from a real HTTP revi
       }
     }
     function click(selector: string, dataset = {}) {
-      handlers.click!({ target: { closest: (candidate: string) => candidate === selector ? { dataset } : null } });
+      handlers.click!({
+        target: { closest: (candidate: string) => (candidate === selector ? { dataset } : null) },
+      });
     }
     try {
       await until(() => app.getState().backlog.items.length === 7);
@@ -88,7 +139,9 @@ test("Workbench Backlog lists, reads, updates and recovers from a real HTTP revi
       assert.equal(run(["backlog", "show", "alpha", ids[1]!, "--json"]).status, "done");
       await app.refresh();
       assert.equal(app.getState().backlog.selectedItemId, ids[1]);
-    } finally { app.destroy(); }
+    } finally {
+      app.destroy();
+    }
   } finally {
     await server?.close();
     rmSync(workspace, { recursive: true, force: true });

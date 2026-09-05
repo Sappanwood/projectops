@@ -95,11 +95,7 @@ test("project doctor detects missing artifact roots", () => {
     problems: { project: string; issue: string }[];
   };
   assert.equal(result.ok, false);
-  assert.ok(
-    result.problems.some(
-      (p) => p.project === "repo-a" && /backlog/.test(p.issue),
-    ),
-  );
+  assert.ok(result.problems.some((p) => p.project === "repo-a" && /backlog/.test(p.issue)));
 });
 
 test("project doctor detects a missing project directory", () => {

@@ -42,7 +42,20 @@ function setupBacklog(): { workspaceDir: string; revision: string } {
   const workspaceDir = setupWorkspace();
   assert.equal(run(["backlog", "init", "repo-a"], workspaceDir).code, 0);
   const added = run(
-    ["backlog", "add", "repo-a", "-T", "Typed API", "-c", "feature", "--priority", "P1", "-b", "Details", "--json"],
+    [
+      "backlog",
+      "add",
+      "repo-a",
+      "-T",
+      "Typed API",
+      "-c",
+      "feature",
+      "--priority",
+      "P1",
+      "-b",
+      "Details",
+      "--json",
+    ],
     workspaceDir,
   );
   assert.equal(added.code, 0);
@@ -118,7 +131,10 @@ test("backlog application API reports stable lookup and validation errors", () =
   assert.equal(missingItem.ok, false);
   if (!missingItem.ok) assert.equal(missingItem.error.code, "ITEM_NOT_FOUND");
 
-  assert.equal(JSON.stringify([invalidStatus, unknownProject, invalidId, missingItem]).includes(workspaceDir), false);
+  assert.equal(
+    JSON.stringify([invalidStatus, unknownProject, invalidId, missingItem]).includes(workspaceDir),
+    false,
+  );
 });
 
 test("backlog application API updates status and protects revisions", () => {
@@ -180,4 +196,3 @@ test("backlog application API reports ITEM_ID_MISMATCH when filename and interna
   assert.equal(result.ok, false);
   if (!result.ok) assert.equal(result.error.code, "ITEM_ID_MISMATCH");
 });
-

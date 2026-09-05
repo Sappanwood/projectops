@@ -99,10 +99,25 @@ test("built CLI completes an isolated retrospective lifecycle with revision and 
     assert.match(readFileSync(path.join(root, "INDEX.md"), "utf8"), /> Total records: 0/);
 
     const captured = pops(workspace, [
-      "retrospective", "capture", "--id", id,
-      "--created-at", "2026-09-04T01:02:03.000Z",
-      "--trigger", "workflow-friction", "--harness", "codex-app", "--model", "null",
-      "--project", "projectops", "--task", "POP-032", "--body", BODY, "--json",
+      "retrospective",
+      "capture",
+      "--id",
+      id,
+      "--created-at",
+      "2026-09-04T01:02:03.000Z",
+      "--trigger",
+      "workflow-friction",
+      "--harness",
+      "codex-app",
+      "--model",
+      "null",
+      "--project",
+      "projectops",
+      "--task",
+      "POP-032",
+      "--body",
+      BODY,
+      "--json",
     ]);
     expectOk(captured);
     const captureReceipt = json<RetrospectiveReceipt>(captured);
@@ -123,15 +138,34 @@ test("built CLI completes an isolated retrospective lifecycle with revision and 
     assert.match(readFileSync(path.join(root, "INDEX.md"), "utf8"), /> Total records: 1/);
 
     const listed = pops(workspace, [
-      "retrospective", "list", "--status", "inbox", "--project", "projectops", "--task", "POP-032", "--json",
+      "retrospective",
+      "list",
+      "--status",
+      "inbox",
+      "--project",
+      "projectops",
+      "--task",
+      "POP-032",
+      "--json",
     ]);
     expectOk(listed);
-    const listResult = json<{ ok: boolean; retrospectives: RetrospectiveReceipt["retrospective"][] }>(listed);
+    const listResult = json<{
+      ok: boolean;
+      retrospectives: RetrospectiveReceipt["retrospective"][];
+    }>(listed);
     assert.equal(listResult.ok, true);
-    assert.deepEqual(listResult.retrospectives.map(({ id: listedId, path: listedPath }) => ({ id: listedId, path: listedPath })), [{
-      id,
-      path: `inbox/${id}.md`,
-    }]);
+    assert.deepEqual(
+      listResult.retrospectives.map(({ id: listedId, path: listedPath }) => ({
+        id: listedId,
+        path: listedPath,
+      })),
+      [
+        {
+          id,
+          path: `inbox/${id}.md`,
+        },
+      ],
+    );
 
     const shown = pops(workspace, ["retrospective", "show", `inbox/${id}.md`, "--json"]);
     expectOk(shown);
@@ -150,10 +184,22 @@ test("built CLI completes an isolated retrospective lifecycle with revision and 
     const indexBeforeStale = readFileSync(path.join(root, "index.json"), "utf8");
     const readableIndexBeforeStale = readFileSync(path.join(root, "INDEX.md"), "utf8");
     const stale = pops(workspace, [
-      "retrospective", "triage", id, "--to", "active",
-      "--expected-revision", "0".repeat(64), "--disposition", "actionable",
-      "--owner-scope", "projectops", "--category", "testing",
-      "--next-action", "Keep the lifecycle smoke.", "--json",
+      "retrospective",
+      "triage",
+      id,
+      "--to",
+      "active",
+      "--expected-revision",
+      "0".repeat(64),
+      "--disposition",
+      "actionable",
+      "--owner-scope",
+      "projectops",
+      "--category",
+      "testing",
+      "--next-action",
+      "Keep the lifecycle smoke.",
+      "--json",
     ]);
     assert.equal(stale.code, 1, stale.stderr);
     assert.match(stale.stdout, /revision conflict/i);
@@ -162,13 +208,28 @@ test("built CLI completes an isolated retrospective lifecycle with revision and 
     assert.equal(readFileSync(path.join(root, "INDEX.md"), "utf8"), readableIndexBeforeStale);
 
     const triaged = pops(workspace, [
-      "retrospective", "triage", `inbox/${id}.md`, "--to", "active",
-      "--expected-revision", captureRecord.revision,
-      "--disposition", "actionable", "--owner-scope", "projectops",
-      "--category", "testing", "--category", "docs",
-      "--next-action", "Keep the lifecycle smoke.",
-      "--related-info", "project-ops:backlog/items/POP-032.md",
-      "--canonical", "project-ops:retrospectives/retro-e2e-lifecycle.md", "--json",
+      "retrospective",
+      "triage",
+      `inbox/${id}.md`,
+      "--to",
+      "active",
+      "--expected-revision",
+      captureRecord.revision,
+      "--disposition",
+      "actionable",
+      "--owner-scope",
+      "projectops",
+      "--category",
+      "testing",
+      "--category",
+      "docs",
+      "--next-action",
+      "Keep the lifecycle smoke.",
+      "--related-info",
+      "project-ops:backlog/items/POP-032.md",
+      "--canonical",
+      "project-ops:retrospectives/retro-e2e-lifecycle.md",
+      "--json",
     ]);
     expectOk(triaged);
     const triageReceipt = json<RetrospectiveReceipt>(triaged);
@@ -217,14 +278,26 @@ test("built CLI completes an isolated retrospective lifecycle with revision and 
     assert.equal(activeIndexRecord.status, "active");
     assert.deepEqual(activeIndexRecord.categories, ["testing", "docs"]);
     assert.match(readFileSync(path.join(root, "INDEX.md"), "utf8"), /> Total records: 1/);
-    assert.match(readFileSync(path.join(root, "INDEX.md"), "utf8"), /\| active \| retro-e2e-lifecycle \|/);
+    assert.match(
+      readFileSync(path.join(root, "INDEX.md"), "utf8"),
+      /\| active \| retro-e2e-lifecycle \|/,
+    );
 
     const archived = pops(workspace, [
-      "retrospective", "archive", id,
-      "--expected-revision", activeRecord.revision,
-      "--action-disposition", "resolved", "--actioned-at", "2026-09-04T02:03:04.000Z",
-      "--backlog", "project-ops:backlog/items/POP-032.md",
-      "--resolution-note", "Lifecycle smoke passed.", "--json",
+      "retrospective",
+      "archive",
+      id,
+      "--expected-revision",
+      activeRecord.revision,
+      "--action-disposition",
+      "resolved",
+      "--actioned-at",
+      "2026-09-04T02:03:04.000Z",
+      "--backlog",
+      "project-ops:backlog/items/POP-032.md",
+      "--resolution-note",
+      "Lifecycle smoke passed.",
+      "--json",
     ]);
     expectOk(archived);
     const archiveReceipt = json<RetrospectiveReceipt>(archived);
@@ -296,7 +369,10 @@ test("built CLI completes an isolated retrospective lifecycle with revision and 
     assert.deepEqual(finalIndexRecord.backlog, ["project-ops:backlog/items/POP-032.md"]);
     assert.equal(finalIndexRecord.resolution_note, "Lifecycle smoke passed.");
     assert.match(readFileSync(path.join(root, "INDEX.md"), "utf8"), /> Total records: 1/);
-    assert.match(readFileSync(path.join(root, "INDEX.md"), "utf8"), /\| archive \| retro-e2e-lifecycle \|/);
+    assert.match(
+      readFileSync(path.join(root, "INDEX.md"), "utf8"),
+      /\| archive \| retro-e2e-lifecycle \|/,
+    );
   } finally {
     rmSync(parent, { recursive: true, force: true });
   }

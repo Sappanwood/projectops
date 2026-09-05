@@ -49,7 +49,11 @@ function formatFsError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function inspectStaticPath(workspaceRoot: string, target: string, requireExisting: boolean): "existing" | "missing" {
+function inspectStaticPath(
+  workspaceRoot: string,
+  target: string,
+  requireExisting: boolean,
+): "existing" | "missing" {
   const relative = path.relative(workspaceRoot, target);
   if (relative === "" || relative.startsWith("..") || path.isAbsolute(relative)) {
     throw new Error("retrospectives root resolves outside the workspace");

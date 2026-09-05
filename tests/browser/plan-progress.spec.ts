@@ -2,7 +2,10 @@ import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { test, expect } from "./fixture.js";
 
-test("Plan progress refreshes CLI state and diagnoses unreadable tasks without writes", async ({ workbench, page }) => {
+test("Plan progress refreshes CLI state and diagnoses unreadable tasks without writes", async ({
+  workbench,
+  page,
+}) => {
   await page.goto(`${workbench.origin}/#/projects/alpha/plans`);
   const plan = page.locator(".plan-card").filter({ hasText: "Browser plan" });
   await plan.locator(":scope > summary").click();
@@ -11,7 +14,16 @@ test("Plan progress refreshes CLI state and diagnoses unreadable tasks without w
   await expect(progress).toContainText("待开始 1");
   await expect(progress.getByRole("progressbar")).toHaveAttribute("value", "0");
   const loaded = JSON.parse(workbench.cli(["backlog", "show", "alpha", "ALP-001", "--json"]));
-  workbench.cli(["backlog", "update", "alpha", "ALP-001", "--status", "done", "--expected-revision", loaded.revision]);
+  workbench.cli([
+    "backlog",
+    "update",
+    "alpha",
+    "ALP-001",
+    "--status",
+    "done",
+    "--expected-revision",
+    loaded.revision,
+  ]);
   const before = workbench.snapshot();
   await page.getByRole("button", { name: "Refresh workspace and project data" }).click();
   await expect(progress).toBeVisible();

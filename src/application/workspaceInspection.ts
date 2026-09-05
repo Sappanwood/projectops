@@ -27,9 +27,9 @@ export type WorkspaceInspection = {
   problems: WorkspaceProblem[];
 };
 
-export function inspectWorkspace(
-  request: { workspaceDir: string },
-): ApplicationResult<WorkspaceInspection> {
+export function inspectWorkspace(request: {
+  workspaceDir: string;
+}): ApplicationResult<WorkspaceInspection> {
   let workspace;
   try {
     workspace = loadWorkspace(request.workspaceDir);
@@ -70,14 +70,19 @@ export function inspectWorkspace(
       problems.push({ project: "workspace", issue: `unexpected artifact type: ${key}` });
     }
   }
-  for (const [id, registration] of Object.entries(manifest.projects).sort(([left], [right]) => left.localeCompare(right))) {
+  for (const [id, registration] of Object.entries(manifest.projects).sort(([left], [right]) =>
+    left.localeCompare(right),
+  )) {
     const projectDir = resolveProjectPath(root, registration.path);
     if (!existsSync(projectDir)) {
       problems.push({ project: id, issue: `project directory missing: ${registration.path}` });
       continue;
     }
     if (!statSync(projectDir).isDirectory()) {
-      problems.push({ project: id, issue: `project path is not a directory: ${registration.path}` });
+      problems.push({
+        project: id,
+        issue: `project path is not a directory: ${registration.path}`,
+      });
       continue;
     }
     const roots = projectArtifactRoots(root, id, manifest.artifact_layout);

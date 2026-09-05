@@ -12,7 +12,13 @@ import {
   type ItemType,
   type Priority,
 } from "./item.js";
-import { ItemNotFoundError, listItemIds, readItemFile, rebuildIndex, writeItemFile } from "./itemFs.js";
+import {
+  ItemNotFoundError,
+  listItemIds,
+  readItemFile,
+  rebuildIndex,
+  writeItemFile,
+} from "./itemFs.js";
 import type { BacklogStoreManifest } from "./store.js";
 
 export type BacklogItemDraft = {
@@ -28,7 +34,11 @@ export type BacklogItemDraft = {
 
 export class BacklogAddError extends Error {}
 
-export function addBacklogItem(storeRoot: string, manifest: BacklogStoreManifest, draft: BacklogItemDraft): BacklogItem {
+export function addBacklogItem(
+  storeRoot: string,
+  manifest: BacklogStoreManifest,
+  draft: BacklogItemDraft,
+): BacklogItem {
   if (draft.title === "") throw new BacklogAddError("--title is required");
   if (!CATEGORIES.includes(draft.category)) {
     throw new BacklogAddError(`--category must be one of: ${CATEGORIES.join(", ")}`);
@@ -47,7 +57,8 @@ export function addBacklogItem(storeRoot: string, manifest: BacklogStoreManifest
     }
     try {
       const parent = readItemFile(storeRoot, draft.parent_id);
-      if (parent.item_type !== "epic") throw new BacklogAddError(`parent ${draft.parent_id} is not an epic`);
+      if (parent.item_type !== "epic")
+        throw new BacklogAddError(`parent ${draft.parent_id} is not an epic`);
     } catch (error) {
       if (error instanceof BacklogAddError) throw error;
       if (error instanceof ItemNotFoundError) {

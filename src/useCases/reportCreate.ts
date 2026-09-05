@@ -2,7 +2,11 @@ import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 
 import type { CliIO } from "../io.js";
-import { ReportAlreadyExistsError, ReportRootError, ReportTargetError } from "../report/reportFs.js";
+import {
+  ReportAlreadyExistsError,
+  ReportRootError,
+  ReportTargetError,
+} from "../report/reportFs.js";
 import { ReportGenerationError, writeGeneratedReport } from "./reportGenerate.js";
 import { resolvePlansRoot } from "./planContext.js";
 import { resolveStoreRoot } from "./backlogContext.js";
@@ -31,14 +35,24 @@ export function reportCreate(
   cwd: string,
 ): number {
   if (projectId === undefined || planId === undefined) {
-    return reportFailure(io, json, "Usage: pops report create <project-id> <plan-id> --verification <evidence> [options]");
+    return reportFailure(
+      io,
+      json,
+      "Usage: pops report create <project-id> <plan-id> --verification <evidence> [options]",
+    );
   }
 
-  const plansRoot = resolveReportInput(io, json, (captured) => resolvePlansRoot(projectId, captured, cwd, true));
+  const plansRoot = resolveReportInput(io, json, (captured) =>
+    resolvePlansRoot(projectId, captured, cwd, true),
+  );
   if (plansRoot === null) return 1;
-  const store = resolveReportInput(io, json, (captured) => resolveStoreRoot(projectId, captured, cwd));
+  const store = resolveReportInput(io, json, (captured) =>
+    resolveStoreRoot(projectId, captured, cwd),
+  );
   if (store === null) return 1;
-  const reportsRoot = resolveReportInput(io, json, (captured) => resolveReportsRoot(projectId, captured, cwd, true));
+  const reportsRoot = resolveReportInput(io, json, (captured) =>
+    resolveReportsRoot(projectId, captured, cwd, true),
+  );
   if (reportsRoot === null) return 1;
 
   let values: ReportCreateOptions;
@@ -94,14 +108,20 @@ export function reportCreate(
       workarounds: values.workaround ?? [],
       repoDocs: values["repo-doc"] ?? [],
       body,
-      ...(values["partial-acceptance"] === undefined ? {} : { partialAcceptance: values["partial-acceptance"] }),
+      ...(values["partial-acceptance"] === undefined
+        ? {}
+        : { partialAcceptance: values["partial-acceptance"] }),
     });
     if (json) io.stdout(JSON.stringify({ ok: true, report }));
     else io.stdout(`Created ${report.id}: ${report.title}`);
     return 0;
   } catch (error) {
-    if (error instanceof ReportGenerationError || error instanceof ReportAlreadyExistsError ||
-      error instanceof ReportRootError || error instanceof ReportTargetError) {
+    if (
+      error instanceof ReportGenerationError ||
+      error instanceof ReportAlreadyExistsError ||
+      error instanceof ReportRootError ||
+      error instanceof ReportTargetError
+    ) {
       return reportFailure(io, json, error.message);
     }
     return reportFailure(io, json, formatReportError(error));

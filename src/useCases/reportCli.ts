@@ -18,7 +18,9 @@ export function resolveReportInput<T>(
   let diagnostic: string | undefined;
   const captured: CliIO = {
     stdout: io.stdout,
-    stderr: (message) => { diagnostic = message; },
+    stderr: (message) => {
+      diagnostic = message;
+    },
   };
   const result = resolve(captured);
   if (result === null) reportFailure(io, json, diagnostic ?? "unable to resolve report input");

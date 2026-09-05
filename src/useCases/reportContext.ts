@@ -22,10 +22,16 @@ export function resolveReportsRoot(
   }
   const reportsType = workspace.manifest.artifact_layout.roots.reports;
   if (reportsType !== REPORT_ARTIFACT_TYPE) {
-    io.stderr(`Error: reports artifact type must be ${REPORT_ARTIFACT_TYPE}, got ${reportsType ?? "missing"}`);
+    io.stderr(
+      `Error: reports artifact type must be ${REPORT_ARTIFACT_TYPE}, got ${reportsType ?? "missing"}`,
+    );
     return null;
   }
-  const reportsRoot = projectArtifactRoots(workspace.root, projectId, workspace.manifest.artifact_layout).reports;
+  const reportsRoot = projectArtifactRoots(
+    workspace.root,
+    projectId,
+    workspace.manifest.artifact_layout,
+  ).reports;
   if (!requireWritableContainment) return reportsRoot;
 
   try {

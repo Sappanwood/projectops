@@ -14,13 +14,21 @@
     "dev": "node --import tsx src/cli.ts",
     "preworkbench": "npm run build",
     "workbench": "node --import tsx src/workbench.ts",
-    "test": "npm run build && node --import tsx --test tests/*.test.ts",
+    "test": "npm run build && npm run test:unit",
     "typecheck": "tsc --noEmit",
     "build": "tsc -p tsconfig.build.json && node scripts/buildAssets.mjs",
     "start": "node dist/cli.js",
-    "test:e2e": "npm run build && playwright test"
+    "test:e2e": "npm run build && npm run test:browser",
+    "lint": "biome lint . --error-on-warnings",
+    "format:check": "biome format .",
+    "format": "biome format --write .",
+    "test:unit": "node --import tsx --test tests/*.test.ts",
+    "test:browser": "playwright test",
+    "quality": "npm run lint && npm run format:check && npm run typecheck",
+    "quality:full": "npm run quality && npm run build && npm run test:unit && npm run test:browser"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.5.12",
     "@playwright/test": "^1.63.0",
     "@types/node": "^24.0.0",
     "tsx": "^4.20.0",

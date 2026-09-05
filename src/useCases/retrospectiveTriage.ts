@@ -1,9 +1,16 @@
 import { parseArgs } from "node:util";
 
 import type { CliIO } from "../io.js";
-import { triageRetrospective, type RetrospectiveTriageOptions } from "../retrospective/retrospectiveFs.js";
+import {
+  triageRetrospective,
+  type RetrospectiveTriageOptions,
+} from "../retrospective/retrospectiveFs.js";
 import { resolveRetrospectivesRoot } from "./retrospectiveContext.js";
-import { formatRetrospectiveError, retrospectiveFailure, resolveRetrospectiveInput } from "./retrospectiveCli.js";
+import {
+  formatRetrospectiveError,
+  retrospectiveFailure,
+  resolveRetrospectiveInput,
+} from "./retrospectiveCli.js";
 import { loadOrReport } from "./workspaceContext.js";
 
 type TriageCliOptions = {
@@ -23,7 +30,9 @@ type TriageCliOptions = {
 export function retrospectiveTriage(args: string[], json: boolean, io: CliIO, cwd: string): number {
   const workspace = resolveRetrospectiveInput(io, json, (captured) => loadOrReport(cwd, captured));
   if (workspace === null) return 1;
-  const root = resolveRetrospectiveInput(io, json, (captured) => resolveRetrospectivesRoot(captured, cwd, true));
+  const root = resolveRetrospectiveInput(io, json, (captured) =>
+    resolveRetrospectivesRoot(captured, cwd, true),
+  );
   if (root === null) return 1;
 
   let values: TriageCliOptions & { positionals?: string[] };
@@ -46,14 +55,18 @@ export function retrospectiveTriage(args: string[], json: boolean, io: CliIO, cw
       allowPositionals: true,
       strict: true,
     });
-    values = { ...parsed.values as TriageCliOptions, positionals: parsed.positionals };
+    values = { ...(parsed.values as TriageCliOptions), positionals: parsed.positionals };
   } catch {
     return retrospectiveFailure(io, json, "invalid arguments");
   }
 
   const reference = values.positionals?.[0];
   if (reference === undefined || values.positionals?.length !== 1) {
-    return retrospectiveFailure(io, json, "Usage: pops retrospective triage <id> --to active|archive --expected-revision <revision> --disposition <value> --owner-scope <value> --next-action <value> [--category <value>] [--related-info <value>]");
+    return retrospectiveFailure(
+      io,
+      json,
+      "Usage: pops retrospective triage <id> --to active|archive --expected-revision <revision> --disposition <value> --owner-scope <value> --next-action <value> [--category <value>] [--related-info <value>]",
+    );
   }
   const rawDisposition = values.disposition;
   if (rawDisposition === undefined || rawDisposition.trim() === "") {
@@ -81,12 +94,16 @@ export function retrospectiveTriage(args: string[], json: boolean, io: CliIO, cw
   }
   const categories = [...(values.category ?? []), ...(values.categories ?? [])];
   const relatedInfo = [...(values["related-info"] ?? []), ...(values.related ?? [])];
-  if (categories.some((value) => value.trim() === "") || relatedInfo.some((value) => value.trim() === "")) {
+  if (
+    categories.some((value) => value.trim() === "") ||
+    relatedInfo.some((value) => value.trim() === "")
+  ) {
     return retrospectiveFailure(io, json, "categories and related info must be non-empty");
   }
 
   const id = normalizeReference(reference);
-  if (id === null) return retrospectiveFailure(io, json, "retrospective reference must be an id or inbox/<id>.md");
+  if (id === null)
+    return retrospectiveFailure(io, json, "retrospective reference must be an id or inbox/<id>.md");
   const options: RetrospectiveTriageOptions = {
     destination,
     disposition,

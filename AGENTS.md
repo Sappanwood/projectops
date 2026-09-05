@@ -124,13 +124,26 @@ Pi SDK 固定为 `@earendil-works/pi-coding-agent@0.85.0`；查阅 [官方 SDK](
 ```bash
 npm install
 npm run dev -- --help
+npm run quality
+npm run format
+npm run quality:full
 npm test
-npm run typecheck
+npm run test:e2e
 npm run build
 node dist/cli.js --version
 ```
 
+格式与基本静态检查由 `biome.json` 统一定义，适用范围及单独测试入口见
+[README 开发质量检查](README.md#开发质量检查)。不得用全目录排除或关闭既定规则绕过问题。
+机械格式变更与行为/结构调整分开提交；模块边界仍按架构文档审查，不以文件行数决定拆分。
+
 ## 完工验收
+
+- 日常源码、测试、脚本和质量配置变更运行 `npm run quality`（lint、format check、typecheck）。
+- 跨模块重构、质量工具或构建/测试脚本变更，以及多阶段最终验收运行 `npm run quality:full`；该入口只构建一次。
+- 风险分级：文案/样式/简单配置可实现后验证；Bug、数据模型和状态逻辑先验证失败用例；
+  CLI/API、权限、路径和并发契约采用 Red-Green-Refactor，保持 Alpha 已接受的安全边界。
+- 测试失败必须区分基线失败、环境限制和新增回归，记录具体命令及诊断；不能以静态检查通过代替完整门禁。
 
 - 功能变更至少运行与当前 happy path 直接相关的测试。
 - TypeScript 源码变更运行 `npm run typecheck`。

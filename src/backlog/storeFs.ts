@@ -25,7 +25,10 @@ export class StoreNotFoundError extends Error {
 }
 
 export class StoreParseError extends Error {
-  constructor(public readonly root: string, cause: unknown) {
+  constructor(
+    public readonly root: string,
+    cause: unknown,
+  ) {
     super(`Invalid backlog store at ${root}: ${String(cause)}`);
   }
 }

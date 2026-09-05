@@ -17,8 +17,18 @@ export type BacklogViewState = {
 };
 
 export function emptyBacklogState(): BacklogViewState {
-  return { projectId: null, items: [], selectedItemId: null, item: null, loading: false,
-    detailLoading: false, saving: false, error: null, detailError: null, message: null };
+  return {
+    projectId: null,
+    items: [],
+    selectedItemId: null,
+    item: null,
+    loading: false,
+    detailLoading: false,
+    saving: false,
+    error: null,
+    detailError: null,
+    message: null,
+  };
 }
 
 export function createBacklogController(
@@ -62,16 +72,24 @@ export function createBacklogController(
     if (projectId === null || state.saving) return;
     const current = generation;
     const request = ++detailRequest;
-    publish({ selectedItemId: itemId, detailLoading: true, detailError: null, message: null,
-      item: state.item?.id === itemId ? state.item : null });
+    publish({
+      selectedItemId: itemId,
+      detailLoading: true,
+      detailError: null,
+      message: null,
+      item: state.item?.id === itemId ? state.item : null,
+    });
     const result = await api.showBacklog(projectId, itemId);
     if (destroyed || current !== generation || request !== detailRequest) return;
-    publish(result.ok
-      ? { item: result.data.item, detailLoading: false }
-      : { item: null, detailLoading: false, detailError: result.error });
+    publish(
+      result.ok
+        ? { item: result.data.item, detailLoading: false }
+        : { item: null, detailLoading: false, detailError: result.error },
+    );
   }
   async function update(status: string) {
-    if (state.saving || state.detailLoading || state.item === null || state.projectId === null) return;
+    if (state.saving || state.detailLoading || state.item === null || state.projectId === null)
+      return;
     const current = generation;
     const projectId = state.projectId;
     const item = state.item;
@@ -89,6 +107,15 @@ export function createBacklogController(
     if (destroyed || current !== generation) return;
     publish({ message: result.data.no_op ? "No changes." : "Status updated." });
   }
-  return { getState: () => state, load, select, update, reset,
-    destroy() { destroyed = true; generation++; } };
+  return {
+    getState: () => state,
+    load,
+    select,
+    update,
+    reset,
+    destroy() {
+      destroyed = true;
+      generation++;
+    },
+  };
 }

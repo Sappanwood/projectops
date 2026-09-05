@@ -5,7 +5,14 @@ import { parseArgs } from "node:util";
 
 import type { CliIO } from "../io.js";
 import { addBacklogItem, BacklogAddError } from "../backlog/add.js";
-import { CATEGORIES, ITEM_TYPES, PRIORITIES, type Category, type ItemType, type Priority } from "../backlog/item.js";
+import {
+  CATEGORIES,
+  ITEM_TYPES,
+  PRIORITIES,
+  type Category,
+  type ItemType,
+  type Priority,
+} from "../backlog/item.js";
 import { resolveStoreRoot } from "./backlogContext.js";
 
 type AddOptions = {
@@ -28,7 +35,9 @@ export function backlogAdd(
   cwd: string,
 ): number {
   if (projectId === undefined) {
-    io.stderr("Usage: pops backlog add <project-id> -T <title> -c <category> --priority <P0-P3> [options]");
+    io.stderr(
+      "Usage: pops backlog add <project-id> -T <title> -c <category> --priority <P0-P3> [options]",
+    );
     return 1;
   }
   const store = resolveStoreRoot(projectId, io, cwd);

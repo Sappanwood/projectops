@@ -1,59 +1,65 @@
-import type { BacklogItem } from '../backlog/item.js';
-import type { ModelRef } from './models.js';
-export const EXECUTION_SCHEMA = 'execution/Attempt@1';
-export type ExecutionState = 'running' | 'stop_requested' | 'unknown' | 'succeeded' | 'failed' | 'stopped';
+import type { BacklogItem } from "../backlog/item.js";
+import type { ModelRef } from "./models.js";
+export const EXECUTION_SCHEMA = "execution/Attempt@1";
+export type ExecutionState =
+  | "running"
+  | "stop_requested"
+  | "unknown"
+  | "succeeded"
+  | "failed"
+  | "stopped";
 export type CodeSnapshot = {
-    head: string;
-    digest: string;
-    diff: string;
-    files: string[];
+  head: string;
+  digest: string;
+  diff: string;
+  files: string[];
 };
 export type Verification = {
-    command: string;
-    outcome: 'passed' | 'failed';
-    at: string;
-    snapshot: CodeSnapshot;
-    evidence_ref: string;
-    evidence_digest: string;
+  command: string;
+  outcome: "passed" | "failed";
+  at: string;
+  snapshot: CodeSnapshot;
+  evidence_ref: string;
+  evidence_digest: string;
 };
 export type ExecutionEvent = {
-    at: string;
-    type: 'text' | 'tool' | 'status' | 'session';
-    text: string;
+  at: string;
+  type: "text" | "tool" | "status" | "session";
+  text: string;
 };
 export type ExecutionAttempt = {
-    checkout?: { run_id: string; node_id: string };
-    progress?: { events: ExecutionEvent[]; session_id?: string; model?: ModelRef };
-    schema: typeof EXECUTION_SCHEMA;
-    id: string;
-    execution_id: string;
-    retry_of: string | null;
-    project_id: string;
-    item_id: string;
-    task_ref: string;
-    revision: string;
-    origin: 'external' | 'runtime';
-    input: {
-        model?: ModelRef;
-        item: BacklogItem;
-        instructions: string;
-        plan: {
-            ref: string;
-            revision: string;
-            snapshot: unknown;
-        } | null;
-    };
-    started_at: string;
-    ended_at: string | null;
-    state: ExecutionState;
-    summary: string;
-    snapshot: CodeSnapshot | null;
-    verifications: Verification[];
-    acceptance: {
-        decision: 'accepted' | 'rework';
-        at: string;
-        note: string;
-        snapshot_digest: string | null;
+  checkout?: { run_id: string; node_id: string };
+  progress?: { events: ExecutionEvent[]; session_id?: string; model?: ModelRef };
+  schema: typeof EXECUTION_SCHEMA;
+  id: string;
+  execution_id: string;
+  retry_of: string | null;
+  project_id: string;
+  item_id: string;
+  task_ref: string;
+  revision: string;
+  origin: "external" | "runtime";
+  input: {
+    model?: ModelRef;
+    item: BacklogItem;
+    instructions: string;
+    plan: {
+      ref: string;
+      revision: string;
+      snapshot: unknown;
     } | null;
+  };
+  started_at: string;
+  ended_at: string | null;
+  state: ExecutionState;
+  summary: string;
+  snapshot: CodeSnapshot | null;
+  verifications: Verification[];
+  acceptance: {
+    decision: "accepted" | "rework";
+    at: string;
+    note: string;
+    snapshot_digest: string | null;
+  } | null;
 };
-export const activeStates: ExecutionState[] = ['running', 'stop_requested', 'unknown'];
+export const activeStates: ExecutionState[] = ["running", "stop_requested", "unknown"];

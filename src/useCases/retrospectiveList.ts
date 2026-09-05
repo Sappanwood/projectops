@@ -1,7 +1,10 @@
 import { parseArgs } from "node:util";
 
 import type { CliIO } from "../io.js";
-import { RETROSPECTIVE_STATUSES, type RetrospectiveStatus } from "../retrospective/retrospective.js";
+import {
+  RETROSPECTIVE_STATUSES,
+  type RetrospectiveStatus,
+} from "../retrospective/retrospective.js";
 import { listRetrospectiveRecords } from "../retrospective/retrospectiveFs.js";
 import { resolveRetrospectivesRoot } from "./retrospectiveContext.js";
 import { formatRetrospectiveError, retrospectiveFailure } from "./retrospectiveCli.js";
@@ -18,7 +21,11 @@ export function retrospectiveList(args: string[], json: boolean, io: CliIO, cwd:
   try {
     values = parseArgs({
       args,
-      options: { status: { type: "string" }, project: { type: "string" }, task: { type: "string" } },
+      options: {
+        status: { type: "string" },
+        project: { type: "string" },
+        task: { type: "string" },
+      },
       allowPositionals: false,
       strict: true,
     }).values as ListOptions;
@@ -28,7 +35,11 @@ export function retrospectiveList(args: string[], json: boolean, io: CliIO, cwd:
   let status: RetrospectiveStatus | undefined;
   if (values.status !== undefined) {
     if (!RETROSPECTIVE_STATUSES.includes(values.status as RetrospectiveStatus)) {
-      return retrospectiveFailure(io, json, `--status must be one of: ${RETROSPECTIVE_STATUSES.join(", ")}`);
+      return retrospectiveFailure(
+        io,
+        json,
+        `--status must be one of: ${RETROSPECTIVE_STATUSES.join(", ")}`,
+      );
     }
     status = values.status as RetrospectiveStatus;
   }
@@ -45,9 +56,16 @@ export function retrospectiveList(args: string[], json: boolean, io: CliIO, cwd:
       if (result.diagnostics.length > 0) response.diagnostics = result.diagnostics;
       io.stdout(JSON.stringify(response));
     } else if (records.length === 0) {
-      io.stdout(result.diagnostics.length === 0 ? "No retrospectives" : `No valid retrospectives (${result.diagnostics.length} diagnostic(s))`);
+      io.stdout(
+        result.diagnostics.length === 0
+          ? "No retrospectives"
+          : `No valid retrospectives (${result.diagnostics.length} diagnostic(s))`,
+      );
     } else {
-      for (const record of records) io.stdout(`${record.id}  [${record.status}]  ${record.project ?? "-"}  ${record.task ?? "-"}`);
+      for (const record of records)
+        io.stdout(
+          `${record.id}  [${record.status}]  ${record.project ?? "-"}  ${record.task ?? "-"}`,
+        );
       if (result.diagnostics.length > 0) io.stdout(`Diagnostics: ${result.diagnostics.length}`);
     }
     return 0;

@@ -5,8 +5,14 @@ import { resolveRetrospectivesRoot } from "./retrospectiveContext.js";
 import { formatRetrospectiveError, retrospectiveFailure } from "./retrospectiveCli.js";
 import { loadOrReport } from "./workspaceContext.js";
 
-export function retrospectiveShow(reference: string | undefined, json: boolean, io: CliIO, cwd: string): number {
-  if (reference === undefined) return retrospectiveFailure(io, json, "Usage: pops retrospective show <id> [--json]");
+export function retrospectiveShow(
+  reference: string | undefined,
+  json: boolean,
+  io: CliIO,
+  cwd: string,
+): number {
+  if (reference === undefined)
+    return retrospectiveFailure(io, json, "Usage: pops retrospective show <id> [--json]");
   const workspace = loadOrReport(cwd, io);
   if (workspace === null) return 1;
   const root = resolveRetrospectivesRoot(io, cwd, true);
@@ -15,7 +21,13 @@ export function retrospectiveShow(reference: string | undefined, json: boolean, 
     const record = showRetrospectiveRecord(workspace.root, root, reference);
     if (json) io.stdout(JSON.stringify(record));
     else {
-      const details = [`${record.id}  [${record.status}]`, `Project: ${record.project ?? "null"}`, `Task: ${record.task ?? "null"}`, `Revision: ${record.revision}`, ""];
+      const details = [
+        `${record.id}  [${record.status}]`,
+        `Project: ${record.project ?? "null"}`,
+        `Task: ${record.task ?? "null"}`,
+        `Revision: ${record.revision}`,
+        "",
+      ];
       if (record.body !== "") details.push(record.body);
       io.stdout(details.join("\n"));
     }

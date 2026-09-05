@@ -17,8 +17,8 @@ import { planMaterialize } from "./useCases/planMaterialize.js";
 import { planComplete } from "./useCases/planComplete.js";
 import { planRevise } from "./useCases/planRevise.js";
 import { executionCommand } from "./useCases/executionCommand.js";
-import { planRunCommand } from './useCases/planRunCommand.js';
-import { parallelRunCommand } from './useCases/parallelRunCommand.js';
+import { planRunCommand } from "./useCases/planRunCommand.js";
+import { parallelRunCommand } from "./useCases/parallelRunCommand.js";
 import { docsScaffold } from "./useCases/docsScaffold.js";
 import { docsCheck } from "./useCases/docsCheck.js";
 import { reportCreate } from "./useCases/reportCreate.js";
@@ -109,7 +109,12 @@ export function runCli(args: readonly string[], io: CliIO, cwd = process.cwd()):
     case "execution":
       return executionCommand(rest, io, cwd);
     case "init":
-      return initWorkspace(rest.find((arg) => arg !== "--json"), rest.includes("--json"), io, cwd);
+      return initWorkspace(
+        rest.find((arg) => arg !== "--json"),
+        rest.includes("--json"),
+        io,
+        cwd,
+      );
     case "project": {
       const [sub, ...projectArgs] = rest;
       const json = projectArgs.includes("--json");
@@ -144,10 +149,23 @@ export function runCli(args: readonly string[], io: CliIO, cwd = process.cwd()):
         return backlogList(first, forwarded, json, io, cwd);
       }
       if (sub === "show") {
-        return backlogShow(first, forwarded.find((arg) => !arg.startsWith("--")), json, io, cwd);
+        return backlogShow(
+          first,
+          forwarded.find((arg) => !arg.startsWith("--")),
+          json,
+          io,
+          cwd,
+        );
       }
       if (sub === "update") {
-        return backlogUpdate(first, forwarded.find((arg) => !arg.startsWith("--")), forwarded, json, io, cwd);
+        return backlogUpdate(
+          first,
+          forwarded.find((arg) => !arg.startsWith("--")),
+          forwarded,
+          json,
+          io,
+          cwd,
+        );
       }
       io.stderr(`Unknown backlog command: ${sub ?? ""}`);
       return 1;
@@ -164,17 +182,35 @@ export function runCli(args: readonly string[], io: CliIO, cwd = process.cwd()):
         return planList(first, json, io, cwd);
       }
       if (sub === "show") {
-        return planShow(first, forwarded.find((arg) => !arg.startsWith("--")), json, io, cwd);
+        return planShow(
+          first,
+          forwarded.find((arg) => !arg.startsWith("--")),
+          json,
+          io,
+          cwd,
+        );
       }
       if (sub === "validate") {
-        return planValidate(first, forwarded.find((arg) => !arg.startsWith("--")), json, io, cwd);
+        return planValidate(
+          first,
+          forwarded.find((arg) => !arg.startsWith("--")),
+          json,
+          io,
+          cwd,
+        );
       }
       if (sub === "approve") {
         const [planId, ...approveArgs] = forwarded;
         return planApprove(first, planId, approveArgs, json, io, cwd);
       }
       if (sub === "materialize") {
-        return planMaterialize(first, forwarded.find((arg) => !arg.startsWith("--")), json, io, cwd);
+        return planMaterialize(
+          first,
+          forwarded.find((arg) => !arg.startsWith("--")),
+          json,
+          io,
+          cwd,
+        );
       }
       if (sub === "complete") {
         const [planId, ...completeArgs] = forwarded;
@@ -222,7 +258,13 @@ export function runCli(args: readonly string[], io: CliIO, cwd = process.cwd()):
       const forwarded = subArgs.filter((arg) => arg !== "--json");
       if (sub === "capture") return retrospectiveCapture(forwarded, json, io, cwd);
       if (sub === "list") return retrospectiveList(forwarded, json, io, cwd);
-      if (sub === "show") return retrospectiveShow(forwarded.find((arg) => !arg.startsWith("--")), json, io, cwd);
+      if (sub === "show")
+        return retrospectiveShow(
+          forwarded.find((arg) => !arg.startsWith("--")),
+          json,
+          io,
+          cwd,
+        );
       if (sub === "triage") return retrospectiveTriage(forwarded, json, io, cwd);
       if (sub === "archive") return retrospectiveArchive(forwarded, json, io, cwd);
       io.stderr(`Unknown retrospective command: ${sub ?? ""}`);

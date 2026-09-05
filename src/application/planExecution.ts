@@ -18,23 +18,45 @@ export type PlanExecution = {
   }>;
 };
 
-export type WorkbenchPlan = Plan & { revision: string; execution: PlanExecution; next_tasks: PlanNextSummary; delivery_reports: Array<Pick<Report, "id" | "title" | "outcome" | "created_at">> };
+export type WorkbenchPlan = Plan & {
+  revision: string;
+  execution: PlanExecution;
+  next_tasks: PlanNextSummary;
+  delivery_reports: Array<Pick<Report, "id" | "title" | "outcome" | "created_at">>;
+};
 
 export function readPlanExecution(
   request: { workspaceDir: string; projectId: string },
   plan: Plan,
 ): PlanExecution {
-  const counts = { total: 0, todo: 0, in_progress: 0, done: 0, blocked: 0, cancelled: 0, unreadable: 0 };
-  if (!plan.materialization) return { materialized: false, counts, completion_percent: null, items: [] };
+  const counts = {
+    total: 0,
+    todo: 0,
+    in_progress: 0,
+    done: 0,
+    blocked: 0,
+    cancelled: 0,
+    unreadable: 0,
+  };
+  if (!plan.materialization)
+    return { materialized: false, counts, completion_percent: null, items: [] };
   const mapping = plan.materialization.mapping;
   const items = plan.items.map((draft): PlanExecution["items"][number] => {
     const id = mapping[draft.key]!;
     let row: PlanExecution["items"][number] = {
-      key: draft.key, id, title: draft.title, item_type: draft.item_type, status: "unreadable",
+      key: draft.key,
+      id,
+      title: draft.title,
+      item_type: draft.item_type,
+      status: "unreadable",
     };
     try {
       const result = showBacklogItem({ ...request, itemId: id });
-      if (result.ok && result.data.item.project === request.projectId && result.data.item.item_type === draft.item_type) {
+      if (
+        result.ok &&
+        result.data.item.project === request.projectId &&
+        result.data.item.item_type === draft.item_type
+      ) {
         row = { ...row, title: result.data.item.title, status: result.data.item.status };
       } else {
         row.diagnostic = {
@@ -52,7 +74,9 @@ export function readPlanExecution(
     return row;
   });
   return {
-    materialized: true, counts, items,
-    completion_percent: counts.total === 0 ? null : Math.floor(counts.done / counts.total * 100),
+    materialized: true,
+    counts,
+    items,
+    completion_percent: counts.total === 0 ? null : Math.floor((counts.done / counts.total) * 100),
   };
 }

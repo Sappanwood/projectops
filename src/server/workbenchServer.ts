@@ -1,9 +1,9 @@
-import { DEFAULT_PARALLEL_COMMANDS } from '../planRun/commands.js';
-import { handleParallelRunRoute } from './parallelRunRoutes.js';
-import { listParallelRuns, ParallelRunRuntime } from '../application/parallelRunApi.js';
-import { handlePlanRunRoute } from './planRunRoutes.js';
-import { listPlanRuns, PlanRunRuntime } from '../application/planRunApi.js';
-import { getExecutionEvidence } from '../application/executionEvidence.js';
+import { DEFAULT_PARALLEL_COMMANDS } from "../planRun/commands.js";
+import { handleParallelRunRoute } from "./parallelRunRoutes.js";
+import { listParallelRuns, ParallelRunRuntime } from "../application/parallelRunApi.js";
+import { handlePlanRunRoute } from "./planRunRoutes.js";
+import { listPlanRuns, PlanRunRuntime } from "../application/planRunApi.js";
+import { getExecutionEvidence } from "../application/executionEvidence.js";
 import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import path from "node:path";
@@ -112,9 +112,10 @@ export async function startWorkbenchServer(
   if (!workspace.ok) {
     throw new WorkbenchServerStartError(workspace.error.code, workspace.error.message);
   }
-  const staticRoot = options.staticDir !== undefined
-    ? resolveStaticRoot(options.staticDir)
-    : resolveDefaultStaticRoot();
+  const staticRoot =
+    options.staticDir !== undefined
+      ? resolveStaticRoot(options.staticDir)
+      : resolveDefaultStaticRoot();
 
   let context: RequestContext | undefined;
   const server = createServer((request, response) => {
@@ -152,12 +153,23 @@ export async function startWorkbenchServer(
     for (const project of workspace.data.projects) {
       const q = { workspaceDir: options.workspaceDir, projectId: project.id };
       const parallel = listParallelRuns(q);
-      if (parallel.ok) for (const run of parallel.data.runs) if (run.state === "running" || run.state === "paused" || (run.state === "ready" && run.controls.at(-1)?.action === "resume"))
-        parallelRuns.advance({ ...q, runId: run.id, expectedRevision: run.revision });
+      if (parallel.ok)
+        for (const run of parallel.data.runs)
+          if (
+            run.state === "running" ||
+            run.state === "paused" ||
+            (run.state === "ready" && run.controls.at(-1)?.action === "resume")
+          )
+            parallelRuns.advance({ ...q, runId: run.id, expectedRevision: run.revision });
       const listed = listPlanRuns(q);
       if (!listed.ok) continue;
-      for (const run of listed.data.runs) if (run.state === "running" || run.state === "paused" || (run.state === "ready" && run.controls.at(-1)?.action === "resume"))
-        planRuns.advance({ ...q, runId: run.id, expectedRevision: run.revision });
+      for (const run of listed.data.runs)
+        if (
+          run.state === "running" ||
+          run.state === "paused" ||
+          (run.state === "ready" && run.controls.at(-1)?.action === "resume")
+        )
+          planRuns.advance({ ...q, runId: run.id, expectedRevision: run.revision });
     }
   }, 1000);
   timer.unref();
@@ -198,15 +210,30 @@ async function handleRequest(
     const url = parseRequestUrl(request, context.origin);
     const segments = decodePathSegments(url.pathname);
 
-    if (matches(segments, ['api', 'models'])) {
-      requireMethod(request, 'GET'); requireNoQuery(url);
-      try { sendApplicationResult(response, { ok: true, data: await context.runtime.listModels() }); }
-      catch { throw new HttpError(400, 'INVALID_REQUEST', 'Pi 模型列表读取失败，请检查本地 Pi 配置后刷新。'); }
+    if (matches(segments, ["api", "models"])) {
+      requireMethod(request, "GET");
+      requireNoQuery(url);
+      try {
+        sendApplicationResult(response, { ok: true, data: await context.runtime.listModels() });
+      } catch {
+        throw new HttpError(
+          400,
+          "INVALID_REQUEST",
+          "Pi 模型列表读取失败，请检查本地 Pi 配置后刷新。",
+        );
+      }
       return;
     }
     const resolveModel = async (value: unknown) => {
-      try { return await context.runtime.resolveModel(context.workspaceDir, segments[2]!, value); }
-      catch { throw new HttpError(400, 'INVALID_REQUEST', '模型选择无效或不可用，请在本地 Pi 完成认证后刷新并重新选择。'); }
+      try {
+        return await context.runtime.resolveModel(context.workspaceDir, segments[2]!, value);
+      } catch {
+        throw new HttpError(
+          400,
+          "INVALID_REQUEST",
+          "模型选择无效或不可用，请在本地 Pi 完成认证后刷新并重新选择。",
+        );
+      }
     };
 
     if (matches(segments, ["api", "workspace"])) {
@@ -233,10 +260,10 @@ async function handleRequest(
     }
 
     if (
-      segments.length === 4
-      && segments[0] === "api"
-      && segments[1] === "projects"
-      && segments[3] === "backlog"
+      segments.length === 4 &&
+      segments[0] === "api" &&
+      segments[1] === "projects" &&
+      segments[3] === "backlog"
     ) {
       requireMethod(request, "GET");
       const status = singleQueryValue(url, "status");
@@ -252,10 +279,10 @@ async function handleRequest(
     }
 
     if (
-      segments.length === 5
-      && segments[0] === "api"
-      && segments[1] === "projects"
-      && segments[3] === "backlog"
+      segments.length === 5 &&
+      segments[0] === "api" &&
+      segments[1] === "projects" &&
+      segments[3] === "backlog"
     ) {
       requireNoQuery(url);
       const projectId = segments[2] ?? "";
@@ -272,12 +299,17 @@ async function handleRequest(
         requireJsonContentType(request);
         const body = await readUpdateBody(request);
         if (body.status === undefined) {
-          sendApplicationResult(response, updateBacklogItemContent({
-            workspaceDir: context.workspaceDir, projectId, itemId,
-            ...(body.title === undefined ? {} : { title: body.title }),
-            ...(body.body === undefined ? {} : { body: body.body }),
-            expectedRevision: body.expected_revision!,
-          }));
+          sendApplicationResult(
+            response,
+            updateBacklogItemContent({
+              workspaceDir: context.workspaceDir,
+              projectId,
+              itemId,
+              ...(body.title === undefined ? {} : { title: body.title }),
+              ...(body.body === undefined ? {} : { body: body.body }),
+              expectedRevision: body.expected_revision!,
+            }),
+          );
           return;
         }
         sendApplicationResult(
@@ -294,47 +326,84 @@ async function handleRequest(
         );
         return;
       }
-      throw new HttpError(
-        405,
-        "METHOD_NOT_ALLOWED",
-        "Method not allowed.",
-        { allow: "GET, PATCH" },
-      );
+      throw new HttpError(405, "METHOD_NOT_ALLOWED", "Method not allowed.", {
+        allow: "GET, PATCH",
+      });
     }
 
-    if (segments.length === 4 && segments[0] === "api" && segments[1] === "projects" && segments[3] === "read-pages") {
+    if (
+      segments.length === 4 &&
+      segments[0] === "api" &&
+      segments[1] === "projects" &&
+      segments[3] === "read-pages"
+    ) {
       requireMethod(request, "GET");
       requireNoQuery(url);
-      sendApplicationResult(response, getWorkbenchReadPages({ workspaceDir: context.workspaceDir, projectId: segments[2]! }));
+      sendApplicationResult(
+        response,
+        getWorkbenchReadPages({ workspaceDir: context.workspaceDir, projectId: segments[2]! }),
+      );
       return;
     }
 
-    if (segments.length === 4 && segments[0] === "api" && segments[1] === "projects" && segments[3] === "docs") {
+    if (
+      segments.length === 4 &&
+      segments[0] === "api" &&
+      segments[1] === "projects" &&
+      segments[3] === "docs"
+    ) {
       requireMethod(request, "GET");
       const documentPath = singleQueryValue(url, "path");
-      const input = {workspaceDir: context.workspaceDir, projectId: segments[2]!};
+      const input = { workspaceDir: context.workspaceDir, projectId: segments[2]! };
       if (documentPath === undefined) sendApplicationResult(response, listDocuments(input));
-      else sendApplicationResult(response, showDocument({...input, path: documentPath}));
+      else sendApplicationResult(response, showDocument({ ...input, path: documentPath }));
       return;
     }
 
-    if (await handleParallelRunRoute(segments, request.method, context.workspaceDir, context.parallelRuns, context.parallelCommands, {
-      model: resolveModel,
-      method: expected => requireMethod(request, expected), noQuery: () => requireNoQuery(url),
-      query: name => singleQueryValue(url, name),
-      body: async keys => { requireAllowedOrigin(request, context.origin); requireJsonContentType(request); return readJsonRecord(request, keys); },
-      send: result => sendApplicationResult(response, result),
-      invalid: message => { throw new HttpError(400, "INVALID_REQUEST", message); },
-    })) return;
+    if (
+      await handleParallelRunRoute(
+        segments,
+        request.method,
+        context.workspaceDir,
+        context.parallelRuns,
+        context.parallelCommands,
+        {
+          model: resolveModel,
+          method: (expected) => requireMethod(request, expected),
+          noQuery: () => requireNoQuery(url),
+          query: (name) => singleQueryValue(url, name),
+          body: async (keys) => {
+            requireAllowedOrigin(request, context.origin);
+            requireJsonContentType(request);
+            return readJsonRecord(request, keys);
+          },
+          send: (result) => sendApplicationResult(response, result),
+          invalid: (message) => {
+            throw new HttpError(400, "INVALID_REQUEST", message);
+          },
+        },
+      )
+    )
+      return;
 
-    if (await handlePlanRunRoute(segments, request.method, context.workspaceDir, context.planRuns, {
-      model: resolveModel,
-      method: expected => requireMethod(request, expected), noQuery: () => requireNoQuery(url),
-      query: name => singleQueryValue(url, name),
-      body: async keys => { requireAllowedOrigin(request, context.origin); requireJsonContentType(request); return readJsonRecord(request, keys); },
-      send: result => sendApplicationResult(response, result),
-      invalid: message => { throw new HttpError(400, "INVALID_REQUEST", message); },
-    })) return;
+    if (
+      await handlePlanRunRoute(segments, request.method, context.workspaceDir, context.planRuns, {
+        model: resolveModel,
+        method: (expected) => requireMethod(request, expected),
+        noQuery: () => requireNoQuery(url),
+        query: (name) => singleQueryValue(url, name),
+        body: async (keys) => {
+          requireAllowedOrigin(request, context.origin);
+          requireJsonContentType(request);
+          return readJsonRecord(request, keys);
+        },
+        send: (result) => sendApplicationResult(response, result),
+        invalid: (message) => {
+          throw new HttpError(400, "INVALID_REQUEST", message);
+        },
+      })
+    )
+      return;
 
     if (segments[0] === "api" && segments[1] === "projects" && segments[3] === "executions") {
       const input = { workspaceDir: context.workspaceDir, projectId: segments[2]! };
@@ -342,15 +411,22 @@ async function handleRequest(
         requireMethod(request, "GET");
         const itemId = singleQueryValue(url, "item_id");
         const result = listExecutions({ ...input, ...(itemId === undefined ? {} : { itemId }) });
-        sendApplicationResult(response, result.ok
-          ? { ok: true, data: { ...result.data, runner_available: context.runtime.available } } : result);
+        sendApplicationResult(
+          response,
+          result.ok
+            ? { ok: true, data: { ...result.data, runner_available: context.runtime.available } }
+            : result,
+        );
         return;
       }
       if (segments.length === 6 && segments[5] === "evidence") {
         requireMethod(request, "GET");
         const ref = singleQueryValue(url, "ref");
         if (!ref) throw new HttpError(400, "INVALID_REQUEST", "An evidence reference is required.");
-        sendApplicationResult(response, getExecutionEvidence({ ...input, attemptId: segments[4]!, ref }));
+        sendApplicationResult(
+          response,
+          getExecutionEvidence({ ...input, attemptId: segments[4]!, ref }),
+        );
         return;
       }
       requireNoQuery(url);
@@ -358,22 +434,46 @@ async function handleRequest(
         requireMethod(request, "POST");
         requireAllowedOrigin(request, context.origin);
         requireJsonContentType(request);
-        const body = await readJsonRecord(request, ["item_id", "instructions", "retry_of", "expected_revision", "model"]);
-        if (typeof body.item_id !== "string" || typeof body.expected_revision !== "string"
-          || Object.entries(body).some(([key, value]) => key !== 'model' && typeof value !== "string")) {
+        const body = await readJsonRecord(request, [
+          "item_id",
+          "instructions",
+          "retry_of",
+          "expected_revision",
+          "model",
+        ]);
+        if (
+          typeof body.item_id !== "string" ||
+          typeof body.expected_revision !== "string" ||
+          Object.entries(body).some(([key, value]) => key !== "model" && typeof value !== "string")
+        ) {
           throw new HttpError(400, "INVALID_REQUEST", "Execution input is invalid.");
         }
         const task = showBacklogItem({ ...input, itemId: body.item_id });
-        if (!task.ok) { sendApplicationResult(response, task); return; }
+        if (!task.ok) {
+          sendApplicationResult(response, task);
+          return;
+        }
         if (task.data.item.revision !== body.expected_revision) {
-          sendApplicationResult(response, { ok: false, error: { code: "REVISION_MISMATCH", message: "Task changed; reload before starting work." } });
+          sendApplicationResult(response, {
+            ok: false,
+            error: {
+              code: "REVISION_MISMATCH",
+              message: "Task changed; reload before starting work.",
+            },
+          });
           return;
         }
         const model = await resolveModel(body.model);
-        sendApplicationResult(response, context.runtime.start({ ...input, model, itemId: body.item_id,
-          ...(typeof body.instructions === "string" ? { instructions: body.instructions } : {}),
-          ...(typeof body.retry_of === "string" ? { retryOf: body.retry_of } : {}),
-        }));
+        sendApplicationResult(
+          response,
+          context.runtime.start({
+            ...input,
+            model,
+            itemId: body.item_id,
+            ...(typeof body.instructions === "string" ? { instructions: body.instructions } : {}),
+            ...(typeof body.retry_of === "string" ? { retryOf: body.retry_of } : {}),
+          }),
+        );
         return;
       }
       if (segments.length === 5) {
@@ -381,27 +481,59 @@ async function handleRequest(
         sendApplicationResult(response, showExecution({ ...input, attemptId: segments[4]! }));
         return;
       }
-      if (segments.length === 6 && ["stop", "steer", "confirm-interrupted", "decide"].includes(segments[5]!)) {
+      if (
+        segments.length === 6 &&
+        ["stop", "steer", "confirm-interrupted", "decide"].includes(segments[5]!)
+      ) {
         requireMethod(request, "POST");
         requireAllowedOrigin(request, context.origin);
         requireJsonContentType(request);
         const action = segments[5];
-        const body = await readJsonRecord(request, action === "stop" ? ["expected_revision"]
-          : action === "steer" ? ["expected_revision", "message"]
-          : action === "decide" ? ["expected_revision", "decision", "note"] : ["expected_revision", "note"]);
-        if (typeof body.expected_revision !== "string" || Object.values(body).some(value => typeof value !== "string")) {
+        const body = await readJsonRecord(
+          request,
+          action === "stop"
+            ? ["expected_revision"]
+            : action === "steer"
+              ? ["expected_revision", "message"]
+              : action === "decide"
+                ? ["expected_revision", "decision", "note"]
+                : ["expected_revision", "note"],
+        );
+        if (
+          typeof body.expected_revision !== "string" ||
+          Object.values(body).some((value) => typeof value !== "string")
+        ) {
           throw new HttpError(400, "INVALID_REQUEST", "Execution mutation is invalid.");
         }
-        const mutation = { ...input, attemptId: segments[4]!, expectedRevision: body.expected_revision };
+        const mutation = {
+          ...input,
+          attemptId: segments[4]!,
+          expectedRevision: body.expected_revision,
+        };
         if (action === "stop") sendApplicationResult(response, context.runtime.stop(mutation));
         else if (action === "steer") {
-          if (typeof body.message !== "string" || !body.message.trim()) throw new HttpError(400, "INVALID_REQUEST", "An instruction message is required.");
-          sendApplicationResult(response, await context.runtime.steer({ ...mutation, message: body.message }));
-        }
-        else if (action === "confirm-interrupted") sendApplicationResult(response, context.runtime.confirmInterrupted({ ...mutation, note: String(body.note ?? "") }));
+          if (typeof body.message !== "string" || !body.message.trim())
+            throw new HttpError(400, "INVALID_REQUEST", "An instruction message is required.");
+          sendApplicationResult(
+            response,
+            await context.runtime.steer({ ...mutation, message: body.message }),
+          );
+        } else if (action === "confirm-interrupted")
+          sendApplicationResult(
+            response,
+            context.runtime.confirmInterrupted({ ...mutation, note: String(body.note ?? "") }),
+          );
         else {
-          if (body.decision !== "accepted" && body.decision !== "rework") throw new HttpError(400, "INVALID_REQUEST", "Acceptance decision is invalid.");
-          sendApplicationResult(response, decideExecution({ ...mutation, decision: body.decision, note: String(body.note ?? "") }));
+          if (body.decision !== "accepted" && body.decision !== "rework")
+            throw new HttpError(400, "INVALID_REQUEST", "Acceptance decision is invalid.");
+          sendApplicationResult(
+            response,
+            decideExecution({
+              ...mutation,
+              decision: body.decision,
+              note: String(body.note ?? ""),
+            }),
+          );
         }
         return;
       }
@@ -409,7 +541,11 @@ async function handleRequest(
 
     if (segments[0] === "api" && segments[1] === "projects" && segments[3] === "plans") {
       requireNoQuery(url);
-      const input = { workspaceDir: context.workspaceDir, projectId: segments[2]!, planId: segments[4] ?? "" };
+      const input = {
+        workspaceDir: context.workspaceDir,
+        projectId: segments[2]!,
+        planId: segments[4] ?? "",
+      };
       if (segments.length === 5) {
         requireMethod(request, "GET");
         sendApplicationResult(response, showPlanRevision(input));
@@ -423,7 +559,10 @@ async function handleRequest(
         if (typeof body.expected_revision !== "string" || !body.expected_revision.trim()) {
           throw new HttpError(400, "INVALID_REQUEST", "Plan revision is required.");
         }
-        sendApplicationResult(response, completePlan({ ...input, expectedRevision: body.expected_revision }));
+        sendApplicationResult(
+          response,
+          completePlan({ ...input, expectedRevision: body.expected_revision }),
+        );
         return;
       }
       if (segments.length === 6 && segments[5] === "revision") {
@@ -431,14 +570,22 @@ async function handleRequest(
         requireAllowedOrigin(request, context.origin);
         requireJsonContentType(request);
         const body = await readJsonRecord(request, ["draft", "expected_revision", "confirm"]);
-        if (typeof body.expected_revision !== "string" || !Object.hasOwn(body, "draft")
-          || (body.confirm !== undefined && typeof body.confirm !== "string")) {
+        if (
+          typeof body.expected_revision !== "string" ||
+          !Object.hasOwn(body, "draft") ||
+          (body.confirm !== undefined && typeof body.confirm !== "string")
+        ) {
           throw new HttpError(400, "INVALID_REQUEST", "Revision input is invalid.");
         }
-        sendApplicationResult(response, revisePlan({ ...input, draft: body.draft,
-          expectedRevision: body.expected_revision,
-          ...(body.confirm === undefined ? {} : { confirm: body.confirm }),
-        }));
+        sendApplicationResult(
+          response,
+          revisePlan({
+            ...input,
+            draft: body.draft,
+            expectedRevision: body.expected_revision,
+            ...(body.confirm === undefined ? {} : { confirm: body.confirm }),
+          }),
+        );
         return;
       }
     }
@@ -467,25 +614,25 @@ function parseRequestUrl(request: IncomingMessage, origin: string): URL {
 
 function decodePathSegments(pathname: string): string[] {
   try {
-    return pathname.split("/").filter(Boolean).map((segment) => decodeURIComponent(segment));
+    return pathname
+      .split("/")
+      .filter(Boolean)
+      .map((segment) => decodeURIComponent(segment));
   } catch {
     throw new HttpError(400, "INVALID_REQUEST", "Request path is invalid.");
   }
 }
 
 function matches(actual: string[], expected: string[]): boolean {
-  return actual.length === expected.length
-    && actual.every((segment, index) => segment === expected[index]);
+  return (
+    actual.length === expected.length &&
+    actual.every((segment, index) => segment === expected[index])
+  );
 }
 
 function requireMethod(request: IncomingMessage, expected: string): void {
   if (request.method === expected) return;
-  throw new HttpError(
-    405,
-    "METHOD_NOT_ALLOWED",
-    "Method not allowed.",
-    { allow: expected },
-  );
+  throw new HttpError(405, "METHOD_NOT_ALLOWED", "Method not allowed.", { allow: expected });
 }
 
 function requireNoQuery(url: URL): void {
@@ -518,15 +665,21 @@ async function readUpdateBody(
 ): Promise<{ status?: string; title?: string; body?: string; expected_revision?: string }> {
   const record = await readJsonRecord(request, ["status", "title", "body", "expected_revision"]);
   const content = Object.hasOwn(record, "title") || Object.hasOwn(record, "body");
-  if ((content && Object.hasOwn(record, "status")) || (!content && typeof record.status !== "string")
-    || Object.values(record).some(value => typeof value !== "string")
-    || (content && (typeof record.expected_revision !== "string" || !record.expected_revision))) {
+  if (
+    (content && Object.hasOwn(record, "status")) ||
+    (!content && typeof record.status !== "string") ||
+    Object.values(record).some((value) => typeof value !== "string") ||
+    (content && (typeof record.expected_revision !== "string" || !record.expected_revision))
+  ) {
     throw new HttpError(400, "INVALID_REQUEST", "Request body is invalid.");
   }
   return record as { status?: string; title?: string; body?: string; expected_revision?: string };
 }
 
-async function readJsonRecord(request: IncomingMessage, allowedKeys: string[]): Promise<Record<string, unknown>> {
+async function readJsonRecord(
+  request: IncomingMessage,
+  allowedKeys: string[],
+): Promise<Record<string, unknown>> {
   const raw = await readBody(request);
   let value: unknown;
   try {
@@ -564,10 +717,7 @@ async function readBody(request: IncomingMessage): Promise<string> {
   return Buffer.concat(chunks).toString("utf8");
 }
 
-function sendApplicationResult<T>(
-  response: ServerResponse,
-  result: ApplicationResult<T>,
-): void {
+function sendApplicationResult<T>(response: ServerResponse, result: ApplicationResult<T>): void {
   if (result.ok) {
     sendJson(response, 200, result);
     return;
@@ -617,7 +767,7 @@ function serveStatic(
     sendText(
       response,
       200,
-      "<!doctype html><html><head><meta charset=\"utf-8\"><title>ProjectOps Workbench</title></head><body><main><h1>ProjectOps Workbench</h1><p>The frontend is not built yet.</p></main></body></html>",
+      '<!doctype html><html><head><meta charset="utf-8"><title>ProjectOps Workbench</title></head><body><main><h1>ProjectOps Workbench</h1><p>The frontend is not built yet.</p></main></body></html>',
       "text/html; charset=utf-8",
     );
     return;
@@ -684,13 +834,20 @@ function sendText(
 
 function contentTypeFor(file: string): string {
   switch (path.extname(file).toLowerCase()) {
-    case ".html": return "text/html; charset=utf-8";
-    case ".js": return "text/javascript; charset=utf-8";
-    case ".css": return "text/css; charset=utf-8";
-    case ".json": return "application/json; charset=utf-8";
-    case ".svg": return "image/svg+xml";
-    case ".png": return "image/png";
-    default: return "application/octet-stream";
+    case ".html":
+      return "text/html; charset=utf-8";
+    case ".js":
+      return "text/javascript; charset=utf-8";
+    case ".css":
+      return "text/css; charset=utf-8";
+    case ".json":
+      return "application/json; charset=utf-8";
+    case ".svg":
+      return "image/svg+xml";
+    case ".png":
+      return "image/png";
+    default:
+      return "application/octet-stream";
   }
 }
 
@@ -700,10 +857,7 @@ function resolveStaticRoot(staticDir: string): string {
     if (!statSync(root).isDirectory()) throw new Error("not a directory");
     return root;
   } catch {
-    throw new WorkbenchServerStartError(
-      "STATIC_ROOT_INVALID",
-      "Workbench static root is invalid.",
-    );
+    throw new WorkbenchServerStartError("STATIC_ROOT_INVALID", "Workbench static root is invalid.");
   }
 }
 
@@ -719,11 +873,11 @@ function resolveDefaultStaticRoot(): string | undefined {
         const indexHtml = path.join(root, "index.html");
         const appJs = path.join(root, "app.js");
         if (
-          statSync(root).isDirectory()
-          && existsSync(indexHtml)
-          && statSync(indexHtml).isFile()
-          && existsSync(appJs)
-          && statSync(appJs).isFile()
+          statSync(root).isDirectory() &&
+          existsSync(indexHtml) &&
+          statSync(indexHtml).isFile() &&
+          existsSync(appJs) &&
+          statSync(appJs).isFile()
         ) {
           return root;
         }
@@ -737,7 +891,10 @@ function resolveDefaultStaticRoot(): string | undefined {
 
 function isContained(root: string, candidate: string): boolean {
   const relative = path.relative(root, candidate);
-  return relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative));
+  return (
+    relative === "" ||
+    (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative))
+  );
 }
 
 function validateListenOptions(host: string, port: number): void {
@@ -764,10 +921,12 @@ function listen(
     const onError = (error: NodeJS.ErrnoException): void => {
       server.off("listening", onListening);
       if (error.code === "EADDRINUSE") {
-        reject(new WorkbenchServerStartError(
-          "PORT_UNAVAILABLE",
-          `Port ${port} is unavailable on ${host}.`,
-        ));
+        reject(
+          new WorkbenchServerStartError(
+            "PORT_UNAVAILABLE",
+            `Port ${port} is unavailable on ${host}.`,
+          ),
+        );
         return;
       }
       reject(new WorkbenchServerStartError("START_FAILED", "Workbench server could not start."));
