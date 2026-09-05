@@ -328,7 +328,8 @@ Docs HTTP 测试覆盖正常阅读、缺失、非 Markdown、路径越界和 sym
 普通内容链接使用统一的 link/link-hover 变量，已访问链接保持同一可读颜色；hover/focus 同时加强下划线，
 不依赖浏览器默认蓝紫色。基础链接选择器保持低优先级，品牌、导航、按钮等组件保留自己的语义样式。
 新页面的内容链接默认复用基础层，避免逐页补充颜色。新增主题颜色集中到 theme.css，以语义变量引用；
-阅读区域复用 bg-reading、text-reading、reading-measure、reading-line-height。Alpha 阶段不重排既有布局，
+阅读区域复用 bg-reading、text-reading、reading-measure、reading-line-height。Overview 使用两列响应式网格与
+独立内容高度，条目标题、元信息和 ID 纵向排列，相关样式限定在 overview-card 下，避免影响详情布局。
 不引入 CSS framework 或完整设计系统。
 
 
