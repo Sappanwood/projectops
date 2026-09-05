@@ -7,6 +7,7 @@ import { ItemNotFoundError, readItemFile } from "../backlog/itemFs.js";
 import { loadStore, StoreNotFoundError, StoreParseError } from "../backlog/storeFs.js";
 import { PLAN_SCHEMA, type Plan } from "../plan/plan.js";
 import { PlanNotFoundError, PlanParseError, readPlan } from "../plan/planFs.js";
+import { listPlanRuns, validatePlanRunCompletion } from '../application/planRunApi.js';
 
 export type ReportGenerationInput = {
   projectId: string;
@@ -138,6 +139,18 @@ function deriveReport(input: ReportDerivationInput): Report {
  */
 export function writeGeneratedReport(input: GeneratedReportInput): Report {
   const report = generateReport(input);
+  const runs = listPlanRuns({ workspaceDir: input.workspaceRoot, projectId: input.projectId, planId: input.planId });
+  if (!runs.ok) throw new ReportGenerationError(`Plan run records are unavailable: ${runs.error.message}`);
+  const latest = runs.data.runs[0];
+  if (latest) {
+    const validation = validatePlanRunCompletion({ workspaceDir: input.workspaceRoot, projectId: input.projectId, runId: latest.id });
+    if (!validation.ok) {
+      if (!input.partialAcceptance?.trim()) throw new ReportGenerationError(`Plan run is not verified complete: ${validation.error.message}`);
+      report.outcome = 'partial';
+      report.deviations.push(input.partialAcceptance.trim(), `Run ${latest.id}: ${validation.error.message}`);
+    }
+    report.verification.push(`Plan run: ${latest.id}; state: ${latest.state}`);
+  }
   writeReport(input.workspaceRoot, input.reportsRoot, report);
   return report;
 }

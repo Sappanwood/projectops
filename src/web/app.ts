@@ -1,3 +1,4 @@
+import { createPlanRunUi } from "./planRunUi.js";
 import { createExecutionUi } from "./executionUi.js";
 import { createFoundationUi } from "./foundationUi.js";
 import { isReadPage } from "./readPagesView.js";
@@ -53,6 +54,7 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
     render();
   });
 
+  const planRuns = createPlanRunUi(container, apiClient, () => state);
   const executions = createExecutionUi(container, apiClient, () => state, refresh);
   const foundation = createFoundationUi(container, apiClient, () => state, refresh);
 
@@ -77,6 +79,7 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
     container.innerHTML = renderApp(state);
     foundation.render();
     executions.render();
+    planRuns.render();
     renderedProject = state.selectedProjectId;
     for (const detail of container.querySelectorAll?.<HTMLDetailsElement>("details[data-reading-key]") ?? []) {
       const open = readingDetails.get(`${renderedProject}:${detail.dataset.readingKey}`);
@@ -438,6 +441,7 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
       backlog.destroy();
       foundation.destroy();
       executions.destroy();
+      planRuns.destroy();
       container.removeEventListener("submit", handleSubmit);
       container.removeEventListener("click", handleClick);
       container.removeEventListener("change", handleChange);

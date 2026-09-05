@@ -330,3 +330,14 @@ Workbench `--pi` 使用本机 Pi 的模型、凭据、AGENTS 与 skills，禁用
 纯进展事件写入保留当前控制 revision；停止、追加指示和生命周期变更仍更新 revision 并校验 CAS，持续输出不会使控制操作持续冲突。
 
 验证结果提供“查看证据正文”。GET `/api/projects/<project>/executions/<attempt>/evidence?ref=<exact-ref>` 只接受该尝试的验证引用，核对静态 containment 与完整内容 SHA256 后返回最多 65,536 字符预览及 truncated 标记；缺失或篡改返回诊断，页面清除旧正文，不能以旧预览冒充当前有效证据。
+
+
+## Plan run 的创建与控制
+
+`pops plan-run create <project> <plan> --expected-revision <plan-revision> --json` 冻结当前已批准物化 Plan；返回 `{ok:true,data:{run,diagnostics}}`。
+`list` 返回 `data.runs`（最新在前），`show` 返回 `data.run`；mutation 使用 run.revision，与 Plan/attempt revision 不同。
+`pause`、`resume --note`、`close-stopped --note` 必带 `--expected-revision`；恢复时若代码基线变化，还须核对并传 `--baseline-digest`，不能仅为绕过诊断盲传。
+CLI 不创建短命 Pi 进程来冒充持续调度；Workbench 的同一 runtime 持有 handles 并自动推进已启动 run。Web 提供创建/启动、暂停、停止、恢复、终止入口。
+
+完成前必须核对实际 run/node/attempt、验证与验收证据；Backlog done 或已有 Report 不替代依赖满足事实。unknown 必须先核实旧工作停止再确认中断。
+同项目旧 run 未终止时不新建，不能以删记录或复制计划绕过。输入修订导致旧 run 无法继续时，保留旧快照并终止，再以新版本建 run。

@@ -251,3 +251,22 @@ Plan 修订采用草案 JSON 输入，先查看变更与受影响任务，再确
 这不是操作系统 sandbox，适用于受信任本地 workspace。Pi session 保存在 workspace 的 `.pops/runtime/pi/<attempt-id>/`；执行记录保留 session ID 和最近 200 条进展，不复制完整会话。
 
 首版不承载 Pi extension 的交互 UI；若 Pi 在最终回复中请求补充信息，填写补充指示后明确重试当前任务，保留前次尝试。
+
+
+### 串行 Plan 执行
+
+在 Plan 详情的“计划执行”区域冻结当前已批准、已物化的计划。创建只保存快照，点击启动后容量为一，按显式依赖和优先级推进。
+当前任务成功后仍等待验证和显式验收；下游只有在上游已验收且成果仍在当前 Repo 基线中时开始。
+暂停只停止后续派发，停止当前另发中止请求。失败暂停后填写核对说明再恢复；代码变化需提供检查后的当前 baseline digest。
+修改计划不会改写旧 run；停止旧工作、确认 unknown 并终止旧 run 后，才以新版本重新创建。已完成任务复用需要指定 accepted attempt 与人工说明。
+
+```bash
+pops plan-run create projectops <plan-id> --expected-revision <plan-revision> --json
+pops plan-run list projectops --json
+pops plan-run show projectops <run-id> --json
+pops plan-run pause projectops <run-id> --expected-revision <run-revision> --json
+pops plan-run resume projectops <run-id> --note '已核对输入和代码基线' --expected-revision <run-revision> --json
+pops plan-run close-stopped projectops <run-id> --note '旧工作已停止，终止本次范围' --expected-revision <run-revision> --json
+```
+
+CLI 保存控制意图，自动派发由启用 Pi 的 Workbench 服务负责；不要为同一数据 workspace 启动多个执行服务。

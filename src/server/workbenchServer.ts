@@ -1,3 +1,5 @@
+import { handlePlanRunRoute } from './planRunRoutes.js';
+import { listPlanRuns, PlanRunRuntime } from '../application/planRunApi.js';
 import { getExecutionEvidence } from '../application/executionEvidence.js';
 import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
@@ -68,6 +70,7 @@ type RequestContext = {
   origin: string;
   staticRoot?: string;
   runtime: ExecutionRuntime;
+  planRuns: PlanRunRuntime;
 };
 
 type HttpErrorCode =
@@ -136,7 +139,19 @@ export async function startWorkbenchServer(
   for (const project of workspace.data.projects) {
     runtime.recover({ workspaceDir: options.workspaceDir, projectId: project.id });
   }
+  const planRuns = new PlanRunRuntime(runtime);
+  const timer = setInterval(() => {
+    for (const project of workspace.data.projects) {
+      const q = { workspaceDir: options.workspaceDir, projectId: project.id };
+      const listed = listPlanRuns(q);
+      if (!listed.ok) continue;
+      for (const run of listed.data.runs) if (run.state === "running" || run.state === "paused" || (run.state === "ready" && run.controls.at(-1)?.action === "resume"))
+        planRuns.advance({ ...q, runId: run.id, expectedRevision: run.revision });
+    }
+  }, 1000);
+  timer.unref();
   context = {
+    planRuns,
     workspaceDir: options.workspaceDir,
     origin,
     runtime,
@@ -154,6 +169,7 @@ export async function startWorkbenchServer(
     close() {
       if (closing !== undefined) return closing;
       if (!server.listening) return Promise.resolve();
+      clearInterval(timer);
       closing = closeServer(server);
       return closing;
     },
@@ -277,6 +293,14 @@ async function handleRequest(
       else sendApplicationResult(response, showDocument({...input, path: documentPath}));
       return;
     }
+
+    if (await handlePlanRunRoute(segments, request.method, context.workspaceDir, context.planRuns, {
+      method: expected => requireMethod(request, expected), noQuery: () => requireNoQuery(url),
+      query: name => singleQueryValue(url, name),
+      body: async keys => { requireAllowedOrigin(request, context.origin); requireJsonContentType(request); return readJsonRecord(request, keys); },
+      send: result => sendApplicationResult(response, result),
+      invalid: message => { throw new HttpError(400, "INVALID_REQUEST", message); },
+    })) return;
 
     if (segments[0] === "api" && segments[1] === "projects" && segments[3] === "executions") {
       const input = { workspaceDir: context.workspaceDir, projectId: segments[2]! };

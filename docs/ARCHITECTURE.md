@@ -379,3 +379,13 @@ Docs HTTP 测试覆盖正常阅读、缺失、非 Markdown、路径越界和 sym
 纯进展事件写入保留当前控制 revision；停止、追加指示和生命周期变更仍更新 revision 并校验 CAS，持续输出不会使控制操作持续冲突。
 
 Pi 0.85.0 发布包的根入口静态引用 pi-server，但未声明依赖；项目显式固定 `@earendil-works/pi-server@0.85.0` 补齐该上游依赖。升级 Pi 时重新核对并移除已不需要的补充依赖。Pi SettingsManager 读取也需要临时文件锁，读取失败明确返回配置权限诊断，不静默使用空模型。
+
+
+## 串行 Plan run
+
+`planRun/planRun.ts` 的 `execution/PlanRun@1` 独立于 Plan 意图，保存在 manifest executions root 的 `plan-runs/`。记录 Plan/任务快照、mapping、显式依赖、每节点 attempt 历史、初始与当前 Repo 基线、控制说明和诊断。
+`application/planRunApi.ts` 组合既有 ExecutionRuntime 与验收证据；不从数组顺序补依赖，不创建第二套任务验收。`server/planRunRoutes.ts` 复用同一个 execution runtime，定时推进已启动的运行；`web/planRunUi.ts` 展示快照、依赖及控制。
+
+运行状态为 ready/running/paused/completed/stopped，节点为 pending/running/awaiting_acceptance/accepted/failed/unknown。生命周期观察在输入漂移时仍更新，输入和基线验证控制是否继续派发。纯查询不派发，创建 ready 不自动启动；容量一的调度在用户显式启动后进行。
+已验收节点可使用其历史快照证据，run 当前 baseline 必须等于当前 Repo；未开始节点仍核对冻结 revision。完成复用需要当前有效 accepted attempt、完整验证证据和人工 reuse note。
+Report 写入先按当前 Plan/Backlog 规则派生，再核对最新 matching run 的实际输入、基线和证据；未确认的 run 即使 Backlog 手动 done 也不能生成 completed。

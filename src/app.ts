@@ -16,6 +16,7 @@ import { planApprove } from "./useCases/planApprove.js";
 import { planMaterialize } from "./useCases/planMaterialize.js";
 import { planRevise } from "./useCases/planRevise.js";
 import { executionCommand } from "./useCases/executionCommand.js";
+import { planRunCommand } from './useCases/planRunCommand.js';
 import { docsScaffold } from "./useCases/docsScaffold.js";
 import { docsCheck } from "./useCases/docsCheck.js";
 import { reportCreate } from "./useCases/reportCreate.js";
@@ -57,6 +58,10 @@ Commands:
   plan approve <project> <plan> --review-note <note>  Approve a validated Plan
   plan materialize <project> <plan>  Materialize an approved Plan into Backlog
   plan revise <project> <plan> --input <draft.json> --expected-revision <revision> [--confirm <token>]  Preview or confirm a revision
+  plan-run create <project> <plan> --expected-revision <plan-revision>  Freeze a Plan run
+  plan-run list <project> [--plan <plan>]  List Plan execution runs
+  plan-run show <project> <run>  Show nodes, attempts and dependency evidence
+  plan-run pause|resume|close-stopped <project> <run> --expected-revision <revision> [--note <text>] [--baseline-digest <digest>]
   docs scaffold <project>       Create the fixed Project Docs files
   docs check <project>          Check the fixed Project Docs files
   report create <project> <plan> --verification <evidence>  Create a Delivery Report
@@ -91,6 +96,8 @@ export function runCli(args: readonly string[], io: CliIO, cwd = process.cwd()):
 
   const [command, ...rest] = args;
   switch (command) {
+    case "plan-run":
+      return planRunCommand(rest, io, cwd);
     case "execution":
       return executionCommand(rest, io, cwd);
     case "init":
