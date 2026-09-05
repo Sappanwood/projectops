@@ -42,6 +42,17 @@ Plans 和 Reports 页面可展开完整详情，分别查看审批、materializa
 开发者也可以增加 `--static-dir <path>` 覆盖静态资源目录。可选 `--host` 只接受
 loopback 地址，`--port 0` 仅适合测试或一次性隔离运行。使用 `Ctrl-C` 或发送 `SIGTERM` 会关闭 listener。
 
+本开发工作区也已接入统一启动器：
+
+```bash
+/home/ling/workspace/workspace-control/bin/workspace dev start projectops
+```
+
+此登记使用 `/home/ling/workspace` 中已初始化的 ProjectOps 数据，Web 与 API 共用
+`http://127.0.0.1:12500`；启动时先构建，`Ctrl-C` 关闭本次启动的进程。
+新初始化的 ProjectOps 项目列表为空，后续使用 `pops project add <子目录>` 显式登记，
+不会自动导入 Workspace Control Catalog 中的项目或过程数据。
+
 ## 验证 Workbench
 
 ```bash

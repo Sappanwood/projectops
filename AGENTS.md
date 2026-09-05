@@ -112,3 +112,11 @@ node dist/cli.js --version
 - 根据路由表检查 `README.md`、`docs/PRODUCT_SPEC.md` 和 `docs/ARCHITECTURE.md` 是否需要同步。
 - 不以 coverage、理论 edge case、未声明平台或 production hardening 阻塞 Alpha 交付。
 
+
+## 本工作区开发服务
+
+Workspace Control Catalog 已登记 `projectops` 单端口服务，Web/API 共用 `127.0.0.1:12500`。
+使用 `/home/ling/workspace/workspace-control/bin/workspace dev start projectops` 启动；
+命令会先构建，再以 `/home/ling/workspace` 为 ProjectOps 数据 workspace。
+该目录的 `.pops/workspace.json` 是 ProjectOps 自己的 manifest；不自动导入 Workspace Control Catalog。
+端口与启动命令的 authority 仍是 Workspace Control Catalog，调整时同步本节。
