@@ -10,6 +10,7 @@ test("Overview keeps long titles, IDs and metadata readable at every viewport", 
     }
     for (const item of payload.data.retrospectives.recent) {
       item.id += "-" + "unbroken".repeat(24);
+      item.summary = "回顾摘要需要完整换行".repeat(16);
       item.path += "unbroken".repeat(24);
     }
     await route.fulfill({ response, json: payload });

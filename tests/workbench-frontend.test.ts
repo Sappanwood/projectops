@@ -91,6 +91,7 @@ const mockProjectOverview: WorkbenchProjectOverview = {
     },
   ],
   docs: {
+    documents: [],
     healthy: false,
     problems: [
       {
@@ -111,6 +112,7 @@ const mockProjectOverview: WorkbenchProjectOverview = {
         status: "inbox",
         created_at: "2026-09-04T10:00:00Z",
         path: "inbox/2026-09-04-retro-1.md",
+        summary: "Retrospective preview",
       },
     ],
   },

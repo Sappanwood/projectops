@@ -3,6 +3,7 @@ import { readPlanExecution, type PlanExecution, type WorkbenchPlan } from "./pla
 import type { Plan } from "../plan/plan.js";
 import type { Report } from "../report/report.js";
 import { PROJECT_DOC_TEMPLATES } from "../docs/projectDocs.js";
+import { DocumentReadError, readProjectDocument } from "../docs/documentReader.js";
 import {
   ITEM_STATUSES,
   type ItemStatus,
@@ -82,6 +83,7 @@ export type WorkbenchProjectOverview = {
   docs: {
     healthy: boolean;
     problems: ProjectDocsProblem[];
+    documents: Array<{ path: string; readable: boolean; issue: string | null }>;
   };
   retrospectives: {
     counts: Record<RetrospectiveStatus, number>;
@@ -90,6 +92,7 @@ export type WorkbenchProjectOverview = {
       status: RetrospectiveStatus;
       created_at: string;
       path: string;
+      summary: string;
     }>;
   };
   diagnostics: WorkbenchDiagnostic[];
@@ -182,7 +185,7 @@ export function getWorkbenchProjectOverview(
     backlog,
     plans,
     reports,
-    docs,
+    docs: { ...docs, documents: readOverviewDocuments(workspace.root, resolveProjectPath(workspace.root, registration.path), docs.problems) },
     retrospectives,
     diagnostics: sortDiagnostics(diagnostics),
   });
@@ -289,7 +292,7 @@ function readDocs(
   workspaceRoot: string,
   projectDir: string,
   diagnostics: WorkbenchDiagnostic[],
-): WorkbenchProjectOverview["docs"] {
+): Omit<WorkbenchProjectOverview["docs"], "documents"> {
   try {
     const problems = checkProjectDocs(workspaceRoot, projectDir);
     return { healthy: problems.length === 0, problems };
@@ -298,6 +301,17 @@ function readDocs(
     diagnostics.push({ source: "docs", code: "DOMAIN_UNAVAILABLE", message: "Project Docs could not be checked." });
     return { healthy: false, problems: [] };
   }
+}
+
+function readOverviewDocuments(workspace: string, project: string, problems: ProjectDocsProblem[]): WorkbenchProjectOverview["docs"]["documents"] {
+  return PROJECT_DOC_TEMPLATES.map(({path}) => {
+    try {
+      readProjectDocument(workspace, project, path);
+      return {path, readable:true, issue:problems.find(problem => problem.path === path)?.issue ?? null};
+    } catch (error) {
+      return {path, readable:false, issue:error instanceof DocumentReadError ? error.message : "文档无法读取。"};
+    }
+  });
 }
 
 function readRetrospectives(
@@ -311,15 +325,28 @@ function readRetrospectives(
     .filter((record) => record.project === projectId);
   for (const record of records) counts[record.status] += 1;
   const recent = records
-    .sort((left, right) => right.created_at.localeCompare(left.created_at) || left.id.localeCompare(right.id))
+    .sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at) || left.id.localeCompare(right.id))
     .slice(0, 5)
     .map((record) => ({
       id: record.id,
       status: record.status,
       created_at: record.created_at,
       path: record.path,
+      summary: retrospectiveSummary(record.body, record.id),
     }));
   return { counts, recent };
+}
+
+function retrospectiveSummary(body: string, id: string): string {
+  const text = body.replace(/```[^]*?```|~~~[^]*?~~~/g, "")
+    .split(/\r?\n/).filter(line => !/^\s*(#{1,6}\s|[-*_]{3,}\s*$)/.test(line))
+    .join("\n").trim().split(/\n\s*\n/)[0]!
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/<[^>]*>/g, "").replace(/^[\s>*+-]+/gm, "")
+    .replace(/[*_`]/g, "").replace(/\s+/g, " ").trim();
+  const characters = Array.from(text);
+  return characters.length > 160 ? characters.slice(0, 160).join("") + "…" : text || id;
 }
 
 function emptyBacklogCounts(): Record<ItemStatus, number> {

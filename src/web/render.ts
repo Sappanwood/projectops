@@ -398,7 +398,8 @@ function renderOverviewTab(overview: WorkbenchProjectOverview): string {
         <span class="badge badge-active">${rCounts.active} active</span>
         <span class="badge badge-archive">${rCounts.archive} archive</span>
       </div>
-      <div class="card-body">${renderRecentRetrospectivesList(overview.retrospectives.recent, projectId)}</div>
+      ${overviewPreview(overview, "retrospectives", overview.retrospectives.recent.length, Object.values(rCounts).reduce((sum, count) => sum + count, 0))}
+      <div class="card-body">${overview.retrospectives.recent.length === 0 && overview.diagnostics.some(d => d.source === "retrospectives") ? "" : renderRecentRetrospectivesList(overview.retrospectives.recent, projectId)}</div>
       <a href="${escapeHtml(overviewLink(projectId, "retrospectives"))}" class="card-link">查看全部 Retrospectives →</a>
     </section>
     <section class="overview-card overview-docs" aria-labelledby="card-docs-title">
@@ -406,6 +407,11 @@ function renderOverviewTab(overview: WorkbenchProjectOverview): string {
       <div class="card-body"><span class="badge ${overview.docs.healthy ? "badge-healthy" : "badge-problem"}">
         ${overview.docs.healthy ? "✓ 标准文档检查通过" : overview.docs.problems.length > 0 ? `⚠ ${overview.docs.problems.length} 个检查问题` : "⚠ 检查不可用"}
       </span></div>
+      <p class="muted">检查范围：四份标准文档的文件类型与一级标题，不代表内容新鲜度或语义正确性。</p>
+      <ul class="overview-document-list">${overview.docs.documents.map(document => `<li>
+        ${document.readable ? `<a href="${escapeHtml(formatRoute({projectId, view:"docs", documentPath:document.path, returnTo:formatRoute({projectId,view:"overview"})}))}">${escapeHtml(document.path)}</a>` : `<span>${escapeHtml(document.path)}</span>`}
+        <small class="${document.issue ? "document-issue" : "muted"}">${document.issue ? escapeHtml(document.issue) : "可阅读"}</small>
+      </li>`).join("")}</ul>
       <a href="${escapeHtml(overviewLink(projectId, "docs"))}" class="card-link">查看全部 Docs →</a>
     </section>
   </div>`;
@@ -466,6 +472,6 @@ function renderReportsList(reports: WorkbenchProjectOverview["reports"], project
 
 function renderRecentRetrospectivesList(recent: WorkbenchProjectOverview["retrospectives"]["recent"], projectId: string): string {
   if (recent.length === 0) return `<p class="empty-list-text">当前项目暂无回顾。</p>`;
-  return `<ul class="items-list">${recent.map(record => overviewRow(record.id, record.path,
+  return `<ul class="items-list">${recent.map(record => overviewRow(record.summary, record.id,
     `<span class="badge badge-${escapeHtml(record.status)}">${escapeHtml(record.status)}</span>${overviewDate(record.created_at)}`, overviewLink(projectId, "retrospectives", record.id))).join("")}</ul>`;
 }

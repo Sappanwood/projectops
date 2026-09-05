@@ -202,6 +202,55 @@ test("Overview sorts Reports by instant then ID rather than filename or timezone
   } finally { rmSync(workspaceDir,{recursive:true,force:true}); }
 });
 
+test("Overview derives readable retrospective summaries without changing records", () => {
+  const workspaceDir = setupProject();
+  try {
+    const root = path.join(workspaceDir,'retrospectives');
+    for (let i = 0; i < 7; i++) writeRetrospective(workspaceDir,root,{
+      schema:RETROSPECTIVE_SCHEMA,id:`summary-${i}`,created_at:`2026-09-05T0${i}:00:00Z`,project:i === 6 ? 'other' : 'repo-a',task:null,
+      trigger:'workflow-friction',status:'inbox',harness:'test',model:null,
+      body:i === 5 ? '## Hidden friction encountered\n\n---' : i === 3 ? '## Hidden friction encountered\n\n' + '长摘要'.repeat(100) : `## Hidden friction encountered\n\n**Readable ${i}** [details](https://example.test)\n\n## Workarounds used\nOther text`,
+    });
+    const file = path.join(root,'inbox/summary-4.md');
+    const before = readFileSync(file,'utf8');
+    writeFileSync(path.join(root,'inbox/bad.md'),'bad');
+    const result = getWorkbenchProjectOverview({workspaceDir,projectId:'repo-a'});
+    assert.ok(result.ok);
+    assert.equal(result.data.retrospectives.counts.inbox,7);
+    assert.equal(result.data.retrospectives.recent.length,5);
+    assert.equal(result.data.retrospectives.recent[0]!.summary,'summary-5');
+    assert.equal(result.data.retrospectives.recent[1]!.summary,'Readable 4 details');
+    assert.equal(Array.from(result.data.retrospectives.recent[2]!.summary).length,161);
+    assert.ok(result.data.retrospectives.recent[2]!.summary.endsWith('…'));
+    assert.ok(!result.data.retrospectives.recent.some(r => r.id === 'summary-6'));
+    assert.ok(result.data.diagnostics.some(d => d.source === 'retrospectives'));
+    assert.equal(readFileSync(file,'utf8'),before);
+  } finally { rmSync(workspaceDir,{recursive:true,force:true}); }
+});
+
+test("Overview exposes four bounded document entries with readability separate from standard checks", () => {
+  const workspaceDir = setupProject();
+  try {
+    rmSync(path.join(workspaceDir,'repo-a/AGENTS.md'));
+    writeFileSync(path.join(workspaceDir,'repo-a/docs/PRODUCT_SPEC.md'),'Readable without heading');
+    const result = getWorkbenchProjectOverview({workspaceDir,projectId:'repo-a'});
+    assert.ok(result.ok);
+    assert.deepEqual(result.data.docs.documents.map(d => d.path),['README.md','AGENTS.md','docs/PRODUCT_SPEC.md','docs/ARCHITECTURE.md']);
+    assert.equal(result.data.docs.documents[1]!.readable,false);
+    assert.match(result.data.docs.documents[1]!.issue!,/不存在/);
+    assert.equal(result.data.docs.documents[2]!.readable,true);
+    assert.match(result.data.docs.documents[2]!.issue!,/heading/);
+    assert.equal(result.data.docs.healthy,false);
+    assert.ok(!JSON.stringify(result.data.docs).includes('Readable without heading'));
+    rmSync(path.join(workspaceDir,'repo-a'),{recursive:true});
+    const unavailable = getWorkbenchProjectOverview({workspaceDir,projectId:'repo-a'});
+    assert.ok(unavailable.ok);
+    assert.equal(unavailable.data.docs.healthy,false);
+    assert.ok(unavailable.data.docs.documents.every(d => !d.readable && d.issue));
+    assert.ok(unavailable.data.diagnostics.some(d => d.source === 'docs'));
+  } finally { rmSync(workspaceDir,{recursive:true,force:true}); }
+});
+
 test("Workbench project overview combines stable domain summaries", () => {
   const workspaceDir = setupProject();
 
@@ -233,13 +282,16 @@ test("Workbench project overview combines stable domain summaries", () => {
     outcome: "completed",
     created_at: "2026-09-04T12:00:00+09:00",
   }]);
-  assert.deepEqual(first.data.docs, { healthy: true, problems: [] });
+  assert.equal(first.data.docs.healthy, true);
+  assert.deepEqual(first.data.docs.problems, []);
+  assert.ok(first.data.docs.documents.every(d => d.readable && !d.issue));
   assert.deepEqual(first.data.retrospectives.counts, { inbox: 1, active: 0, archive: 0 });
   assert.deepEqual(first.data.retrospectives.recent, [{
     id: "workbench-friction",
     status: "inbox",
     created_at: "2026-09-04T12:30:00+09:00",
     path: "inbox/workbench-friction.md",
+    summary: "Captured.",
   }]);
   assert.deepEqual(first.data.diagnostics, []);
   assert.equal(JSON.stringify(first.data).includes(workspaceDir), false);
@@ -343,6 +395,4 @@ test("Workbench project overview isolates backlog item ID mismatch as ITEM_ID_MI
     entry.code === "ITEM_ID_MISMATCH",
   ));
 });
-
-
 

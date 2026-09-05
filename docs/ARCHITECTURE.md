@@ -268,6 +268,10 @@ Overview 的 `plans[].execution` 复用 `readPlanExecution`，仅保留 material
 Overview 的 `backlog.mode` 为 active/recent，`recent` 为对应范围的最多五条预览：活动条目按进行中、待办、
 优先级、ID 排序，无活动条目时按更新时间倒序、ID 升序。计数保留全量已读取状态，Web 据 mode 显示预览范围。
 报告摘要限当前项目，按解析后的生成时间倒序、ID 升序；读取失败保留领域 diagnostics。
+Overview 回顾 projection 从现有正文派生纯文本 summary，不增加持久化标题字段；按创建时间/ID 排序，
+只输出当前项目的五条预览和状态计数。文档 projection 枚举 PROJECT_DOC_TEMPLATES 的四个固定路径，
+复用 readProjectDocument 判定 readable，正文不进入聚合响应；issue 保留不可读原因或既有标准检查问题。
+现有文档路径约束保持不变，不为 Overview 枚举扩展文档或另建文件读取实现。
 
 `getWorkbenchReadPages` 返回的 `plans[]` 在 Plan 数据上附加 `execution`，持久化 Plan schema 不变。
 `readPlanExecution` 通过共享 `showBacklogItem` 逐项读取同项目 mapping；局部读取失败只影响该条目，

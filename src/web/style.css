@@ -436,6 +436,10 @@
 }
 
 .overview-docs { grid-column: 1 / -1; }
+.overview-document-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; list-style: none; }
+.overview-document-list li { padding: .75rem; background: var(--bg-primary); border-radius: .25rem; }
+.overview-document-list small { display: block; margin-top: .35rem; }
+@media (max-width: 600px) { .overview-document-list { grid-template-columns: minmax(0, 1fr); } }
 .overview-card .card-header { flex-wrap: wrap; gap: .5rem; }
 .overview-card .card-link { align-self: flex-start; padding: .35rem 0; }
 .overview-card .item-row { flex-direction: column; align-items: stretch; padding: .85rem; gap: .5rem; }

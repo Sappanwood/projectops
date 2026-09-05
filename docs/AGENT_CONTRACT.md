@@ -202,9 +202,13 @@ archive 可重复传 `--backlog project-ops:backlog/items/<ID>.md` 关联自身�
 `pops docs check projectops --json` 只检查 README、AGENTS、产品规格与架构文档的文件类型及一级标题。
 它不会检查本文、链接、内容新鲜度或语义一致性；Agent 需另行检查契约与入口链接。
 
-Workbench 可浏览 Backlog 并在详情顶部修改状态；revision 位于技术信息中。五类内容正文默认阅读排版，
 Overview 的任务、计划、报告和回顾标题可直接进入详情，支持复制链接、新标签页打开和刷新定位。
 详情提供“返回 Overview”，当前页面会话内恢复来源滚动位置；回顾链接显式携带当前项目筛选。
+Overview 文档面板提供四份标准文档的直接链接与逐项问题，可读但不满足标准检查的文档仍可进入正文。
+回顾卡片摘要由正文派生，最多显示 160 个字符，完整内容在详情阅读；预览数和状态计数均限定当前项目，
+读取异常时显示诊断和已读取数量，不能把该数量当作完整 store 总数。
+
+Workbench 可浏览 Backlog 并在详情顶部修改状态；revision 位于技术信息中。五类内容正文默认阅读排版，
 可切换 Markdown 源码；Plan 通过任务目录定位正文，审批与 mapping 位于计划记录中。Plan 另有实时执行进度，按 task 计数，epic 不计入完成率；
 缺失或损坏任务仍占总数并显示诊断，未物化/零 task 不显示虚假的完成率。CLI 更新任务后点击 Refresh 查看最新进度，
 不通过修改 Plan 记录推进执行状态。点击 Plan 映射任务进入 Backlog，完成状态更新后点击“返回原 Plan”
