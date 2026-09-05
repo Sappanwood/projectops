@@ -15,7 +15,7 @@ export function resolvePlansRoot(
 ): string | null {
   const workspace = loadOrReport(cwd, io);
   if (workspace === null) return null;
-  if (workspace.manifest.projects[projectId] === undefined) {
+  if (!Object.hasOwn(workspace.manifest.projects, projectId)) {
     io.stderr(`Error: project "${projectId}" is not registered`);
     return null;
   }

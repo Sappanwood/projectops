@@ -1,9 +1,7 @@
 // Application use case: show a full backlog item.
 
+import { showBacklogItem } from "../application/backlogApi.js";
 import type { CliIO } from "../io.js";
-import { isItemIdForPrefix } from "../backlog/item.js";
-import { ItemNotFoundError, readItemFile } from "../backlog/itemFs.js";
-import { resolveStoreRoot } from "./backlogContext.js";
 
 export function backlogShow(
   projectId: string | undefined,
@@ -16,27 +14,15 @@ export function backlogShow(
     io.stderr("Usage: pops backlog show <project-id> <item-id> [--json]");
     return 1;
   }
-  const store = resolveStoreRoot(projectId, io, cwd);
-  if (store === null) return 1;
-  if (!isItemIdForPrefix(itemId, store.manifest.id_prefix)) {
-    io.stderr(`Error: invalid item id: ${itemId}`);
+  const result = showBacklogItem({ workspaceDir: cwd, projectId, itemId });
+  if (!result.ok) {
+    const suffix = result.error.code === "BACKLOG_STORE_NOT_FOUND"
+      ? ` Run "pops backlog init ${projectId}" first.`
+      : "";
+    io.stderr(`Error: ${result.error.message}${suffix}`);
     return 1;
   }
-
-  let item;
-  try {
-    item = readItemFile(store.root, itemId);
-  } catch (error) {
-    if (error instanceof ItemNotFoundError) {
-      io.stderr(`Error: ${error.message}`);
-      return 1;
-    }
-    throw error;
-  }
-  if (item.id !== itemId) {
-    io.stderr(`Error: item id mismatch: expected ${itemId}, got ${item.id}`);
-    return 1;
-  }
+  const { item } = result.data;
 
   if (json) {
     io.stdout(JSON.stringify(item));

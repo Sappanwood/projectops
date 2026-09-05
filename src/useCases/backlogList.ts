@@ -2,10 +2,9 @@
 
 import { parseArgs } from "node:util";
 
+import { listBacklogItems } from "../application/backlogApi.js";
 import type { CliIO } from "../io.js";
-import { ITEM_STATUSES, type BacklogItem, type ItemStatus } from "../backlog/item.js";
-import { listItemIds, readItemFile } from "../backlog/itemFs.js";
-import { resolveStoreRoot } from "./backlogContext.js";
+import { ITEM_STATUSES, type ItemStatus } from "../backlog/item.js";
 
 export function backlogList(
   projectId: string | undefined,
@@ -18,9 +17,6 @@ export function backlogList(
     io.stderr("Usage: pops backlog list <project-id> [--status <status>] [--json]");
     return 1;
   }
-  const store = resolveStoreRoot(projectId, io, cwd);
-  if (store === null) return 1;
-
   let status: ItemStatus | undefined;
   try {
     const parsed = parseArgs({
@@ -42,16 +38,22 @@ export function backlogList(
     return 1;
   }
 
-  let items = listItemIds(store.root)
-    .sort()
-    .map((id) => readItemFile(store.root, id));
-  if (status !== undefined) {
-    items = items.filter((item) => item.status === status);
+  const result = listBacklogItems({
+    workspaceDir: cwd,
+    projectId,
+    ...(status === undefined ? {} : { status }),
+  });
+  if (!result.ok) {
+    const suffix = result.error.code === "BACKLOG_STORE_NOT_FOUND"
+      ? ` Run "pops backlog init ${projectId}" first.`
+      : "";
+    io.stderr(`Error: ${result.error.message}${suffix}`);
+    return 1;
   }
+  const { items } = result.data;
 
   if (json) {
-    const summary = items.map((item) => summarize(item));
-    io.stdout(JSON.stringify({ ok: true, items: summary }));
+    io.stdout(JSON.stringify({ ok: true, items }));
   } else if (items.length === 0) {
     io.stdout("No items");
   } else {
@@ -60,9 +62,4 @@ export function backlogList(
     }
   }
   return 0;
-}
-
-function summarize(item: BacklogItem): Record<string, unknown> {
-  const { body: _body, ...rest } = item;
-  return rest;
 }

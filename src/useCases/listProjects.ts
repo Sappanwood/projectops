@@ -1,17 +1,15 @@
 // Application use case: list registered projects.
 
 import type { CliIO } from "../io.js";
-import { loadOrReport } from "./workspaceContext.js";
+import { getWorkspaceSummary } from "../application/workspaceApi.js";
 
 export function listProjects(json: boolean, io: CliIO, cwd: string): number {
-  const workspace = loadOrReport(cwd, io);
-  if (workspace === null) return 1;
-  const { manifest } = workspace;
-
-  const projects = Object.entries(manifest.projects).map(([id, registration]) => ({
-    id,
-    path: registration.path,
-  }));
+  const result = getWorkspaceSummary({ workspaceDir: cwd });
+  if (!result.ok) {
+    io.stderr(`Error: ${result.error.message}`);
+    return 1;
+  }
+  const { projects } = result.data;
 
   if (json) {
     io.stdout(JSON.stringify({ ok: true, projects }));

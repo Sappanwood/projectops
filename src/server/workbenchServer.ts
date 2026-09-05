@@ -1,0 +1,594 @@
+import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import path from "node:path";
+
+import {
+  listBacklogItems,
+  showBacklogItem,
+  updateBacklogItemStatus,
+} from "../application/backlogApi.js";
+import type {
+  ApplicationError,
+  ApplicationErrorCode,
+  ApplicationResult,
+} from "../application/result.js";
+import {
+  getWorkbenchReadPages,
+  getWorkbenchProjectOverview,
+  getWorkbenchWorkspaceOverview,
+} from "../application/workbenchReadModel.js";
+import { getWorkspaceSummary } from "../application/workspaceApi.js";
+
+const DEFAULT_HOST = "127.0.0.1";
+const DEFAULT_PORT = 7331;
+const MAX_JSON_BODY_BYTES = 64 * 1024;
+const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1", "localhost"]);
+
+export type WorkbenchServerStartErrorCode =
+  | ApplicationErrorCode
+  | "INVALID_HOST"
+  | "INVALID_PORT"
+  | "PORT_UNAVAILABLE"
+  | "STATIC_ROOT_INVALID"
+  | "START_FAILED";
+
+export class WorkbenchServerStartError extends Error {
+  constructor(
+    public readonly code: WorkbenchServerStartErrorCode,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+export type StartWorkbenchServerOptions = {
+  workspaceDir: string;
+  host?: string;
+  port?: number;
+  staticDir?: string;
+};
+
+export type WorkbenchServer = {
+  readonly host: string;
+  readonly port: number;
+  readonly origin: string;
+  readonly listening: boolean;
+  close(): Promise<void>;
+};
+
+type RequestContext = {
+  workspaceDir: string;
+  origin: string;
+  staticRoot?: string;
+};
+
+type HttpErrorCode =
+  | "INVALID_REQUEST"
+  | "METHOD_NOT_ALLOWED"
+  | "UNSUPPORTED_MEDIA_TYPE"
+  | "ORIGIN_NOT_ALLOWED"
+  | "INVALID_JSON"
+  | "REQUEST_TOO_LARGE"
+  | "ROUTE_NOT_FOUND"
+  | "INTERNAL_ERROR";
+
+class HttpError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly code: HttpErrorCode,
+    message: string,
+    public readonly headers: Record<string, string> = {},
+  ) {
+    super(message);
+  }
+}
+
+export async function startWorkbenchServer(
+  options: StartWorkbenchServerOptions,
+): Promise<WorkbenchServer> {
+  const host = options.host ?? DEFAULT_HOST;
+  const port = options.port ?? DEFAULT_PORT;
+  validateListenOptions(host, port);
+
+  const workspace = getWorkspaceSummary({ workspaceDir: options.workspaceDir });
+  if (!workspace.ok) {
+    throw new WorkbenchServerStartError(workspace.error.code, workspace.error.message);
+  }
+  const staticRoot = options.staticDir !== undefined
+    ? resolveStaticRoot(options.staticDir)
+    : resolveDefaultStaticRoot();
+
+  let context: RequestContext | undefined;
+  const server = createServer((request, response) => {
+    if (context === undefined) {
+      sendError(response, new HttpError(503, "INTERNAL_ERROR", "Workbench is not ready."));
+      return;
+    }
+    void handleRequest(request, response, context).catch(() => {
+      if (!response.headersSent) {
+        sendError(response, new HttpError(500, "INTERNAL_ERROR", "Internal server error."));
+      } else if (!response.writableEnded) {
+        response.end();
+      }
+    });
+  });
+  server.requestTimeout = 15_000;
+  server.headersTimeout = 10_000;
+  server.keepAliveTimeout = 1_000;
+
+  await listen(server, host, port);
+  const address = server.address();
+  if (address === null || typeof address === "string") {
+    server.close();
+    throw new WorkbenchServerStartError("START_FAILED", "Workbench did not bind to a TCP port.");
+  }
+  const originHost = host === "::1" ? "[::1]" : host;
+  const origin = `http://${originHost}:${address.port}`;
+  context = {
+    workspaceDir: options.workspaceDir,
+    origin,
+    ...(staticRoot === undefined ? {} : { staticRoot }),
+  };
+
+  let closing: Promise<void> | undefined;
+  return {
+    host,
+    port: address.port,
+    origin,
+    get listening() {
+      return server.listening;
+    },
+    close() {
+      if (closing !== undefined) return closing;
+      if (!server.listening) return Promise.resolve();
+      closing = closeServer(server);
+      return closing;
+    },
+  };
+}
+
+async function handleRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  context: RequestContext,
+): Promise<void> {
+  try {
+    const url = parseRequestUrl(request, context.origin);
+    const segments = decodePathSegments(url.pathname);
+
+    if (matches(segments, ["api", "workspace"])) {
+      requireMethod(request, "GET");
+      requireNoQuery(url);
+      sendApplicationResult(
+        response,
+        getWorkbenchWorkspaceOverview({ workspaceDir: context.workspaceDir }),
+      );
+      return;
+    }
+
+    if (segments.length === 3 && segments[0] === "api" && segments[1] === "projects") {
+      requireMethod(request, "GET");
+      requireNoQuery(url);
+      sendApplicationResult(
+        response,
+        getWorkbenchProjectOverview({
+          workspaceDir: context.workspaceDir,
+          projectId: segments[2] ?? "",
+        }),
+      );
+      return;
+    }
+
+    if (
+      segments.length === 4
+      && segments[0] === "api"
+      && segments[1] === "projects"
+      && segments[3] === "backlog"
+    ) {
+      requireMethod(request, "GET");
+      const status = singleQueryValue(url, "status");
+      sendApplicationResult(
+        response,
+        listBacklogItems({
+          workspaceDir: context.workspaceDir,
+          projectId: segments[2] ?? "",
+          ...(status === undefined ? {} : { status }),
+        }),
+      );
+      return;
+    }
+
+    if (
+      segments.length === 5
+      && segments[0] === "api"
+      && segments[1] === "projects"
+      && segments[3] === "backlog"
+    ) {
+      requireNoQuery(url);
+      const projectId = segments[2] ?? "";
+      const itemId = segments[4] ?? "";
+      if (request.method === "GET") {
+        sendApplicationResult(
+          response,
+          showBacklogItem({ workspaceDir: context.workspaceDir, projectId, itemId }),
+        );
+        return;
+      }
+      if (request.method === "PATCH") {
+        requireAllowedOrigin(request, context.origin);
+        requireJsonContentType(request);
+        const body = await readUpdateBody(request);
+        sendApplicationResult(
+          response,
+          updateBacklogItemStatus({
+            workspaceDir: context.workspaceDir,
+            projectId,
+            itemId,
+            status: body.status,
+            ...(body.expected_revision === undefined
+              ? {}
+              : { expectedRevision: body.expected_revision }),
+          }),
+        );
+        return;
+      }
+      throw new HttpError(
+        405,
+        "METHOD_NOT_ALLOWED",
+        "Method not allowed.",
+        { allow: "GET, PATCH" },
+      );
+    }
+
+    if (segments.length === 4 && segments[0] === "api" && segments[1] === "projects" && segments[3] === "read-pages") {
+      requireMethod(request, "GET");
+      requireNoQuery(url);
+      sendApplicationResult(response, getWorkbenchReadPages({ workspaceDir: context.workspaceDir, projectId: segments[2]! }));
+      return;
+    }
+
+    if (segments[0] === "api") {
+      throw new HttpError(404, "ROUTE_NOT_FOUND", "Route not found.");
+    }
+    requireMethod(request, "GET");
+    serveStatic(response, url.pathname, context.staticRoot);
+  } catch (error) {
+    if (error instanceof HttpError) {
+      sendError(response, error);
+      return;
+    }
+    throw error;
+  }
+}
+
+function parseRequestUrl(request: IncomingMessage, origin: string): URL {
+  try {
+    return new URL(request.url ?? "/", origin);
+  } catch {
+    throw new HttpError(400, "INVALID_REQUEST", "Request URL is invalid.");
+  }
+}
+
+function decodePathSegments(pathname: string): string[] {
+  try {
+    return pathname.split("/").filter(Boolean).map((segment) => decodeURIComponent(segment));
+  } catch {
+    throw new HttpError(400, "INVALID_REQUEST", "Request path is invalid.");
+  }
+}
+
+function matches(actual: string[], expected: string[]): boolean {
+  return actual.length === expected.length
+    && actual.every((segment, index) => segment === expected[index]);
+}
+
+function requireMethod(request: IncomingMessage, expected: string): void {
+  if (request.method === expected) return;
+  throw new HttpError(
+    405,
+    "METHOD_NOT_ALLOWED",
+    "Method not allowed.",
+    { allow: expected },
+  );
+}
+
+function requireNoQuery(url: URL): void {
+  if ([...url.searchParams].length === 0) return;
+  throw new HttpError(400, "INVALID_REQUEST", "Query parameters are not supported.");
+}
+
+function singleQueryValue(url: URL, name: string): string | undefined {
+  const keys = [...url.searchParams.keys()];
+  if (keys.some((key) => key !== name) || url.searchParams.getAll(name).length > 1) {
+    throw new HttpError(400, "INVALID_REQUEST", "Query parameters are invalid.");
+  }
+  return url.searchParams.get(name) ?? undefined;
+}
+
+function requireAllowedOrigin(request: IncomingMessage, expectedOrigin: string): void {
+  const origin = request.headers.origin;
+  if (origin === undefined || origin === expectedOrigin) return;
+  throw new HttpError(403, "ORIGIN_NOT_ALLOWED", "Request origin is not allowed.");
+}
+
+function requireJsonContentType(request: IncomingMessage): void {
+  const contentType = request.headers["content-type"]?.split(";", 1)[0]?.trim().toLowerCase();
+  if (contentType === "application/json") return;
+  throw new HttpError(415, "UNSUPPORTED_MEDIA_TYPE", "Content-Type must be application/json.");
+}
+
+async function readUpdateBody(
+  request: IncomingMessage,
+): Promise<{ status: string; expected_revision?: string }> {
+  const raw = await readBody(request);
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    throw new HttpError(400, "INVALID_JSON", "Request body is not valid JSON.");
+  }
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new HttpError(400, "INVALID_REQUEST", "Request body is invalid.");
+  }
+  const record = value as Record<string, unknown>;
+  const allowed = new Set(["status", "expected_revision"]);
+  if (
+    Object.keys(record).some((key) => !allowed.has(key))
+    || typeof record.status !== "string"
+    || (
+      record.expected_revision !== undefined
+      && typeof record.expected_revision !== "string"
+    )
+  ) {
+    throw new HttpError(400, "INVALID_REQUEST", "Request body is invalid.");
+  }
+  return {
+    status: record.status,
+    ...(record.expected_revision === undefined
+      ? {}
+      : { expected_revision: record.expected_revision as string }),
+  };
+}
+
+async function readBody(request: IncomingMessage): Promise<string> {
+  const declaredLength = Number(request.headers["content-length"] ?? 0);
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_JSON_BODY_BYTES) {
+    request.resume();
+    throw new HttpError(413, "REQUEST_TOO_LARGE", "Request body is too large.");
+  }
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of request) {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as Uint8Array);
+    size += buffer.length;
+    if (size > MAX_JSON_BODY_BYTES) {
+      request.resume();
+      throw new HttpError(413, "REQUEST_TOO_LARGE", "Request body is too large.");
+    }
+    chunks.push(buffer);
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
+
+function sendApplicationResult<T>(
+  response: ServerResponse,
+  result: ApplicationResult<T>,
+): void {
+  if (result.ok) {
+    sendJson(response, 200, result);
+    return;
+  }
+  sendJson(response, statusForApplicationError(result.error), result);
+}
+
+function statusForApplicationError(error: ApplicationError): number {
+  switch (error.code) {
+    case "WORKSPACE_NOT_FOUND":
+    case "PROJECT_NOT_FOUND":
+    case "BACKLOG_STORE_NOT_FOUND":
+    case "ITEM_NOT_FOUND":
+      return 404;
+    case "REVISION_MISMATCH":
+      return 409;
+    case "WORKSPACE_INVALID":
+    case "BACKLOG_STORE_INVALID":
+    case "ITEM_ID_MISMATCH":
+    case "ITEM_INVALID":
+      return 422;
+    case "INVALID_STATUS":
+    case "INVALID_ITEM_ID":
+      return 400;
+  }
+}
+
+function serveStatic(
+  response: ServerResponse,
+  pathname: string,
+  staticRoot: string | undefined,
+): void {
+  if (staticRoot === undefined) {
+    if (pathname !== "/") {
+      throw new HttpError(404, "ROUTE_NOT_FOUND", "Route not found.");
+    }
+    sendText(
+      response,
+      200,
+      "<!doctype html><html><head><meta charset=\"utf-8\"><title>ProjectOps Workbench</title></head><body><main><h1>ProjectOps Workbench</h1><p>The frontend is not built yet.</p></main></body></html>",
+      "text/html; charset=utf-8",
+    );
+    return;
+  }
+
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(pathname);
+  } catch {
+    throw new HttpError(400, "INVALID_REQUEST", "Request path is invalid.");
+  }
+  const relativePath = decoded === "/" ? "index.html" : decoded.replace(/^\/+/, "");
+  const target = path.resolve(staticRoot, relativePath);
+  if (!isContained(staticRoot, target) || !existsSync(target)) {
+    throw new HttpError(404, "ROUTE_NOT_FOUND", "Route not found.");
+  }
+  const realTarget = realpathSync(target);
+  if (!isContained(staticRoot, realTarget) || !statSync(realTarget).isFile()) {
+    throw new HttpError(404, "ROUTE_NOT_FOUND", "Route not found.");
+  }
+  sendText(response, 200, readFileSync(realTarget), contentTypeFor(realTarget));
+}
+
+function sendError(response: ServerResponse, error: HttpError): void {
+  sendJson(
+    response,
+    error.status,
+    { ok: false, error: { code: error.code, message: error.message } },
+    error.headers,
+  );
+}
+
+function sendJson(
+  response: ServerResponse,
+  status: number,
+  body: unknown,
+  headers: Record<string, string> = {},
+): void {
+  sendText(
+    response,
+    status,
+    `${JSON.stringify(body)}\n`,
+    "application/json; charset=utf-8",
+    headers,
+  );
+}
+
+function sendText(
+  response: ServerResponse,
+  status: number,
+  body: string | Buffer,
+  contentType: string,
+  headers: Record<string, string> = {},
+): void {
+  response.writeHead(status, {
+    "content-type": contentType,
+    "content-length": Buffer.byteLength(body),
+    "cache-control": "no-store",
+    "x-content-type-options": "nosniff",
+    ...headers,
+  });
+  response.end(body);
+}
+
+function contentTypeFor(file: string): string {
+  switch (path.extname(file).toLowerCase()) {
+    case ".html": return "text/html; charset=utf-8";
+    case ".js": return "text/javascript; charset=utf-8";
+    case ".css": return "text/css; charset=utf-8";
+    case ".json": return "application/json; charset=utf-8";
+    case ".svg": return "image/svg+xml";
+    case ".png": return "image/png";
+    default: return "application/octet-stream";
+  }
+}
+
+function resolveStaticRoot(staticDir: string): string {
+  try {
+    const root = realpathSync(staticDir);
+    if (!statSync(root).isDirectory()) throw new Error("not a directory");
+    return root;
+  } catch {
+    throw new WorkbenchServerStartError(
+      "STATIC_ROOT_INVALID",
+      "Workbench static root is invalid.",
+    );
+  }
+}
+
+function resolveDefaultStaticRoot(): string | undefined {
+  const candidates = [
+    path.resolve(import.meta.dirname, "../../dist/web"),
+    path.resolve(import.meta.dirname, "../web"),
+  ];
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) {
+      try {
+        const root = realpathSync(candidate);
+        const indexHtml = path.join(root, "index.html");
+        const appJs = path.join(root, "app.js");
+        if (
+          statSync(root).isDirectory()
+          && existsSync(indexHtml)
+          && statSync(indexHtml).isFile()
+          && existsSync(appJs)
+          && statSync(appJs).isFile()
+        ) {
+          return root;
+        }
+      } catch {
+        // Fall back when unreadable or invalid
+      }
+    }
+  }
+  return undefined;
+}
+
+function isContained(root: string, candidate: string): boolean {
+  const relative = path.relative(root, candidate);
+  return relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative));
+}
+
+function validateListenOptions(host: string, port: number): void {
+  if (!LOOPBACK_HOSTS.has(host)) {
+    throw new WorkbenchServerStartError(
+      "INVALID_HOST",
+      "Workbench host must be a loopback address.",
+    );
+  }
+  if (!Number.isInteger(port) || port < 0 || port > 65_535) {
+    throw new WorkbenchServerStartError(
+      "INVALID_PORT",
+      "Workbench port must be an integer between 0 and 65535.",
+    );
+  }
+}
+
+function listen(
+  server: ReturnType<typeof createServer>,
+  host: string,
+  port: number,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const onError = (error: NodeJS.ErrnoException): void => {
+      server.off("listening", onListening);
+      if (error.code === "EADDRINUSE") {
+        reject(new WorkbenchServerStartError(
+          "PORT_UNAVAILABLE",
+          `Port ${port} is unavailable on ${host}.`,
+        ));
+        return;
+      }
+      reject(new WorkbenchServerStartError("START_FAILED", "Workbench server could not start."));
+    };
+    const onListening = (): void => {
+      server.off("error", onError);
+      resolve();
+    };
+    server.once("error", onError);
+    server.once("listening", onListening);
+    server.listen({ host, port, exclusive: true });
+  });
+}
+
+function closeServer(server: ReturnType<typeof createServer>): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const forceTimer = setTimeout(() => server.closeAllConnections(), 1_000);
+    forceTimer.unref();
+    server.close((error) => {
+      clearTimeout(forceTimer);
+      if (error !== undefined) {
+        reject(error);
+        return;
+      }
+      resolve();
+    });
+  });
+}

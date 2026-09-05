@@ -83,7 +83,14 @@ function parseScalar(value: string): string | null {
   if (value === "null") return null;
   if (value === "''") return "";
   if (value.startsWith("[") || value.startsWith('"')) {
-    return JSON.parse(value) as string;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      throw new ItemParseError("?", "invalid scalar JSON");
+    }
+    if (typeof parsed !== "string") throw new ItemParseError("?", "scalar must be a string");
+    return parsed;
   }
   return value;
 }
@@ -138,14 +145,17 @@ export function parseItemFile(content: string): BacklogItem {
     if (typeof value !== "string") return [];
     try {
       const parsed = JSON.parse(value) as unknown;
-      return Array.isArray(parsed) ? (parsed as string[]) : [];
+      if (!Array.isArray(parsed) || !parsed.every((entry) => typeof entry === "string")) {
+        throw new ItemParseError(id, `invalid ${field}`);
+      }
+      return parsed as string[];
     } catch {
       throw new ItemParseError(id, `invalid ${field}`);
     }
   };
 
   const body = lines.slice(end + 1).join("\n").replace(/^\n/, "");
-  return {
+  const item: BacklogItem = {
     id,
     project: scalar("project", ""),
     title: scalar("title", ""),
@@ -166,6 +176,10 @@ export function parseItemFile(content: string): BacklogItem {
     revision: scalar("revision", ""),
     body,
   };
+  if (!ITEM_STATUSES.includes(item.status)) throw new ItemParseError(id, "invalid status");
+  if (!ITEM_TYPES.includes(item.item_type)) throw new ItemParseError(id, "invalid item_type");
+  if (!PRIORITIES.includes(item.priority)) throw new ItemParseError(id, "invalid priority");
+  return item;
 }
 
 export function computeRevision(item: Omit<BacklogItem, "revision">): string {

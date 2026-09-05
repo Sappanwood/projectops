@@ -28,7 +28,7 @@ flowchart TD
 当前 Repo 已落地 Workspace/Catalog、Backlog、Plan authoring/query/validation/approval/materialization、Project Docs
 scaffold/check，以及 Report@1 schema、Markdown filesystem adapter、单 Plan Report 生成资格校验和
 `pops report create/list/show`；独立临时 workspace 的 built CLI smoke 已覆盖 Plan → Backlog → Report 的
-completed 路径、logical references、验证证据和 no-clobber 行为。Retrospective 的 Retrospective@1/Store@1 schema、workspace manifest 路由、Markdown store bootstrap、可重建索引、capture/query 与 revision-protected triage/archive lifecycle 已落地；独立临时 workspace 的 built CLI E2E 还验证了 metadata 保留、唯一 authority 移动、索引计数和 stale revision 不变式。Workbench 仍是目标域，上图是新增纵向能力时必须保持的目标依赖方向。
+completed 路径、logical references、验证证据和 no-clobber 行为。Retrospective 的 Retrospective@1/Store@1 schema、workspace manifest 路由、Markdown store bootstrap、可重建索引、capture/query 与 revision-protected triage/archive lifecycle 已落地；独立临时 workspace 的 built CLI E2E 还验证了 metadata 保留、唯一 authority 移动、索引计数和 stale revision 不变式。Workbench 的 UI-neutral typed Application API、按请求重建的 workspace/project Read Model、loopback-only Local HTTP server 以及基于纯 TypeScript/原生 ESM 的可导航 Workbench 前端壳已落地，生产 build 由本地 server 直接托管；Backlog 可写切片和 Plan/Report/Docs/Retrospective 完整只读视图已交付。上图是新增纵向能力时必须保持的目标依赖方向。
 
 ## 核心技术栈
 
@@ -39,7 +39,8 @@ completed 路径、logical references、验证证据和 no-clobber 行为。Retr
 | Package manager | npm | 降低初始工具数量 |
 | Persistence | Markdown/JSON files | 人类可读、Git-friendly、Agent 可操作 |
 | Tests | Node test runner + tsx | 无额外测试框架，覆盖代表性 happy path |
-| Web | 未选择 | 到 Workbench 阶段再根据实际需求决定 |
+| HTTP | Node.js `node:http` | 直接复用单运行时，不增加 server framework |
+| Web UI | 纯 TypeScript + 原生 ESM + 现代 CSS | 保持单运行时与零重型外部依赖，兼顾可访问性与直接静态托管 |
 
 ## 模块边界
 
@@ -64,8 +65,29 @@ filesystem/runtime adapters
 ```text
 src/
   cli.ts                  interfaces：进程入口，注入 stdout/stderr/stdin
+  workbench.ts            interfaces：Local HTTP server 进程入口与 signal shutdown
   app.ts                  application：命令路由与退出码
   io.ts                   CliIO 契约
+  application/
+    result.ts             UI-neutral typed success/error contract
+    workspaceApi.ts       workspace identity 与 project summaries 查询
+    backlogApi.ts         Backlog list/show/revision-protected update API
+    workspaceInspection.ts workspace doctor 的 typed inspection API
+    workbenchReadModel.ts workspace/project 跨领域只读 projection
+  server/
+    workbenchServer.ts    HTTP routes、request boundary、static assets 与 server lifecycle
+  web/
+    index.html            Workbench HTML 骨架与挂载点
+    style.css             无外部依赖的现代 CSS、可见 focus 与语义化样式
+    types.ts              前端 AppState、ViewType 与只读模型契约
+    router.ts             URL Hash 路由解析、格式化与状态恢复
+    apiClient.ts          HTTP API 客户端与网络/格式错误收敛
+    backlogController.ts Backlog 列表、详情、revision mutation 与异步响应隔离
+    backlogView.ts        Backlog 分组列表、详情、依赖提示和更新控件
+    state.ts              前端状态机核心与不可变状态转移
+    readPagesView.ts       Plan/Report/Docs/Retrospective 只读详情与回顾过滤
+    render.ts             语义化 HTML 纯函数渲染与可访问性属性
+    app.ts                生命周期编排、事件委托与 DOM 挂载
   catalog/
     workspace.ts          Catalog domain：Manifest@1 schema 与纯路径逻辑
     workspaceStore.ts     filesystem adapter：发现、读写 workspace manifest
@@ -104,6 +126,50 @@ src/
     ...                    每个 CLI 子命令一个 use case，编排 domain 与 adapters
 ```
 
+`src/application/` 是 CLI、Local Web Workbench 与未来 Agent interface 的共享调用面。它接收 typed request，
+返回 `ApplicationResult<T>`，不解析 CLI arguments、不格式化 JSON、不依赖 `CliIO`、HTTP 或 UI 类型，也不在
+错误结果中暴露机器绝对路径。当前覆盖 workspace/project 查询、Backlog
+list/show/update 以及四个领域的完整只读 projection；现有 CLI 对应命令负责参数、文本/JSON 输出和退出码，并把业务处理委托给这些 API。其他
+领域仍按需求逐步迁移，不建立通用 command bus 或 Artifact service。
+
+`workbenchReadModel.ts` 直接组合各领域公开读取能力。workspace overview 包含 workspace identity、稳定排序的
+project summaries 与 doctor diagnostics；project overview 包含 Backlog 状态计数/最近条目、Plan/Report 摘要、
+Docs check、project-scoped Retrospective 计数和最近记录。projection 不保存状态；malformed artifact 或单领域
+不可用时返回按 source/reference 稳定排序的 diagnostics，并继续返回其他可用领域，不复制 schema parser。
+
+`workbenchServer.ts` 是 application API 外的薄 HTTP adapter。启动参数固定唯一 workspace，并默认绑定
+`127.0.0.1:7331`；host 只接受 loopback，测试可使用 port `0` 获取隔离端口。路由提供 workspace/project
+overview、Backlog list/show/update 和 `GET /api/projects/<id>/read-pages`，统一返回 `{ ok, data }` 或 `{ ok, error }` JSON envelope，并把 stale
+revision 映射为 HTTP 409。请求不能提供 workspace path；除 Backlog list 的 `status` 外拒绝 query 参数。
+PATCH 只接受 `application/json`、无 Origin 或与 server origin 完全相同的 Origin，以及仅含 `status` 和可选
+`expected_revision` 的有界 body。server 可从显式 static root 提供前端资源，realpath containment 防止 URL
+访问 root 外文件；未提供 static root 时自动查找内置 `dist/web` 生产资源，只有资源尚未构建时才返回占位页。
+关闭先停止接收连接，随后有界清理残留连接。
+
+`getWorkbenchReadPages` 与 overview 共享 Plan/Report/Retrospective 领域读取器和 Docs check，返回 `WorkbenchReadPages`：
+Plan、Report 保留各自 domain 类型，Docs 从 `PROJECT_DOC_TEMPLATES` 派生固定路径及检查结果，Retrospective
+返回完整 workspace 记录。单个 malformed 文件被转换为诊断，不中断其他有效文件；不通过 CLI subprocess、
+CLI JSON 或前端 schema parser 读取数据。此 projection 按需从 read-pages endpoint 加载，Alpha 阶段一次返回
+四个领域的完整内容，无分页或持久化缓存；overview 继续保留轻量摘要契约。
+
+`readPagesView.ts` 以原生 `<details>` 提供可键盘展开的 Plan、Report 和 Retrospective 详情，正文转义后以源文显示。
+Retrospective 在完整 typed 列表上按 status/project/task 精确过滤，默认 project 为当前项目，留空表示全部，
+`null` 表示 provenance 未记录；按 inbox/active/archive 分组并保留不受过滤影响的 malformed diagnostics。
+Docs 只展示固定路径和共享检查结果。`app.ts` 管理按需加载、重试、刷新和过滤状态，使用请求序号隔离过期响应；
+项目切换清除旧 projection 并重置过滤。四个领域没有 Web mutation 或任意文件读取接口。
+
+Workbench Backlog 页面通过 HTTP list/show/update 获取完整数据，独立于 overview 的最近五条摘要。
+`backlogController.ts` 管理列表、当前详情和提交状态：提交携带已加载 revision，成功后重读列表和详情并刷新
+project overview；409 保留旧详情和当前选择，用户显式刷新后才能再次提交。项目切换会废弃旧请求的 UI
+结果，进行中的提交不允许重复触发。页面依据 `depends_on` 与已读取 item 状态显示未完成/缺失依赖提示，
+不引入额外的 mutation 规则。Markdown 正文以转义的源文显示，不解释其中 HTML。
+workspace 连接重试期间的路由变化只更新目标路由，待 workspace 响应到达后再加载项目。
+
+测试以隔离临时 workspace、port `0` 和真实 HTTP API 覆盖列表、DOM 事件分发、更新后的 authority 文件、
+project summary、revision conflict 与刷新重试；只读视图测试覆盖四领域正常、空状态与诊断、完整详情、回顾过滤、刷新和读取前后文件不变；
+异步单元测试覆盖项目切换和重复提交。完整浏览器 E2E
+仍属于后续收口阶段。
+
 ## 数据文件格式
 
 - workspace manifest：`.pops/workspace.json`，schema `workspace/Manifest@1`；不含绝对路径，project 以
@@ -138,6 +204,8 @@ src/
 1. `src/cli.ts` 把参数、I/O adapter 和 cwd 交给 `runCli`。
 2. `src/app.ts` 路由到命令：`init`、`project add|list|doctor`、`docs scaffold|check`、`backlog init|add|list|show|update`、`plan create|list|show|validate|approve|materialize`、`report create|list|show`、`retrospective capture|list|show|triage|archive`；Retrospective capture/query/transition 共享同一 domain/adapter。
 3. 每个子命令对应 `src/useCases/` 下的一个 use case，编排 domain 逻辑与 filesystem adapter；Docs scaffold 由 `docsScaffold.ts` 调用共享的 Docs domain 和 adapter，Docs check 由 `docsCheck.ts` 调用同一 Docs adapter；Plan 的 create/list/show/validate/approve/materialize 共享同一 `plan/` domain 和 filesystem adapter，Report 的 create/list/show 共享同一 Report domain 和 filesystem adapter；Plan materialize 通过 `backlog/add.ts` 复用 Backlog item 创建规则，不启动内部 CLI subprocess。
+   `project list` 与 Backlog list/show/update 已成为薄 CLI adapter，调用 `src/application/` 的 typed API；Web
+   后续直接调用同一 API，不复用 CLI 参数或输出格式。
 4. use case 以退出码表达成功、明确错误或 unknown 命令；非 JSON 错误信息写 stderr，机器可读结果经 `--json` 写 stdout（Report 命令的 JSON 失败结果也使用稳定 error envelope）。
 5. Report CLI 的 create/list/show 共享同一 Report application/domain 与 filesystem adapter；create 先完成 Plan/Backlog 资格校验，再以 no-clobber 写入 `reports/report-<slug>.md`。
 6. 后续 command 按纵向用例加入对应 domain module，不在入口文件堆叠存储逻辑。
@@ -150,6 +218,10 @@ manifest 在进入 use case 前作为明确错误拒绝；doctor 只报告问题
 - 业务数据使用 versioned Markdown/JSON schema。
 - 初期不引入数据库、缓存、后台 daemon 或插件系统。
 - locks、cache、logs 和临时数据不得进入版本化 artifact。
+- Workbench Read Model 按请求从 authority 重建，不引入数据库、缓存或后台 daemon；其 relative/logical references
+  与 diagnostics 可传给 interface，filesystem 绝对 root 只保留在 application 内部。
+- Local HTTP server 的 workspace 和可选 static root 只在启动时选择，HTTP 请求不能更换它们；错误响应不返回
+  stack trace 或机器绝对路径。server 不持久化业务数据之外的第二份状态。
 - 当前威胁模型是受信任本地用户与 workspace。
 - Alpha 不承诺恶意 symlink、ancestor-swap、复杂并发、crash consistency 或跨平台原子性。
 - 写入仍必须限制在命令明确选择的 workspace 内，且默认不覆盖已有用户文件。

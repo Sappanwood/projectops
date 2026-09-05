@@ -31,8 +31,8 @@ Markdown/JSON artifact 为权威数据，通过统一 `pops` CLI 和 Local Web W
 | Plan | authoring、查询、validation、review、approval、materialization | authoring/query/validation/approval/materialization 已实现 |
 | Report | delivery evidence 生成和关联 | 部分实现（Report@1 schema/storage、单 Plan 生成资格校验与 `pops report create/list/show`；已覆盖 completed/partial/no-clobber CLI smoke） |
 | Project Docs | roles、templates、scaffold、check | scaffold/check 已实现 |
-| Retrospective | workspace 级 Markdown 记录、inbox/active/archive store 与派生索引 | 已实现（Retrospective@1、Store@1、manifest 路由、`pops init` bootstrap、`pops retrospective capture/list/show/triage/archive` 与 revision 保护；Workbench 未实现） |
-| Workbench | 统一浏览和受控写入 | 未实现 |
+| Retrospective | workspace 级 Markdown 记录、inbox/active/archive store 与派生索引 | 已实现（Retrospective@1、Store@1、manifest 路由、`pops init` bootstrap、`pops retrospective capture/list/show/triage/archive` 与 revision 保护；Workbench 只读列表、过滤与详情已实现） |
+| Workbench | 统一浏览和受控写入 | Backlog 可写切片已实现（完整列表、详情、revision-protected 状态更新与冲突重试）；Plan、Report、Docs、Retrospective 完整只读视图已实现；浏览器 E2E 待交付 |
 | CLI bootstrap | `pops --help`、`pops --version` | 已实现 |
 
 ## 数据契约原则
@@ -43,7 +43,30 @@ Markdown/JSON artifact 为权威数据，通过统一 `pops` CLI 和 Local Web W
 - Plan 使用 `plan/Plan@1` JSON artifact：包含稳定 ID、标题、目标及以局部 key 关联的 Backlog item 草案，并以 `status: draft|approved` 表示生命周期；草案可用 `parent` 和 `depends_on` 引用其他局部 key。批准 Plan 额外包含一次 `approval` 记录（`approved_at` 与 `review_note`）；materialize 后增加 `materialization` 记录（`materialized_at` 与 `mapping`），保存局部 key 到 Backlog ID 的映射。
 - `pops plan materialize` 只接受通过 schema/依赖校验且 status 为 `approved` 的 Plan；按 parent/dependency 拓扑创建同一 project 的 epic/task，JSON 输出 mutation receipt。已有完整 mapping 的重试为 `no_op`，不创建或改写条目。
 - 派生索引和未来 UI preference 不得成为业务 authority。
+- Workbench Read Model 是按请求从现有领域读取能力组合的 projection：workspace overview 返回 workspace identity、
+  project summaries 与 doctor diagnostics；project overview 返回 Backlog 状态计数/最近条目、Plan/Report 摘要、
+  Docs check 与 project-scoped Retrospective 状态计数。单个 malformed artifact 或不可用领域以结构化 diagnostic
+  呈现，不改变 Markdown/JSON authority，也不在输出中增加机器绝对路径。
+- Local Workbench HTTP server 由启动参数固定一个 workspace，默认只绑定 `127.0.0.1:7331`，并以稳定 JSON
+  envelope 暴露 workspace/project overview 与 Backlog list/show/update。HTTP 请求不得携带 workspace path；
+  Backlog update 只接受 JSON `status` 和可选 `expected_revision`，stale revision 返回 conflict，不写入旧状态。
+  mutation 拒绝非 JSON content type 和非同源 browser Origin；错误不暴露 stack trace 或机器绝对路径。
+- Workbench 的 `GET /api/projects/<id>/read-pages` 返回独立 typed projection：完整 Plan、Report、固定文档检查结果和
+  workspace Retrospective 记录；不接受 query 参数、文件路径或 mutation。Plan 可展开 goal、status、approval、
+  materialization mapping 和带 parent/dependencies 的 item；Report 可展开 outcome、Plan/Backlog references、
+  verification、deviations、workarounds、repo docs 与 Markdown 正文。正文按转义的源文显示。
+- Docs 页面始终列出共享 Docs domain 的四个固定路径及各自检查结果，不 scaffold、不修改文件。
+  Retrospective 页面读取完整 workspace 列表，默认过滤当前 project；status/project/task 支持组合精确过滤，
+  project/task 留空表示全部，`null` 表示未记录的 provenance。结果按 inbox/active/archive 分组，详情包含完整
+  metadata、revision 和正文；malformed diagnostics 不因过滤而隐藏。四个领域均显示空状态或读取诊断，顶部
+  Refresh 重读 authority；读取失败可重试，项目切换丢弃旧请求响应。
 - Workspace 是聚合父目录，project 必须是其子路径；workspace 根自身不可登记。
+- Workbench Backlog 按状态分组、组内按 ID 稳定排序，显示全部 item；详情包含 title、priority、status、
+  dependencies、revision 和转义后的 Markdown 源文。界面只提供 `todo|in_progress|done` 状态操作，
+  每次提交均携带已加载的 revision；成功后重读列表、详情和项目摘要。冲突不自动重试，保留当前 item
+  并要求用户刷新后重新提交。读取失败、未知 item、非法输入均显示错误反馈。
+- 未完成或缺失的依赖依据同一 Backlog 列表显示提示；当前 CLI 不强制按依赖阻止状态更新，Web 保持一致，
+  不持久化派生依赖状态。共享 Backlog parser 拒绝非字符串列表元素、非法标量类型和非法状态等 malformed 数据。
 - Workspace 可在非空目录初始化，但不得覆盖已有 manifest 或其他用户内容。
 - 登记不强求 git repo，任意目录均可登记；重复登记报错。
 - Project Docs scaffold 为每个已登记 project 提供固定的 README.md、AGENTS.md、docs/PRODUCT_SPEC.md 和 docs/ARCHITECTURE.md 模板；模板包含角色标题和待填写提示，不支持外部模板源或自定义变量。
@@ -69,6 +92,6 @@ Markdown/JSON artifact 为权威数据，通过统一 `pops` CLI 和 Local Web W
 
 1. ~~Workspace/Catalog 与 Backlog 纵向闭环。~~（基础版已交付：init、显式 project 登记、doctor、backlog store 与 CRUD、状态流转）
 2. Plan、Project Docs 和 materialization。（Plan 到 Backlog materialization 已实现。）
-3. ~~Report 与 Retrospective 闭环。~~（Report 与 Retrospective 的 CLI 纵向闭环已实现；Workbench 仍未实现。）
-4. Local Web Workbench。
+3. ~~Report 与 Retrospective 闭环。~~（Report 与 Retrospective 的 CLI 纵向闭环已实现；Workbench 只读视图已实现。）
+4. Local Web Workbench。（Backlog 首个可写切片已完成；Plan、Report、Docs、Retrospective 完整只读视图已完成；浏览器 E2E 待交付。）
 5. 安装发行、升级和按真实需求补充 hardening。

@@ -12,9 +12,11 @@
   },
   "scripts": {
     "dev": "node --import tsx src/cli.ts",
+    "preworkbench": "npm run build",
+    "workbench": "node --import tsx src/workbench.ts",
     "test": "npm run build && node --import tsx --test tests/*.test.ts",
     "typecheck": "tsc --noEmit",
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && node scripts/buildAssets.mjs",
     "start": "node dist/cli.js"
   },
   "devDependencies": {
@@ -23,4 +25,3 @@
     "typescript": "^5.9.0"
   }
 }
-

@@ -34,7 +34,7 @@ export function registerProject(pathArg: string, json: boolean, io: CliIO, cwd: 
     return 1;
   }
   const rel = toPosixPath(path.relative(root, target));
-  if (manifest.projects[id] !== undefined) {
+  if (Object.hasOwn(manifest.projects, id)) {
     io.stderr(`Error: project "${id}" is already registered`);
     return 1;
   }

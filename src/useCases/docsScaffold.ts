@@ -18,11 +18,11 @@ export function docsScaffold(
   const workspace = loadOrReport(cwd, io);
   if (workspace === null) return 1;
   const { root, manifest } = workspace;
-  const registration = manifest.projects[projectId];
-  if (registration === undefined) {
+  if (!Object.hasOwn(manifest.projects, projectId)) {
     io.stderr(`Error: project "${projectId}" is not registered`);
     return 1;
   }
+  const registration = manifest.projects[projectId]!;
 
   const projectDir = resolveProjectPath(root, registration.path);
   let receipt;

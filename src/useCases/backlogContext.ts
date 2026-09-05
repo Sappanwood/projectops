@@ -14,7 +14,7 @@ export function resolveStoreRoot(
   const workspace = loadOrReport(cwd, io);
   if (workspace === null) return null;
   const { root, manifest } = workspace;
-  if (manifest.projects[projectId] === undefined) {
+  if (!Object.hasOwn(manifest.projects, projectId)) {
     io.stderr(`Error: project "${projectId}" is not registered`);
     return null;
   }

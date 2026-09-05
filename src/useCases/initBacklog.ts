@@ -22,7 +22,7 @@ export function initBacklog(
   if (workspace === null) return 1;
   const { root, manifest } = workspace;
 
-  if (manifest.projects[projectId] === undefined) {
+  if (!Object.hasOwn(manifest.projects, projectId)) {
     io.stderr(`Error: project "${projectId}" is not registered`);
     return 1;
   }

@@ -22,9 +22,29 @@ pops --version
 `npm run dev -- --help`。初始 npm package 保持 `private`，因为 npm registry 已存在同名的
 `projectops` 和 `pops` package；公开发行名将在发布阶段另行决定。
 
+Local Workbench server 通过显式 workspace 启动，默认只监听 `127.0.0.1:7331`：
+
+```bash
+npm run workbench -- --workspace "$HOME/my-workspace"
+```
+
+构建后 server 自动托管内置生产前端 Web 界面，浏览器访问 `http://127.0.0.1:7331` 即可体验。
+选择 project 后进入 Backlog，可按状态浏览全部条目，选择条目查看 Markdown 正文、依赖和 revision，
+并更新为 `todo`、`in_progress` 或 `done`。更新会刷新条目和项目摘要；revision 冲突时保留当前选择，
+先点击 `Refresh item` 读取最新内容，再重新提交。未完成或缺失的依赖会显示提示；与 CLI 一样，
+状态更新由用户显式决定，不自动推进依赖或强制改变状态。
+Plans 和 Reports 页面可展开完整详情，分别查看审批、materialization mapping、item dependencies，以及
+交付 outcome、Plan/Backlog references、验证、偏离、workaround 和正文。Docs 展示固定四份文档及
+`docs check` 结果。Retrospectives 展示 workspace 完整列表，默认过滤当前项目；支持 status、project、task
+精确过滤，project/task 留空表示全部，填写 `null` 表示 provenance 未记录。回顾按 inbox/active/archive 分组，
+可展开 metadata 与正文；malformed artifact 单独显示诊断。这四个页面均只读，点击顶部 Refresh 重读文件。
+
+开发者也可以增加 `--static-dir <path>` 覆盖静态资源目录。可选 `--host` 只接受
+loopback 地址，`--port 0` 仅适合测试或一次性隔离运行。使用 `Ctrl-C` 或发送 `SIGTERM` 会关闭 listener。
+
 ## 当前能力
 
-当前已可完成 workspace、project、Backlog、Plan 审批到 materialize、Delivery Report 生成与查询，以及 Workflow Retrospective 从捕获、查询到分类和归档的完整工作流。
+当前已可完成 workspace、project、Backlog、Plan 审批到 materialize、Delivery Report 生成与查询，以及 Workflow Retrospective 从捕获、查询到分类和归档的完整工作流；Local Workbench server 与前端壳已提供 workspace/project overview 和 Backlog、Plans、Reports、Docs、Retrospective 统一导航及 HTTP API。
 
 ```bash
 # 1. 在目标目录初始化 workspace 壳（目录可以非空，生成 .pops/workspace.json）
