@@ -20,7 +20,7 @@ Local Web Workbench 管理项目注册表、Backlog、Plan、Delivery Report、�
 - 优先实现明确的正确工作流和高频用户路径。
 - 不为假设性的未来需求建立抽象、扩展点或兼容层。
 - 不主动实现低概率 edge case；真实发生后再补充处理和回归测试。
-- 不承担历史版本兼容、数据 migration 或 deprecated API。
+- 不承担历史版本兼容或 deprecated API；仅按下述 dogfooding 规则迁移自身活动数据。
 - 可以接受局部重复；只有重复已经阻碍修改时才重构。
 - 可以暂不提供跨进程事务、崩溃恢复、严格原子性和复杂并发保证。
 - 产品威胁模型限定为受信任的本地用户和受信任的 workspace。
@@ -51,6 +51,19 @@ Local Web Workbench 管理项目注册表、Backlog、Plan、Delivery Report、�
 
 这里的文件写入和删除规则是开发最低保护线，不代表产品已经承诺 production-grade containment、原子性或并发安全。
 
+## 自身 dogfooding 与数据演进
+
+- Alpha dogfooding 只接入 `projectops` 自身，不接入其他真实项目；隔离测试 fixture 不受此限制。
+- 新产生的自身开发 Backlog、Plan、Report 和 dogfooding 回顾由 ProjectOps 管理，同一条目只有一个 authority，不双写。
+- Workspace Control 的既有条目（包括仍未完成的条目）留在原系统处理，不导入、不迁移，也不复制为自身条目。
+- active item 指 dogfooding 过程中产生且仍在使用的条目，不是某个领域的固定 status 值；迁移前明确实际清单及必要引用。
+- schema 变化只迁移上述活动数据。运行时只支持当前 schema，不增加旧版读取、自动升级、双写或兼容分支。
+- 迁移采用针对实际数据的一次性脚本，先保留可恢复副本，再迁移并验证内容、状态、ID、依赖和跨 artifact 引用；
+  验证失败时保留恢复材料，验证成功后删除脚本，不建设长期 migration framework。以 Git diff 或交付记录保留迁移与验证证据。
+- 已完成或归档条目不要求持续迁移；无法读取的旧版本应明确显示版本不支持，不静默丢弃或阻断有效活动条目。
+  活动条目仍引用的历史数据须在迁移清单中明确处理，不能留下失效引用。
+- 一次性迁移仍遵守受信任本地 workspace、有界写入和显式覆盖规则，不增加恶意 ancestor-swap 防护或 native helper 要求。
+
 ## Project Ops 路由
 
 开始任务前运行：
@@ -61,7 +74,27 @@ Local Web Workbench 管理项目注册表、Backlog、Plan、Delivery Report、�
   --json
 ```
 
-只使用 resolved context 返回的 Repo、`ops_root` 和 typed artifact roots。Backlog 操作使用：
+Workspace Control resolver 继续负责 Repo 定位与开发服务。本节是用户批准的自身 dogfooding 路由例外：
+新产生的自身过程 artifact 使用 ProjectOps manifest 路由，不使用 resolver 返回的 Workspace Control artifact roots。
+
+自身数据 workspace 为 `/home/ling/workspace`，authority 为其 `.pops/workspace.json`。
+操作前从该 workspace 运行 `pops project list --json` 和 `pops project doctor`，确认 `projectops` 登记与 typed roots。
+若尚未登记，使用 `pops project add projectops`，按需执行 `pops backlog init projectops`；不自动登记其他项目。
+使用当前 Repo 构建的 CLI；未安装 `pops` 时可使用 `node /home/ling/workspace/projectops/dist/cli.js`。
+所有命令从上述数据 workspace 执行，artifact 路径由 ProjectOps manifest 解析，不自行拼接：
+
+```bash
+pops backlog list projectops --json
+pops plan list projectops --json
+pops report list projectops --json
+```
+
+自身条目通过对应 `pops` 命令管理；Backlog 更新携带读取到的 revision。
+全局 skill 若假定 Workspace Control store/schema，不得直接套用于自身数据；使用 ProjectOps 当前 CLI 契约。
+ADR、Research 使用 ProjectOps 登记的对应 typed roots；自身 dogfooding 回顾使用其 workspace-level Retrospective store。
+跨项目或全局工作流事项仍遵循 Workspace 路由。
+
+只有处理 Workspace Control 既有条目时，才使用 resolver 返回的 exact roots 与原有工具：
 
 ```bash
 backlog --store <resolved-artifacts.backlog.root> <command> --json
@@ -79,6 +112,9 @@ backlog --store <resolved-artifacts.backlog.root> <command> --json
 | `<ops-path>/plans/` | 执行多阶段工作前 | 新建、修订、批准或归档执行计划时 |
 | `<ops-path>/research/` | 结论依赖 ProjectOps 代码或状态时 | 完成项目级调研时 |
 | `<ops-path>/reports/` | 查看已完成多阶段交付证据时 | delivery completed 或用户接受 partial 后 |
+
+表中的 `<ops-path>` 对新自身 artifact 指 ProjectOps manifest 解析出的项目 ops root；对 Workspace Control
+既有 artifact 指其 resolver 返回的 root。引用既有条目时标明所属系统，不能仅凭短 ID 选择 store。
 
 ## 外部 API 文档索引
 

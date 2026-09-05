@@ -6,6 +6,11 @@ Workflow Retrospective。
 
 项目当前处于 Alpha 初始化阶段，以快速交付可运行的纵向工作流为主，不提供生产级安全、兼容性或完整边界保证。
 
+当前真实 dogfooding 仅接入 ProjectOps 自身：新开发任务与计划由本产品管理，Workspace Control 既有条目
+留在原系统，不导入或双写。schema 变化时仅对 dogfooding 产生且仍在使用的数据做一次性迁移，验证后删除
+迁移脚本，不保留运行时兼容分支。已完成或归档数据不要求持续迁移；旧版本不可读时应明确提示版本不支持。
+这是 Alpha 演进规则，具体操作与路由见 [AGENTS.md](AGENTS.md)。
+
 ## 快速开始
 
 ```bash

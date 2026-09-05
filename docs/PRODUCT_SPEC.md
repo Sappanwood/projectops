@@ -82,6 +82,14 @@ Markdown/JSON artifact 为权威数据，通过统一 `pops` CLI 和 Local Web W
 
 ## Alpha 产品约束
 
+- 真实 dogfooding 仅接入 ProjectOps 自身，暂不接入其他项目；产品的多项目目标和隔离测试不受此限制。
+- 新产生的自身 Backlog、Plan 等过程数据以 ProjectOps 为唯一 authority；Workspace Control 的既有条目
+  无论是否完成均留在原系统，不属于迁移对象，不双写。
+- active item 指 dogfooding 产生且仍在使用的数据，不等同于某个 status。契约变化采用一次性脚本迁移
+  实际活动数据，验证内容、状态及引用后删除脚本；不提供旧 schema 读取或长期迁移框架。
+- 已完成或归档的数据不要求持续迁移。旧版本无法读取时应明确提示版本不支持，不阻断有效活动数据；
+  活动条目对历史数据的引用必须在迁移时明确处理。此项为演进要求，不表示当前已有独立的版本诊断功能。
+
 - 只支持受信任的本地用户和 workspace。
 - 优先正确工作流，不承诺完整非法输入处理。
 - 不承诺 crash consistency、跨进程事务或对抗性并发安全。

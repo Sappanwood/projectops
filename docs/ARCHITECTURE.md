@@ -227,6 +227,10 @@ manifest 在进入 use case 前作为明确错误拒绝；doctor 只报告问题
 ## 数据与运行时边界
 
 - 业务数据使用 versioned Markdown/JSON schema。
+- Alpha 运行时只支持当前 schema；自身 dogfooding 的活动数据通过一次性脚本迁移，不增加旧版 parser、
+  双写或自动升级路径。脚本在恢复副本保留、迁移完成及内容/状态/引用验证通过后删除，不作为产品模块维护。
+- 迁移对象只包含 dogfooding 产生且仍在使用的数据及明确需要处理的引用，不包含 Workspace Control 既有数据。
+  完成或归档数据无需持续升级；演进时对不可读旧版本提供明确诊断，并隔离其对有效活动数据的影响。
 - 初期不引入数据库、缓存、后台 daemon 或插件系统。
 - locks、cache、logs 和临时数据不得进入版本化 artifact。
 - Workbench Read Model 按请求从 authority 重建，不引入数据库、缓存或后台 daemon；其 relative/logical references
