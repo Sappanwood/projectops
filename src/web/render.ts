@@ -4,6 +4,7 @@ import { renderDocs } from "./docsView.js";
 import type {
   AppState,
   ViewType,
+  RouteState,
   WorkbenchBacklogSummary,
   WorkbenchDiagnostic,
   WorkbenchProjectOverview,
@@ -27,7 +28,7 @@ export function renderApp(state: AppState): string {
       ${renderDiagnostics(state.workspace?.diagnostics ?? [], "Workspace Diagnostics")}
       ${renderProjectNav(state)}
       <main id="workbench-content" class="workbench-main" tabindex="-1">
-        ${state.route.returnTo ? `<p><a class="btn btn-secondary" href="${escapeHtml(state.route.returnTo)}">返回来源页面</a></p>` : ""}
+        ${state.route.returnTo ? `<p><a class="btn btn-secondary" href="${escapeHtml(state.route.returnTo)}">${state.route.returnTo === formatRoute({projectId: state.selectedProjectId, view:"overview"}) || state.route.returnTo.endsWith("/overview") ? "返回 Overview" : "返回来源页面"}</a></p>` : ""}
         ${renderContent(state)}
       </main>
     </div>
@@ -361,12 +362,12 @@ export function renderProjectView(
 function renderOverviewTab(overview: WorkbenchProjectOverview): string {
   const bCounts = overview.backlog.counts;
   const rCounts = overview.retrospectives.counts;
-  const base = `#/projects/${encodeURIComponent(overview.project.id)}`;
+  const projectId = overview.project.id;
   return `<div class="overview-grid">
     <section class="overview-card" aria-labelledby="card-plans-title">
       <div class="card-header"><h3 id="card-plans-title">Plans (${overview.plans.length})</h3></div>
-      <div class="card-body">${renderPlansList(overview.plans.slice(0, 5))}</div>
-      <a href="${base}/plans" class="card-link">查看全部 Plans →</a>
+      <div class="card-body">${renderPlansList(overview.plans.slice(0, 5), projectId)}</div>
+      <a href="${escapeHtml(overviewLink(projectId, "plans"))}" class="card-link">查看全部 Plans →</a>
     </section>
     <section class="overview-card" aria-labelledby="card-backlog-title">
       <div class="card-header"><h3 id="card-backlog-title">Backlog</h3></div>
@@ -376,13 +377,13 @@ function renderOverviewTab(overview: WorkbenchProjectOverview): string {
         <span class="badge badge-blocked">${bCounts.blocked} blocked</span>
         <span class="badge badge-done">${bCounts.done} done</span>
       </div>
-      <div class="card-body"><h4>最近更新</h4>${renderRecentBacklogList(overview.backlog.recent)}</div>
-      <a href="${base}/backlog" class="card-link">查看全部 Backlog →</a>
+      <div class="card-body"><h4>最近更新</h4>${renderRecentBacklogList(overview.backlog.recent, projectId)}</div>
+      <a href="${escapeHtml(overviewLink(projectId, "backlog"))}" class="card-link">查看全部 Backlog →</a>
     </section>
     <section class="overview-card" aria-labelledby="card-reports-title">
       <div class="card-header"><h3 id="card-reports-title">Reports (${overview.reports.length})</h3></div>
-      <div class="card-body">${renderReportsList(overview.reports.slice(0, 5))}</div>
-      <a href="${base}/reports" class="card-link">查看全部 Reports →</a>
+      <div class="card-body">${renderReportsList(overview.reports.slice(0, 5), projectId)}</div>
+      <a href="${escapeHtml(overviewLink(projectId, "reports"))}" class="card-link">查看全部 Reports →</a>
     </section>
     <section class="overview-card" aria-labelledby="card-retro-title">
       <div class="card-header"><h3 id="card-retro-title">Retrospectives</h3></div>
@@ -391,21 +392,33 @@ function renderOverviewTab(overview: WorkbenchProjectOverview): string {
         <span class="badge badge-active">${rCounts.active} active</span>
         <span class="badge badge-archive">${rCounts.archive} archive</span>
       </div>
-      <div class="card-body">${renderRecentRetrospectivesList(overview.retrospectives.recent)}</div>
-      <a href="${base}/retrospectives" class="card-link">查看全部 Retrospectives →</a>
+      <div class="card-body">${renderRecentRetrospectivesList(overview.retrospectives.recent, projectId)}</div>
+      <a href="${escapeHtml(overviewLink(projectId, "retrospectives"))}" class="card-link">查看全部 Retrospectives →</a>
     </section>
     <section class="overview-card overview-docs" aria-labelledby="card-docs-title">
       <div class="card-header"><h3 id="card-docs-title">Project Docs</h3></div>
       <div class="card-body"><span class="badge ${overview.docs.healthy ? "badge-healthy" : "badge-problem"}">
         ${overview.docs.healthy ? "✓ 标准文档检查通过" : overview.docs.problems.length > 0 ? `⚠ ${overview.docs.problems.length} 个检查问题` : "⚠ 检查不可用"}
       </span></div>
-      <a href="${base}/docs" class="card-link">查看全部 Docs →</a>
+      <a href="${escapeHtml(overviewLink(projectId, "docs"))}" class="card-link">查看全部 Docs →</a>
     </section>
   </div>`;
 }
 
-function overviewRow(title: string, id: string, metadata: string): string {
-  return `<li class="item-row"><span class="item-title">${escapeHtml(title)}</span>
+function overviewLink(projectId: string, view: ViewType, id?: string): string {
+  const route: RouteState = { projectId, view, returnTo: formatRoute({projectId, view:"overview"}) };
+  if (view === "plans" && id) route.planId = id;
+  if (view === "backlog" && id) route.itemId = id;
+  if (view === "reports" && id) route.reportId = id;
+  if (view === "retrospectives") {
+    if (id) route.retrospectiveId = id;
+    route.retrospectiveFilters = {project:projectId, status:"", task:""};
+  }
+  return formatRoute(route);
+}
+
+function overviewRow(title: string, id: string, metadata: string, href: string): string {
+  return `<li class="item-row"><a class="item-title" href="${escapeHtml(href)}">${escapeHtml(title)}</a>
     <div class="overview-item-meta">${metadata}</div><span class="item-id"><code>${escapeHtml(id)}</code></span></li>`;
 }
 
@@ -415,26 +428,26 @@ function overviewDate(value: string): string {
     : `<time datetime="${escapeHtml(value)}" title="${escapeHtml(value)}">${escapeHtml(date.toLocaleString("zh-CN", {year:"numeric", month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit"}))}</time>`;
 }
 
-function renderRecentBacklogList(items: WorkbenchBacklogSummary[]): string {
+function renderRecentBacklogList(items: WorkbenchBacklogSummary[], projectId: string): string {
   if (items.length === 0) return `<p class="empty-list-text">暂无任务。</p>`;
   return `<ul class="items-list">${items.map(item => overviewRow(item.title, item.id,
-    `<span class="badge badge-${escapeHtml(item.status)}">${escapeHtml(item.status)}</span><span>${escapeHtml(item.priority)}</span>`)).join("")}</ul>`;
+    `<span class="badge badge-${escapeHtml(item.status)}">${escapeHtml(item.status)}</span><span>${escapeHtml(item.priority)}</span>`, overviewLink(projectId, "backlog", item.id))).join("")}</ul>`;
 }
 
-function renderPlansList(plans: WorkbenchProjectOverview["plans"]): string {
+function renderPlansList(plans: WorkbenchProjectOverview["plans"], projectId: string): string {
   if (plans.length === 0) return `<p class="empty-list-text">暂无计划。</p>`;
   return `<ul class="items-list">${plans.map(plan => overviewRow(plan.title, plan.id,
-    `<span class="badge badge-${escapeHtml(plan.status)}">${escapeHtml(plan.status)}</span><span>${plan.item_count} 个计划条目</span>`)).join("")}</ul>`;
+    `<span class="badge badge-${escapeHtml(plan.status)}">${escapeHtml(plan.status)}</span><span>${plan.item_count} 个计划条目</span>`, overviewLink(projectId, "plans", plan.id))).join("")}</ul>`;
 }
 
-function renderReportsList(reports: WorkbenchProjectOverview["reports"]): string {
+function renderReportsList(reports: WorkbenchProjectOverview["reports"], projectId: string): string {
   if (reports.length === 0) return `<p class="empty-list-text">暂无交付报告。</p>`;
   return `<ul class="items-list">${reports.map(report => overviewRow(report.title, report.id,
-    `<span class="badge badge-${escapeHtml(report.outcome)}">${escapeHtml(report.outcome)}</span>${overviewDate(report.created_at)}`)).join("")}</ul>`;
+    `<span class="badge badge-${escapeHtml(report.outcome)}">${escapeHtml(report.outcome)}</span>${overviewDate(report.created_at)}`, overviewLink(projectId, "reports", report.id))).join("")}</ul>`;
 }
 
-function renderRecentRetrospectivesList(recent: WorkbenchProjectOverview["retrospectives"]["recent"]): string {
+function renderRecentRetrospectivesList(recent: WorkbenchProjectOverview["retrospectives"]["recent"], projectId: string): string {
   if (recent.length === 0) return `<p class="empty-list-text">当前项目暂无回顾。</p>`;
   return `<ul class="items-list">${recent.map(record => overviewRow(record.id, record.path,
-    `<span class="badge badge-${escapeHtml(record.status)}">${escapeHtml(record.status)}</span>${overviewDate(record.created_at)}`)).join("")}</ul>`;
+    `<span class="badge badge-${escapeHtml(record.status)}">${escapeHtml(record.status)}</span>${overviewDate(record.created_at)}`, overviewLink(projectId, "retrospectives", record.id))).join("")}</ul>`;
 }

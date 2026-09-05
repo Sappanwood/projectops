@@ -203,6 +203,8 @@ archive 可重复传 `--backlog project-ops:backlog/items/<ID>.md` 关联自身�
 它不会检查本文、链接、内容新鲜度或语义一致性；Agent 需另行检查契约与入口链接。
 
 Workbench 可浏览 Backlog 并在详情顶部修改状态；revision 位于技术信息中。五类内容正文默认阅读排版，
+Overview 的任务、计划、报告和回顾标题可直接进入详情，支持复制链接、新标签页打开和刷新定位。
+详情提供“返回 Overview”，当前页面会话内恢复来源滚动位置；回顾链接显式携带当前项目筛选。
 可切换 Markdown 源码；Plan 通过任务目录定位正文，审批与 mapping 位于计划记录中。Plan 另有实时执行进度，按 task 计数，epic 不计入完成率；
 缺失或损坏任务仍占总数并显示诊断，未物化/零 task 不显示虚假的完成率。CLI 更新任务后点击 Refresh 查看最新进度，
 不通过修改 Plan 记录推进执行状态。点击 Plan 映射任务进入 Backlog，完成状态更新后点击“返回原 Plan”

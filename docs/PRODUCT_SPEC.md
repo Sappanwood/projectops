@@ -41,6 +41,8 @@ Markdown/JSON artifact 为权威数据，通过统一 `pops` CLI 和 Local Web W
 Overview 桌面采用两列，按 Plans、Backlog、Reports、Retrospectives 排列，Project Docs 独占末行；
 小于 1024px 时按相同顺序单列展示。卡片高度随内容增长，标题完整换行，状态/时间与 ID 分行，
 长 ID 允许断行，不使用卡片内部滚动条。五类面板提供一致的“查看全部”入口，日期按浏览器本地时间显示。
+任务、计划、报告和回顾标题使用真实详情链接，支持新标签页、刷新定位及返回 Overview；
+返回时重读项目摘要并在当前会话内恢复来源滚动位置，回顾列表和详情入口携带项目筛选。
 
 - Workspace topology、Backlog、Plan、Report、Docs 和 Retrospective 使用独立 versioned schema。
 - 不建立覆盖所有 artifact 的通用 schema 或生命周期。

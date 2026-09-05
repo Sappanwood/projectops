@@ -134,6 +134,7 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
 
     state = setProjectSuccess(state, projectResult.data);
     render();
+    if (state.currentView === "overview") restoreReadingPosition();
     if (state.currentView === "backlog") await loadBacklogRoute(projectId);
     if (isReadPage(state.currentView)) await loadReadPages(projectId);
   }
@@ -236,6 +237,7 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
     }
 
     render();
+    if (state.currentView === "overview") restoreReadingPosition();
     if (state.currentView === "backlog" && state.selectedProjectId !== null && state.projectError === null) {
       await loadBacklogRoute(state.selectedProjectId);
     }
@@ -296,6 +298,7 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
     } else if (viewChanged) {
       state = selectView(state, route.view);
       render();
+      if (route.view === "overview" && route.projectId !== null) void loadProject(route.projectId);
       if (route.view === "backlog" && route.projectId !== null) void loadBacklogRoute(route.projectId);
       if (isReadPage(route.view) && route.projectId !== null) void loadReadPages(route.projectId);
     } else {

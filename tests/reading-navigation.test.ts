@@ -3,6 +3,16 @@ import test from "node:test";
 import { formatRoute, parseRoute } from "../src/web/router.js";
 import { documentLink } from "../src/web/docsView.js";
 
+test("Overview is a valid return destination for every detail route", () => {
+  for (const returnTo of ['#/projects/alpha', '#/projects/alpha/overview']) {
+    const route = { projectId:'alpha', view:'backlog' as const, itemId:'ALP-001', returnTo };
+    assert.deepEqual(parseRoute(formatRoute(route)), route);
+  }
+  for (const returnTo of ['https://evil.test', '#/projects/alpha/unknown', '#/projects/alpha/overview/extra']) {
+    assert.equal(parseRoute(formatRoute({projectId:'alpha',view:'plans',returnTo})).returnTo, undefined);
+  }
+});
+
 test("Retrospective details preserve filters and bounded return routes", () => {
   const hash = '#/projects/alpha/retrospectives/retro-reading?filter_project=alpha&status=inbox&task=ALP-001';
   const route = parseRoute(hash);

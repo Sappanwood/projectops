@@ -45,7 +45,7 @@ export function formatRoute(route: RouteState): string {
 }
 
 function isReturnRoute(value: string): boolean {
-  return value.length < 8192 && !/[\x00-\x1f]/.test(value) && /^#\/projects\/[^/?#]+\/(backlog|plans|reports|docs|retrospectives)(?:[/?]|$)/.test(value);
+  return value.length < 8192 && !/[\x00-\x1f]/.test(value) && (/^#\/projects\/[^/?#]+(?:\/overview)?$/.test(value) || /^#\/projects\/[^/?#]+\/(backlog|plans|reports|docs|retrospectives)(?:[/?]|$)/.test(value));
 }
 
 function formatBaseRoute(route: RouteState): string {
