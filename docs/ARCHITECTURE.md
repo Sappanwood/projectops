@@ -263,6 +263,12 @@ use case 在既有初始化与回滚边界内将成功和失败格式化为 JSON
 
 ## Plan 执行进度 projection
 
+Overview 的 `plans[].execution` 复用 `readPlanExecution`，仅保留 materialized、counts、completion_percent 与
+逐项读取 diagnostics；不携带任务正文或另存执行状态。未完成计划优先、同组 ID 排序在 application 层完成。
+Overview 的 `backlog.mode` 为 active/recent，`recent` 为对应范围的最多五条预览：活动条目按进行中、待办、
+优先级、ID 排序，无活动条目时按更新时间倒序、ID 升序。计数保留全量已读取状态，Web 据 mode 显示预览范围。
+报告摘要限当前项目，按解析后的生成时间倒序、ID 升序；读取失败保留领域 diagnostics。
+
 `getWorkbenchReadPages` 返回的 `plans[]` 在 Plan 数据上附加 `execution`，持久化 Plan schema 不变。
 `readPlanExecution` 通过共享 `showBacklogItem` 逐项读取同项目 mapping；局部读取失败只影响该条目，
 不使用全量 Backlog 列表失败结果覆盖其他有效任务。`execution` 包含 `materialized`、`counts`、

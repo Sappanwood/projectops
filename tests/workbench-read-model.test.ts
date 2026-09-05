@@ -129,6 +129,79 @@ test("Workbench workspace overview handles an empty workspace", () => {
   assert.equal(JSON.stringify(result.data).includes(workspaceDir), false);
 });
 
+test("Overview prioritizes active work, caps previews and falls back to recent updates", () => {
+  const workspaceDir = setupProject();
+  try {
+    for (let i = 0; i < 6; i++) assert.equal(run(['backlog','add','repo-a','-T',`Task ${i}`,'-c','feature','--priority',i === 5 ? 'P0' : 'P2'],workspaceDir).code,0);
+    assert.equal(run(['backlog','update','repo-a','REP-003','--status','in_progress'],workspaceDir).code,0);
+    const result = getWorkbenchProjectOverview({workspaceDir,projectId:'repo-a'});
+    assert.ok(result.ok);
+    assert.equal(result.data.backlog.mode,'active');
+    assert.equal(result.data.backlog.counts.todo,6);
+    assert.deepEqual(result.data.backlog.recent.map(item => item.id),['REP-003','REP-008','REP-001','REP-004','REP-005']);
+    for (let i = 1; i <= 8; i++) assert.equal(run(['backlog','update','repo-a',`REP-${String(i).padStart(3,'0')}`,'--status','done'],workspaceDir).code,0);
+    const file = path.join(workspaceDir,'ops/repo-a/backlog/items/REP-008.md');
+    writeFileSync(file,readFileSync(file,'utf8').replace(/updated: .*/, 'updated: 2099-01-01'));
+    const recent = getWorkbenchProjectOverview({workspaceDir,projectId:'repo-a'});
+    assert.ok(recent.ok);
+    assert.equal(recent.data.backlog.mode,'recent');
+    assert.deepEqual(recent.data.backlog.recent.map(item => item.id),['REP-008','REP-001','REP-002','REP-003','REP-004']);
+  } finally { rmSync(workspaceDir,{recursive:true,force:true}); }
+});
+
+test("Overview separates Plan approval, live task progress and historical report outcomes", () => {
+  const workspaceDir = setupProject();
+  try {
+    const root = path.join(workspaceDir,'ops/repo-a/plans');
+    const base = JSON.parse(readFileSync(path.join(root,'plan-workbench.json'),'utf8'));
+    for (const [name, mapping, itemType] of [
+      ['completed','REP-002','task'], ['running','REP-001','task'], ['missing','REP-999','task'], ['zero','REP-998','epic'],
+    ]) {
+      writeFileSync(path.join(root,`plan-${name}.json`),JSON.stringify({...base,id:`plan-${name}`,title:name,status:'approved',
+        approval:{approved_at:'2026-09-05',review_note:'Fixture'},items:[{...base.items[0],item_type:itemType}],
+        materialization:{materialized_at:'2026-09-05',mapping:{summary:mapping}}}));
+    }
+    writeFileSync(path.join(root,'plan-unmaterialized.json'),JSON.stringify({...base,id:'plan-unmaterialized',status:'approved',approval:{approved_at:'2026-09-05',review_note:'Fixture'}}));
+    writeFileSync(path.join(root,'plan-invalid.json'),'{bad');
+    const result = getWorkbenchProjectOverview({workspaceDir,projectId:'repo-a'});
+    assert.ok(result.ok);
+    assert.equal(result.data.plans.at(-1)!.id,'plan-completed');
+    assert.equal(result.data.plans.length,6);
+    const plan = (id: string) => result.data.plans.find(p => p.id === `plan-${id}`)!;
+    assert.equal(plan('workbench').execution.completion_percent,null);
+    assert.equal(plan('unmaterialized').execution.materialized,false);
+    assert.equal(plan('zero').execution.counts.total,0);
+    assert.equal(plan('zero').execution.completion_percent,null);
+    assert.equal(plan('completed').status,'approved');
+    assert.equal(plan('completed').execution.completion_percent,100);
+    assert.equal(plan('running').execution.counts.todo,1);
+    assert.equal(plan('missing').execution.counts.total,1);
+    assert.equal(plan('missing').execution.counts.unreadable,1);
+    assert.equal(plan('missing').execution.diagnostics[0]!.id,'REP-999');
+    assert.ok(result.data.diagnostics.some(d => d.source === 'plans'));
+    assert.equal(result.data.reports[0]!.outcome,'completed');
+    assert.equal(run(['backlog','update','repo-a','REP-002','--status','todo'],workspaceDir).code,0);
+    const refreshed = getWorkbenchProjectOverview({workspaceDir,projectId:'repo-a'});
+    assert.ok(refreshed.ok);
+    assert.equal(refreshed.data.plans.find(p => p.id === 'plan-completed')!.execution.completion_percent,0);
+    assert.equal(refreshed.data.reports[0]!.outcome,'completed');
+  } finally { rmSync(workspaceDir,{recursive:true,force:true}); }
+});
+
+test("Overview sorts Reports by instant then ID rather than filename or timezone spelling", () => {
+  const workspaceDir = setupProject();
+  try {
+    const root = path.join(workspaceDir,'ops/repo-a/reports');
+    const original = readFileSync(path.join(root,'report-workbench.md'),'utf8');
+    for (const [id, time] of [['report-a','2026-09-05T09:00:00+09:00'],['report-z','2026-09-05T01:00:00Z'],['report-b','2026-09-05T00:00:00Z']]) {
+      writeFileSync(path.join(root,`${id}.md`),original.replaceAll('report-workbench',id!).replace('2026-09-04T12:00:00+09:00',time!));
+    }
+    const result = getWorkbenchProjectOverview({workspaceDir,projectId:'repo-a'});
+    assert.ok(result.ok);
+    assert.deepEqual(result.data.reports.map(report => report.id),['report-z','report-a','report-b','report-workbench']);
+  } finally { rmSync(workspaceDir,{recursive:true,force:true}); }
+});
+
 test("Workbench project overview combines stable domain summaries", () => {
   const workspaceDir = setupProject();
 
@@ -146,12 +219,13 @@ test("Workbench project overview combines stable domain summaries", () => {
     cancelled: 0,
     blocked: 0,
   });
-  assert.deepEqual(first.data.backlog.recent.map((item) => item.id), ["REP-001", "REP-002"]);
+  assert.deepEqual(first.data.backlog.recent.map((item) => item.id), ["REP-001"]);
   assert.deepEqual(first.data.plans, [{
     id: "plan-workbench",
     title: "Workbench",
     status: "draft",
     item_count: 1,
+    execution: {materialized:false, counts:{total:0,todo:0,in_progress:0,done:0,blocked:0,cancelled:0,unreadable:0}, completion_percent:null, diagnostics:[]},
   }]);
   assert.deepEqual(first.data.reports, [{
     id: "report-workbench",
@@ -269,7 +343,6 @@ test("Workbench project overview isolates backlog item ID mismatch as ITEM_ID_MI
     entry.code === "ITEM_ID_MISMATCH",
   ));
 });
-
 
 
 

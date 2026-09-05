@@ -43,6 +43,11 @@ Overview 桌面采用两列，按 Plans、Backlog、Reports、Retrospectives 排
 长 ID 允许断行，不使用卡片内部滚动条。五类面板提供一致的“查看全部”入口，日期按浏览器本地时间显示。
 任务、计划、报告和回顾标题使用真实详情链接，支持新标签页、刷新定位及返回 Overview；
 返回时重读项目摘要并在当前会话内恢复来源滚动位置，回顾列表和详情入口携带项目筛选。
+Plans 将未完成（含草案、未物化和零 task）放在全部 task 已完成的计划之前，同组按 ID 排序；
+审批状态与从当前 Backlog 计算的 task 完成数/百分比分开显示，缺失映射保留分母和诊断。
+Backlog 优先展示进行中、待办，再按优先级与 ID 排序；没有活动条目时提示并展示最近更新，
+按更新时间倒序、ID 升序。Reports 按实际生成时间倒序、ID 升序，保留历史交付结果。
+以上三类列表最多预览五条，显示预览数与对应范围总数；读取异常时标注数量仅代表已读取记录，保留可读内容。
 
 - Workspace topology、Backlog、Plan、Report、Docs 和 Retrospective 使用独立 versioned schema。
 - 不建立覆盖所有 artifact 的通用 schema 或生命周期。

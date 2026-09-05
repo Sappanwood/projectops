@@ -363,10 +363,12 @@ function renderOverviewTab(overview: WorkbenchProjectOverview): string {
   const bCounts = overview.backlog.counts;
   const rCounts = overview.retrospectives.counts;
   const projectId = overview.project.id;
+  const backlogTotal = overview.backlog.mode === "active" ? bCounts.todo + bCounts.in_progress : Object.values(bCounts).reduce((sum, count) => sum + count, 0);
   return `<div class="overview-grid">
     <section class="overview-card" aria-labelledby="card-plans-title">
       <div class="card-header"><h3 id="card-plans-title">Plans (${overview.plans.length})</h3></div>
-      <div class="card-body">${renderPlansList(overview.plans.slice(0, 5), projectId)}</div>
+      ${overviewPreview(overview, "plans", Math.min(5, overview.plans.length), overview.plans.length)}
+      <div class="card-body">${overview.plans.length === 0 && overview.diagnostics.some(d => d.source === "plans") ? "" : renderPlansList(overview.plans.slice(0, 5), projectId)}</div>
       <a href="${escapeHtml(overviewLink(projectId, "plans"))}" class="card-link">查看全部 Plans →</a>
     </section>
     <section class="overview-card" aria-labelledby="card-backlog-title">
@@ -377,12 +379,16 @@ function renderOverviewTab(overview: WorkbenchProjectOverview): string {
         <span class="badge badge-blocked">${bCounts.blocked} blocked</span>
         <span class="badge badge-done">${bCounts.done} done</span>
       </div>
-      <div class="card-body"><h4>最近更新</h4>${renderRecentBacklogList(overview.backlog.recent, projectId)}</div>
+      ${overviewPreview(overview, "backlog", overview.backlog.recent.length, backlogTotal)}
+      <div class="card-body"><h4>${overview.backlog.mode === "active" ? "进行中与待办" : "最近更新"}</h4>
+        ${overview.backlog.mode === "recent" && !overview.diagnostics.some(d => d.source === "backlog") ? '<p class="muted">当前没有进行中或待办任务。</p>' : ""}
+        ${overview.backlog.recent.length === 0 && overview.diagnostics.some(d => d.source === "backlog") ? "" : renderRecentBacklogList(overview.backlog.recent, projectId)}</div>
       <a href="${escapeHtml(overviewLink(projectId, "backlog"))}" class="card-link">查看全部 Backlog →</a>
     </section>
     <section class="overview-card" aria-labelledby="card-reports-title">
       <div class="card-header"><h3 id="card-reports-title">Reports (${overview.reports.length})</h3></div>
-      <div class="card-body">${renderReportsList(overview.reports.slice(0, 5), projectId)}</div>
+      ${overviewPreview(overview, "reports", Math.min(5, overview.reports.length), overview.reports.length)}
+      <div class="card-body">${overview.reports.length === 0 && overview.diagnostics.some(d => d.source === "reports") ? "" : renderReportsList(overview.reports.slice(0, 5), projectId)}</div>
       <a href="${escapeHtml(overviewLink(projectId, "reports"))}" class="card-link">查看全部 Reports →</a>
     </section>
     <section class="overview-card" aria-labelledby="card-retro-title">
@@ -403,6 +409,12 @@ function renderOverviewTab(overview: WorkbenchProjectOverview): string {
       <a href="${escapeHtml(overviewLink(projectId, "docs"))}" class="card-link">查看全部 Docs →</a>
     </section>
   </div>`;
+}
+
+function overviewPreview(overview: WorkbenchProjectOverview, source: WorkbenchDiagnostic["source"], shown: number, total: number): string {
+  const problems = overview.diagnostics.filter(d => d.source === source);
+  return `<p class="overview-preview muted">展示 ${shown} / ${problems.length ? "已读取" : "共"} ${total} 条</p>${problems.length
+    ? `<p class="reading-notice" role="status">部分数据无法读取，数量仅代表已读取记录。${problems.map(d => escapeHtml(d.message)).join(" ")}</p>` : ""}`;
 }
 
 function overviewLink(projectId: string, view: ViewType, id?: string): string {
@@ -437,7 +449,13 @@ function renderRecentBacklogList(items: WorkbenchBacklogSummary[], projectId: st
 function renderPlansList(plans: WorkbenchProjectOverview["plans"], projectId: string): string {
   if (plans.length === 0) return `<p class="empty-list-text">暂无计划。</p>`;
   return `<ul class="items-list">${plans.map(plan => overviewRow(plan.title, plan.id,
-    `<span class="badge badge-${escapeHtml(plan.status)}">${escapeHtml(plan.status)}</span><span>${plan.item_count} 个计划条目</span>`, overviewLink(projectId, "plans", plan.id))).join("")}</ul>`;
+    `<span class="badge badge-${escapeHtml(plan.status)}">${escapeHtml(plan.status)}</span><span>${plan.item_count} 个计划条目</span>${overviewPlanProgress(plan.execution)}`, overviewLink(projectId, "plans", plan.id))).join("")}</ul>`;
+}
+
+function overviewPlanProgress(execution: WorkbenchProjectOverview["plans"][number]["execution"]): string {
+  const progress = !execution.materialized ? "未开始执行" : execution.counts.total === 0 ? "无可执行任务"
+    : `任务完成 ${execution.counts.done} / ${execution.counts.total} · ${execution.completion_percent}%`;
+  return `<span class="overview-progress">${progress}</span>${execution.diagnostics.map(d => `<span class="reading-notice">${escapeHtml(d.message)}</span>`).join("")}`;
 }
 
 function renderReportsList(reports: WorkbenchProjectOverview["reports"], projectId: string): string {

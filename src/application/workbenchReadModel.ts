@@ -1,5 +1,5 @@
 import { readPlanNext } from "./planNext.js";
-import { readPlanExecution, type WorkbenchPlan } from "./planExecution.js";
+import { readPlanExecution, type PlanExecution, type WorkbenchPlan } from "./planExecution.js";
 import type { Plan } from "../plan/plan.js";
 import type { Report } from "../report/report.js";
 import { PROJECT_DOC_TEMPLATES } from "../docs/projectDocs.js";
@@ -63,6 +63,7 @@ export type WorkbenchProjectOverview = {
   project: WorkspaceProjectSummary;
   backlog: {
     counts: Record<ItemStatus, number>;
+    mode: "active" | "recent";
     recent: WorkbenchBacklogSummary[];
   };
   plans: Array<{
@@ -70,6 +71,7 @@ export type WorkbenchProjectOverview = {
     title: string;
     status: string;
     item_count: number;
+    execution: Omit<PlanExecution, "items"> & { diagnostics: Array<{ id: string; code: string; message: string }> };
   }>;
   reports: Array<{
     id: string;
@@ -154,8 +156,15 @@ export function getWorkbenchProjectOverview(
   );
   const project = { id: request.projectId, path: registration.path };
   const backlog = readBacklog(request.workspaceDir, request.projectId, diagnostics);
-  const plans = readPlans(roots.plans, diagnostics).map((plan) => ({ id: plan.id, title: plan.title, status: plan.status, item_count: plan.items.length }));
-  const reports = readReports(workspace.root, roots.reports, diagnostics).map((report) => ({ id: report.id, title: report.title, outcome: report.outcome, created_at: report.created_at }));
+  const plans = readPlans(roots.plans, diagnostics).map((plan) => {
+    const { items, ...execution } = readPlanExecution(request, plan);
+    return { id: plan.id, title: plan.title, status: plan.status, item_count: plan.items.length,
+      execution: { ...execution, diagnostics: items.flatMap(item => item.diagnostic ? [{id:item.id, ...item.diagnostic}] : []) } };
+  }).sort((a, b) => Number(a.execution.completion_percent === 100) - Number(b.execution.completion_percent === 100) || a.id.localeCompare(b.id));
+  const reports = readReports(workspace.root, roots.reports, diagnostics)
+    .filter(report => report.project === request.projectId)
+    .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at) || a.id.localeCompare(b.id))
+    .map((report) => ({ id: report.id, title: report.title, outcome: report.outcome, created_at: report.created_at }));
   const docs = readDocs(
     workspace.root,
     resolveProjectPath(workspace.root, registration.path),
@@ -194,7 +203,7 @@ function readBacklog(
       code: "DOMAIN_UNAVAILABLE",
       message: "Backlog items could not be listed.",
     });
-    return { counts, recent: [] };
+    return { counts, mode: "recent", recent: [] };
   }
   if (!result.ok) {
     diagnostics.push({
@@ -202,14 +211,18 @@ function readBacklog(
       code: result.error.code,
       message: result.error.message,
     });
-    return { counts, recent: [] };
+    return { counts, mode: "recent", recent: [] };
   }
   for (const item of result.data.items) counts[item.status] += 1;
-  const recent = [...result.data.items]
-    .sort((left, right) => right.updated.localeCompare(left.updated) || left.id.localeCompare(right.id))
+  const active = result.data.items.filter(item => item.status === "in_progress" || item.status === "todo");
+  const mode = active.length > 0 ? "active" : "recent";
+  const recent = (mode === "active" ? active : [...result.data.items])
+    .sort((left, right) => mode === "active"
+      ? Number(right.status === "in_progress") - Number(left.status === "in_progress") || left.priority.localeCompare(right.priority) || left.id.localeCompare(right.id)
+      : right.updated.localeCompare(left.updated) || left.id.localeCompare(right.id))
     .slice(0, 5)
     .map(toWorkbenchBacklogSummary);
-  return { counts, recent };
+  return { counts, mode, recent };
 }
 
 function readPlans(

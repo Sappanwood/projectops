@@ -51,6 +51,7 @@ const mockWorkspace: WorkbenchWorkspaceOverview = {
 const mockProjectOverview: WorkbenchProjectOverview = {
   project: { id: "alpha", path: "repos/alpha" },
   backlog: {
+    mode: "active",
     counts: {
       todo: 3,
       in_progress: 1,
@@ -78,6 +79,7 @@ const mockProjectOverview: WorkbenchProjectOverview = {
       title: "Core Infrastructure",
       status: "approved",
       item_count: 4,
+      execution: {materialized:false, counts:{total:0,todo:0,in_progress:0,done:0,blocked:0,cancelled:0,unreadable:0}, completion_percent:null, diagnostics:[]},
     },
   ],
   reports: [
