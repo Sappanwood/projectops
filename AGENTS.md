@@ -78,7 +78,8 @@ Workspace Control resolver 继续负责 Repo 定位与开发服务。本节是�
 新产生的自身过程 artifact 使用 ProjectOps manifest 路由，不使用 resolver 返回的 Workspace Control artifact roots。
 
 自身数据 workspace 为 `/home/ling/workspace`，authority 为其 `.pops/workspace.json`。
-操作前必须阅读 [Agent 操作契约](docs/AGENT_CONTRACT.md)，按其中的 list/doctor、初始化、CLI 与 revision 流程执行。
+操作前从 [ProjectOps 工作流 skill](skills/projectops-workflow/SKILL.md) 进入，再按其路由读取
+[Agent 操作契约](docs/AGENT_CONTRACT.md) 的 list/doctor、初始化、CLI 与 revision 流程。
 artifact 路径由 ProjectOps manifest 解析，不自行拼接。
 全局 skill 若假定 Workspace Control store/schema，不得直接套用于自身数据；使用 ProjectOps 当前 CLI 契约。
 ADR、Research 使用 ProjectOps 登记的对应 typed roots；自身 dogfooding 回顾使用其 workspace-level Retrospective store。
@@ -94,6 +95,7 @@ backlog --store <resolved-artifacts.backlog.root> <command> --json
 
 | 文档或 artifact | 何时读 | 何时更新 |
 |---|---|---|
+| [skills/projectops-workflow/SKILL.md](skills/projectops-workflow/SKILL.md) | Agent 操作 ProjectOps 数据、执行验收或恢复 run 前 | 工作流决策、恢复路径或 skill 接入变化时 |
 | [docs/AGENT_CONTRACT.md](docs/AGENT_CONTRACT.md) | Agent 操作自身过程数据前 | CLI 参数、输出、生命周期或操作流程变化时 |
 | [README.md](README.md) | 了解安装方式和当前可运行能力时 | CLI、安装步骤或用户入口变化时 |
 | [docs/PRODUCT_SPEC.md](docs/PRODUCT_SPEC.md) | 修改产品范围、用户工作流或数据契约前 | 功能、用户流程、schema 或版本路线变化时 |

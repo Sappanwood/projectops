@@ -11,8 +11,13 @@ Workflow Retrospective。
 迁移脚本，不保留运行时兼容分支。已完成或归档数据不要求持续迁移；旧版本不可读时应明确提示版本不支持。
 这是 Alpha 演进规则，具体操作与路由见 [AGENTS.md](AGENTS.md)。
 
-Agent 使用前请阅读 [Agent 操作契约](docs/AGENT_CONTRACT.md)，其中集中说明 workspace 定位、CLI 返回值、
-revision 冲突处理，以及 Plan 审批、交付和回顾的执行边界。
+Agent 使用前从 [ProjectOps 工作流 skill](skills/projectops-workflow/SKILL.md) 进入，按需读取
+[Agent 操作契约](docs/AGENT_CONTRACT.md) 中的命令与数据说明。skill 负责步骤选择、证据判断和恢复路径。
+
+该 skill 随 Repo 分发，当前通过本入口直接读取，无需安装全局配置。若以后接入全局 skill 发现机制，
+采用单独审阅的安装变更：在 `~/.agents/skills/projectops-workflow` 建立指向本 Repo skill 目录的 symlink，
+各 Agent 的 skill 目录再通过 symlink 引用 `~/.agents/skills`，保留唯一活动入口与 Repo 内相对引用。
+安装前检查已有入口及其指向，冲突时不覆盖；移动 Repo 时同步调整链接。不要单独复制 SKILL.md 或其引用资料。
 
 ## 快速开始
 
