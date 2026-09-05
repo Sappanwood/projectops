@@ -99,6 +99,7 @@ backlog --store <resolved-artifacts.backlog.root> <command> --json
 | [docs/AGENT_CONTRACT.md](docs/AGENT_CONTRACT.md) | Agent 操作自身过程数据前 | CLI 参数、输出、生命周期或操作流程变化时 |
 | [README.md](README.md) | 了解安装方式和当前可运行能力时 | CLI、安装步骤或用户入口变化时 |
 | [docs/PRODUCT_SPEC.md](docs/PRODUCT_SPEC.md) | 修改产品范围、用户工作流或数据契约前 | 功能、用户流程、schema 或版本路线变化时 |
+| [docs/FRONTEND_GUIDELINES.md](docs/FRONTEND_GUIDELINES.md) | 修改前端控件、样式或布局前 | 共享视觉、控件状态、页面例外或前端验收规则变化时 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 修改模块、依赖方向、存储或运行形态前 | 组件关系、核心数据流或技术选型变化时 |
 | `<ops-path>/adr/` | 需要查看或记录架构取舍时 | 新增、替代或废弃架构决策时 |
 | `<ops-path>/backlog/` | 开始任务、查看验收范围或更新状态时 | 任务创建、状态或验收边界变化时 |

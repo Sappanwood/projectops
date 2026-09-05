@@ -16,27 +16,8 @@
   display: block;
   margin: 0.8rem 0;
 }
-[data-foundation-editor] .form-input,
-[data-foundation-plan] .form-input,
-[data-execution-panel] .form-input {
-  display: block;
-  width: 100%;
-  box-sizing: border-box;
-  padding: 0.65rem;
-  margin-top: 0.35rem;
-  color: var(--text-primary);
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: 0.4rem;
-  font: inherit;
-}
 [data-foundation-plan] textarea {
   font-family: var(--font-mono);
-}
-[data-foundation-editor] textarea,
-[data-foundation-plan] textarea,
-[data-execution-panel] textarea {
-  resize: vertical;
 }
 [data-foundation-plan] pre,
 [data-execution-panel] pre {
@@ -46,10 +27,6 @@
   background: var(--bg-primary);
   font: 0.85rem / 1.6 var(--font-mono);
 }
-[data-execution-panel] .btn {
-  white-space: normal;
-  overflow-wrap: anywhere;
-}
 [data-execution-panel] dd {
   margin: 0.2rem 0 0.7rem;
 }
@@ -58,4 +35,21 @@
 }
 [data-execution-panel] summary {
   cursor: pointer;
+}
+
+:where(
+    [data-foundation-editor],
+    [data-foundation-plan],
+    [data-execution-panel],
+    [data-plan-run-panel],
+    [data-parallel-panel]
+  )
+  > p:not([role]) {
+  color: var(--text-secondary);
+  font-size: var(--control-font-size);
+  line-height: 1.6;
+}
+:where([data-plan-run-panel], [data-parallel-panel]) label {
+  display: block;
+  margin-block: 0.8rem;
 }
