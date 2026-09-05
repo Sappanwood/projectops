@@ -97,7 +97,7 @@ backlog --store <resolved-artifacts.backlog.root> <command> --json
 |---|---|---|
 | [skills/projectops-workflow/SKILL.md](skills/projectops-workflow/SKILL.md) | Agent 操作 ProjectOps 数据、执行验收或恢复 run 前 | 工作流决策、恢复路径或 skill 接入变化时 |
 | [docs/AGENT_CONTRACT.md](docs/AGENT_CONTRACT.md) | Agent 操作自身过程数据前 | CLI 参数、输出、生命周期或操作流程变化时 |
-| [README.md](README.md) | 了解安装方式和当前可运行能力时 | CLI、安装步骤或用户入口变化时 |
+| [README.md](README.md) | 了解安装方式、代码检查入口和当前可运行能力时 | CLI、安装步骤、质量入口或用户入口变化时 |
 | [docs/PRODUCT_SPEC.md](docs/PRODUCT_SPEC.md) | 修改产品范围、用户工作流或数据契约前 | 功能、用户流程、schema 或版本路线变化时 |
 | [docs/FRONTEND_GUIDELINES.md](docs/FRONTEND_GUIDELINES.md) | 修改前端控件、样式或布局前 | 共享视觉、控件状态、页面例外或前端验收规则变化时 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 修改模块、依赖方向、存储或运行形态前 | 组件关系、核心数据流或技术选型变化时 |
@@ -148,6 +148,7 @@ node dist/cli.js --version
   CLI/API、权限、路径和并发契约采用 Red-Green-Refactor，保持 Alpha 已接受的安全边界。
 - 测试失败必须区分基线失败、环境限制和新增回归，记录具体命令及诊断；不能以静态检查通过代替完整门禁。
 
+- 前端任务按 [前端交付验收](docs/FRONTEND_GUIDELINES.md#前端交付验收) 复用控件和布局，并完成实际受影响状态的真实浏览器检查；后台和纯文档任务不承担无关视觉门禁。
 - 功能变更至少运行与当前 happy path 直接相关的测试。
 - TypeScript 源码变更运行 `npm run typecheck`。
 - CLI 或构建入口变化运行 `npm run build` 和一次对应 smoke。

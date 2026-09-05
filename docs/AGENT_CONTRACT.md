@@ -3,6 +3,7 @@
 本契约描述当前 Alpha CLI 的操作顺序与结果处理。开始任务先读 [AGENTS.md](../AGENTS.md)，
 产品数据约束见 [PRODUCT_SPEC.md](PRODUCT_SPEC.md)，人工演示见 [README.md](../README.md)。
 CLI 参数、输出或生命周期改变时，同步更新本文并在隔离 workspace 验证相关示例。
+工具操作顺序与恢复决策从 [工作流 skill](../skills/projectops-workflow/SKILL.md) 进入；开发代码的质量入口见 [README](../README.md#开发质量检查)，前端交付使用 [前端规范](FRONTEND_GUIDELINES.md#前端交付验收)。本文不重复维护开发规范。
 
 ## 选择 workspace 与入口
 

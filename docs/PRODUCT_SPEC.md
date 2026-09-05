@@ -161,7 +161,7 @@ id、title、priority、status，blocked 额外包含 reasons（依赖 id、code
 ## Plan 与 Backlog 页面联动
 
 Plan 详情中的“下一步任务”展示共享查询返回的进行中、可开始、受阻列表及依赖原因，排序与 `pops plan next` 一致。
-进度和推荐列表中的任务链接进入同项目 Backlog 详情，继续使用现有携带 revision 的状态更新；Plan 页面不新增 mutation。
+进度和推荐列表中的任务链接进入同项目 Backlog 详情，继续使用现有携带 revision 的状态更新；此导航不自动修改 Plan 或启动执行。
 `#/projects/<project>/plans/<plan-id>` 定位并展开 Plan；
 `#/projects/<project>/backlog/<item-id>?plan=<plan-id>` 定位任务并保留同项目来源 Plan。
 “返回原 Plan”重读进度与推荐，清除旧 projection，展开并定位原计划；手动 Refresh 仍可用，无实时推送。

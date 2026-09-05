@@ -107,6 +107,7 @@ npm run quality:full  # quality、一次 build、Node 测试、Chromium E2E
 低风险文案、样式和配置可实现后验证；Bug、数据或状态逻辑先用失败测试锁定行为；
 CLI/API、权限、路径及并发契约变更使用 Red-Green-Refactor。具体必跑门禁见 [AGENTS.md](AGENTS.md#完工验收)。
 格式修正与行为或结构重构分开提交，避免机械 diff 隐藏行为变化。
+前端开发使用 [Workbench 前端规范](docs/FRONTEND_GUIDELINES.md)，其中的交付验收仅适用于实际受影响的前端页面与状态；Agent 操作项目数据仍从 [工作流 skill](skills/projectops-workflow/SKILL.md) 进入。
 
 ## 验证 Workbench
 
