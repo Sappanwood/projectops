@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { promisify } from "node:util";
 import { showBacklogItem, updateBacklogItemStatus } from "./backlogApi.js";
 import { executionResult } from "./executionApi.js";
+import { verificationChecksForSnapshot, verificationChecksPass } from "./verificationChecks.js";
 import { computePlanRevision, computePlanExecutionRevision } from "./planRevision.js";
 import { type ApplicationResult } from "./result.js";
 import { activeStates, type ExecutionAttempt } from "../execution/attempt.js";
@@ -10,7 +11,6 @@ import { ExecutionRuntime } from "../execution/runtime.js";
 import { captureSnapshot } from "../execution/snapshot.js";
 import {
   context,
-  evidenceReadable,
   executionRepo,
   ExecutionError,
   listAttempts,
@@ -224,17 +224,11 @@ function accepted(
     listAttempts(c.root, run.project_id).some((other) => other.retry_of === attempt.id)
   )
     invalid(`Task ${node.item_id} lacks accepted owned-checkout evidence.`);
-  const checks = new Map(
-    attempt.verifications
-      .filter((v) => v.snapshot.digest === attempt.acceptance!.snapshot_digest)
-      .map((v) => [v.command, v]),
+  const checks = verificationChecksForSnapshot(
+    attempt.verifications,
+    attempt.acceptance!.snapshot_digest,
   );
-  if (
-    !checks.size ||
-    [...checks.values()].some(
-      (v) => v.outcome !== "passed" || !evidenceReadable(c.root, v.evidence_ref, v.evidence_digest),
-    )
-  )
+  if (!checks.length || !verificationChecksPass(c.root, checks))
     invalid(`Task ${node.item_id} has missing or failed verification evidence.`);
   if (
     checkSnapshot &&

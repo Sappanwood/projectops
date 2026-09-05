@@ -1,7 +1,7 @@
 import { completePlan } from "../src/application/planComplete.js";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -506,6 +506,35 @@ test("landing rechecks selected acceptance after checkout or evidence changes", 
     assert.equal(result.ok, false, changed);
     assert.equal(git(f.repo, "rev-parse", run.workspace.integrationRef), f.baseCommit);
   }
+});
+
+test("parallel acceptance observes only the last check per command at the accepted snapshot", async (t) => {
+  const f = setup();
+  t.after(() => rmSync(f.q.workspaceDir, { recursive: true, force: true }));
+  const run = data(f.scheduler.advance(f.mutation(f.create()))).run;
+  await f.finish(run, "a");
+  const attemptId = run.nodes[0]!.attempt_ids[0]!;
+  const attempt = data(showExecution({ ...f.q, attemptId })).attempt;
+  const file = path.join(f.q.workspaceDir, "ops/repo/executions", `${attemptId}.json`);
+  const check = attempt.verifications[0]!;
+  const failed = { ...check, outcome: "failed" as const };
+  const historical = {
+    ...failed,
+    command: "historical failure",
+    snapshot: { ...check.snapshot, digest: "old-snapshot" },
+  };
+  for (const verifications of [[], [historical], [check, failed]]) {
+    writeFileSync(file, JSON.stringify({ ...attempt, verifications }));
+    const observed = data(f.scheduler.advance(f.mutation(f.current(run)))).run;
+    assert.equal(observed.state, "paused");
+    assert.deepEqual(observed.diagnostics, [
+      "Task REP-001 has missing or failed verification evidence.",
+    ]);
+    assert.equal(observed.nodes[0]!.state, "running");
+  }
+  writeFileSync(file, JSON.stringify({ ...attempt, verifications: [historical, failed, check] }));
+  const observed = data(f.scheduler.advance(f.mutation(f.current(run)))).run;
+  assert.equal(observed.nodes[0]!.state, "awaiting_landing");
 });
 
 test("a failure after integration ref publication remains awaiting inspection and cannot replay", async () => {

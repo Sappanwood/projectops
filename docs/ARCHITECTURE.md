@@ -356,6 +356,10 @@ Docs HTTP 测试覆盖正常阅读、缺失、非 Markdown、路径越界和 sym
 捕获 HEAD、diff 和工作文件摘要，不通过 shell 执行；证据和快照作为工作事实保存，不把临时日志作为唯一长期证据。
 `application/executionApi.ts` 提供 create/list/show/finish/verify/decide，共用 CLI 与 HTTP，无内部 CLI subprocess。
 
+`application/verificationChecks.ts` 供独立执行验收、串行 run 与并行 run 共用：按指定 snapshot digest 筛选验证，
+每个 command 只采用最后一条记录，再核对 passed 及持久化证据的可读性和内容摘要。调用方决定目标快照、
+空验证的诊断、attempt 是否最新以及状态、输入、baseline 和 checkout 条件；该模块不拥有验收或调度状态机。
+
 `execution/runtime.ts` 持有注入 Runner 返回的 completion/stop handle，管理重复启动、停止确认和启动后核对。
 后端负责生命周期，浏览器轮询只读记录；runtime/external 来源分开，重启仅核对 runtime 所属活动工作。
 未知工作要求人工确认而不重新执行；默认服务没有 runner，仍可查看和验收外部记录。

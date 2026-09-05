@@ -1,17 +1,12 @@
 import { showBacklogItem } from "./backlogApi.js";
 import { executionResult } from "./executionApi.js";
+import { verificationChecksForSnapshot, verificationChecksPass } from "./verificationChecks.js";
 import { computePlanRevision, computePlanExecutionRevision } from "./planRevision.js";
 import type { ApplicationResult } from "./result.js";
 import { activeStates, type CodeSnapshot, type ExecutionAttempt } from "../execution/attempt.js";
 import { ExecutionRuntime } from "../execution/runtime.js";
 import { captureSnapshot } from "../execution/snapshot.js";
-import {
-  context,
-  evidenceReadable,
-  ExecutionError,
-  listAttempts,
-  readAttempt,
-} from "../execution/store.js";
+import { context, ExecutionError, listAttempts, readAttempt } from "../execution/store.js";
 import { readPlan } from "../plan/planFs.js";
 import {
   nextReadyNode,
@@ -53,10 +48,9 @@ function acceptedAttempt(
 ): ExecutionAttempt {
   const attempt = readAttempt(c.root, attemptId, input.project);
   const latest = attempts.filter((entry) => entry.item_id === input.id).at(-1);
-  const checks = new Map(
-    attempt.verifications
-      .filter((v) => v.snapshot.digest === attempt.acceptance?.snapshot_digest)
-      .map((v) => [v.command, v]),
+  const checks = verificationChecksForSnapshot(
+    attempt.verifications,
+    attempt.acceptance?.snapshot_digest,
   );
   if (
     attempt.item_id !== input.id ||
@@ -66,10 +60,8 @@ function acceptedAttempt(
     !sameTaskInput(attempt.input.item, input) ||
     !attempt.snapshot ||
     attempt.snapshot.digest !== attempt.acceptance.snapshot_digest ||
-    checks.size === 0 ||
-    [...checks.values()].some(
-      (v) => v.outcome !== "passed" || !evidenceReadable(c.root, v.evidence_ref, v.evidence_digest),
-    ) ||
+    checks.length === 0 ||
+    !verificationChecksPass(c.root, checks) ||
     (baseline !== undefined && baseline.digest !== attempt.acceptance.snapshot_digest)
   )
     throw new ExecutionError(

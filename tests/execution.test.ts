@@ -313,6 +313,64 @@ test("verification cannot hide failed checks and task revision must match start"
     false,
   );
 });
+test("acceptance keeps empty-evidence diagnostics and ignores checks from older snapshots", (t) => {
+  const q = setup();
+  t.after(() => rmSync(q.workspaceDir, { recursive: true, force: true }));
+  let attempt = data(createExecution(q)).attempt;
+  attempt = data(
+    finishExecution({
+      ...q,
+      attemptId: attempt.id,
+      expectedRevision: attempt.revision,
+      outcome: "succeeded",
+      summary: "done",
+    }),
+  ).attempt;
+  const accept = () =>
+    decideExecution({
+      ...q,
+      attemptId: attempt.id,
+      expectedRevision: attempt.revision,
+      decision: "accepted",
+      note: "reviewed",
+    });
+  assert.deepEqual(accept(), {
+    ok: false,
+    error: {
+      code: "EXECUTION_CONFLICT",
+      message: "Acceptance requires successful execution and readable passing evidence.",
+    },
+  });
+  attempt = data(
+    verifyExecution({
+      ...q,
+      attemptId: attempt.id,
+      expectedRevision: attempt.revision,
+      command: "old check",
+      outcome: "failed",
+      evidence: "old failure",
+    }),
+  ).attempt;
+  assert.deepEqual(accept(), {
+    ok: false,
+    error: {
+      code: "EXECUTION_CONFLICT",
+      message: "All current verification commands must pass with readable evidence.",
+    },
+  });
+  writeFileSync(path.join(q.workspaceDir, "repo", "code.txt"), "new snapshot");
+  attempt = data(
+    verifyExecution({
+      ...q,
+      attemptId: attempt.id,
+      expectedRevision: attempt.revision,
+      command: "new check",
+      outcome: "passed",
+      evidence: "new snapshot passed",
+    }),
+  ).attempt;
+  assert.equal(data(accept()).attempt.acceptance?.decision, "accepted");
+});
 test("runner failure is durable and external work is not recovered by a service owner", async () => {
   const q = setup();
   const runtime = new ExecutionRuntime({

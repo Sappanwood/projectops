@@ -20,6 +20,7 @@ import {
 import { captureSnapshot } from "../execution/snapshot.js";
 import { computeRevision } from "../backlog/item.js";
 import { rebuildIndex, updateItemFile } from "../backlog/itemFs.js";
+import { verificationChecksForSnapshot, verificationChecksPass } from "./verificationChecks.js";
 export type ExecutionQuery = {
   workspaceDir: string;
   projectId: string;
@@ -253,17 +254,8 @@ export function decideExecution(
           "This attempt has been superseded by later work. Review its successor instead.",
         );
       const v = a.verifications.at(-1);
-      const currentChecks = new Map(
-        a.verifications
-          .filter((x) => x.snapshot.digest === v?.snapshot.digest)
-          .map((x) => [x.command, x]),
-      );
-      if (
-        [...currentChecks.values()].some(
-          (x) =>
-            x.outcome !== "passed" || !evidenceReadable(c.root, x.evidence_ref, x.evidence_digest),
-        )
-      )
+      const currentChecks = verificationChecksForSnapshot(a.verifications, v?.snapshot.digest);
+      if (!verificationChecksPass(c.root, currentChecks))
         throw new ExecutionError(
           "EXECUTION_CONFLICT",
           "All current verification commands must pass with readable evidence.",

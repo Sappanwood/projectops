@@ -300,6 +300,30 @@ test("reusing a completed node requires accepted current evidence and an explici
     }),
   ).attempt;
   const request = { ...f.q, expectedRevision: computePlanRevision(f.plan) };
+  const attemptFile = path.join(f.q.workspaceDir, "ops/repo/executions", `${attempt.id}.json`);
+  const check = attempt.verifications[0]!;
+  const failed = { ...check, outcome: "failed" as const };
+  const historical = {
+    ...failed,
+    command: "historical failure",
+    snapshot: { ...check.snapshot, digest: "old-snapshot" },
+  };
+  const reuse = [{ itemId: q.itemId, attemptId: attempt.id, note: "Inspected evidence" }];
+  for (const verifications of [[], [historical], [check, failed]]) {
+    writeFileSync(attemptFile, JSON.stringify({ ...attempt, verifications }));
+    assert.deepEqual(createPlanRun({ ...request, reuse }), {
+      ok: false,
+      error: {
+        code: "EXECUTION_CONFLICT",
+        message:
+          "Task REP-001 requires a current accepted attempt, matching baseline and passing durable evidence.",
+      },
+    });
+  }
+  writeFileSync(
+    attemptFile,
+    JSON.stringify({ ...attempt, verifications: [historical, failed, check] }),
+  );
   assert.equal(
     createPlanRun({ ...request, reuse: [{ itemId: q.itemId, attemptId: attempt.id, note: "" }] })
       .ok,
