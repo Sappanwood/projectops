@@ -32,6 +32,8 @@ export function createExecutionUi(container: HTMLElement, api: ApiClient, getSta
       ${attempt ? `<article><h4>尝试 ${e(attempt.id)}</h4><p role="status">${e(labels[attempt.state]??attempt.state)}</p><dl><dt>执行 ID</dt><dd>${e(attempt.execution_id)}</dd><dt>前次尝试</dt><dd>${e(attempt.retry_of??'无')}</dd><dt>开始 / 结束</dt><dd>${e(attempt.started_at)} / ${e(attempt.ended_at??'尚未结束')}</dd><dt>任务输入 revision</dt><dd>${e(attempt.input.item.revision)}</dd></dl>
       <details data-execution-details="input"><summary>查看冻结输入</summary><h5>${e(attempt.input.item.title)}</h5><pre>${e(attempt.input.item.body)}</pre><p>${e(attempt.input.instructions)}</p></details>
       <h4>工作进展</h4>${attempt.progress?.session_id ? `<p>Pi session：<code>${e(attempt.progress.session_id)}</code></p>` : ''}
+      ${attempt.input.model ? `<p>启动模型：${e(attempt.input.model.provider)}/${e(attempt.input.model.id)}</p>` : ''}
+      ${attempt.progress?.model ? `<p>实际模型：${e(attempt.progress.model.provider)}/${e(attempt.progress.model.id)}</p>` : ''}
       ${attempt.progress?.events.length ? `<ol aria-label="工作进展记录">${attempt.progress.events.map(event=>`<li><span>${e(event.at)} · ${e(({text:'文本',tool:'工具',status:'状态',instruction:'追加指示',session:'会话'} as Record<string,string>)[event.type]??event.type)}</span><pre>${e(event.text)}</pre></li>`).join('')}</ol>` : '<p>等待工作进展。</p>'}
       ${attempt.state==='running' ? `<label>追加工作指示<textarea class="form-input" data-execution-field="steering" rows="3" ${busy?'disabled':''}>${e(steering)}</textarea></label>${button('steer','发送追加指示',busy||!steering.trim())}` : ''}
       <h4>改动摘要</h4><p>${e(attempt.summary||'尚未记录')}</p>${attempt.snapshot ? `<p>Git HEAD: <code>${e(attempt.snapshot.head)}</code> · 快照 <code>${e(attempt.snapshot.digest)}</code></p><details data-execution-details="diff"><summary>查看 diff 与文件</summary><pre>${e(attempt.snapshot.diff||'无已跟踪文件 diff')}</pre><ul>${attempt.snapshot.files.map(file=>`<li>${e(file)}</li>`).join('')}</ul></details>`:'<p>尚无代码快照。</p>'}
@@ -80,7 +82,7 @@ export function createExecutionUi(container: HTMLElement, api: ApiClient, getSta
     if(!starting&&!a) return;
     busy=true;message='';requestId++;draw();
     const endpoint=starting?`${base}/start`:`${base}/${encodeURIComponent(a!.id)}/${action==='accept'||action==='rework'?'decide':action}`;
-    const body=starting?{item_id:item,instructions,expected_revision:getState().backlog.item!.revision,...(action==='retry'?{retry_of:a!.id}:{})}:{expected_revision:a!.revision,...(action==='stop'?{}:action==='steer'?{message:steering}:{note}),...(action==='accept'||action==='rework'?{decision:action==='accept'?'accepted':'rework'}:{})};
+    const body=starting?{model:getState().modelSelection.selected,item_id:item,instructions,expected_revision:getState().backlog.item!.revision,...(action==='retry'?{retry_of:a!.id}:{})}:{expected_revision:a!.revision,...(action==='stop'?{}:action==='steer'?{message:steering}:{note}),...(action==='accept'||action==='rework'?{decision:action==='accept'?'accepted':'rework'}:{})};
     const result=await api.request<AttemptDetail>(endpoint,body,'POST');
     if(destroyed||run!==generation) return;
     busy=false;

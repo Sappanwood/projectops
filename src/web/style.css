@@ -805,3 +805,7 @@
 .plan-delivery a { flex: 1; min-width: 160px; }
 .plan-delivery time { font-size: .875rem; color: var(--text-secondary); }
 [data-report-id] { scroll-margin-top: 80px; }
+.model-selector { display: grid; grid-template-columns: auto minmax(140px, 280px); gap: 4px 8px; align-items: center; }
+.model-selector select { max-width: 100%; padding: 6px; color: inherit; background: var(--bg-primary, #fff); border: 1px solid var(--border-color, #ccc); border-radius: 4px; }
+.model-selector [role="status"] { grid-column: 1 / -1; font-size: 12px; }
+@media (max-width: 720px) { .header-controls { flex-wrap: wrap; } .model-selector { max-width: 100%; } }

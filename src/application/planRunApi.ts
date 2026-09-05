@@ -1,6 +1,6 @@
 import { showBacklogItem } from './backlogApi.js';
 import { executionResult } from './executionApi.js';
-import { computePlanRevision } from './planRevision.js';
+import { computePlanRevision, computePlanExecutionRevision } from './planRevision.js';
 import type { ApplicationResult } from './result.js';
 import { activeStates, type CodeSnapshot, type ExecutionAttempt } from '../execution/attempt.js';
 import { ExecutionRuntime } from '../execution/runtime.js';
@@ -38,7 +38,7 @@ function acceptedAttempt(c: Context, attempts: ExecutionAttempt[], attemptId: st
   return attempt;
 }
 
-export function createPlanRun(q: PlanRunQuery & { planId: string; expectedRevision: string; reuse?: PlanRunReuse[]; instructions?: string }) {
+export function createPlanRun(q: PlanRunQuery & { planId: string; expectedRevision: string; reuse?: PlanRunReuse[]; instructions?: string; model?: PlanRun['model'] }) {
   return executionResult(() => {
     const c = context(q.workspaceDir, q.projectId);
     if (q.instructions !== undefined && typeof q.instructions !== 'string') throw new ExecutionError('EXECUTION_INVALID', 'Run instructions must be text.');
@@ -95,6 +95,7 @@ export function createPlanRun(q: PlanRunQuery & { planId: string; expectedRevisi
     if (nodes.some(node => !reachable.has(node.item_id))) throw new ExecutionError('EXECUTION_INVALID', 'Task dependency graph contains a cycle.');
     const at = new Date().toISOString();
     const run: PlanRun = { schema: PLAN_RUN_SCHEMA, id: newPlanRunId(), project_id: q.projectId, plan_id: plan.id, plan_revision: revision, plan_snapshot: structuredClone(plan), instructions: q.instructions ?? '', mapping: structuredClone(mapping), revision: '', created_at: at, updated_at: at, state: nodes.every(node => node.state === 'accepted') ? 'completed' : 'ready', capacity: 1, initial_baseline: baseline, baseline, nodes, external_dependencies: externalDependencies, controls: [], diagnostics: [] };
+    if (q.model) run.model = structuredClone(q.model);
     return detail(savePlanRun(planRunRoot(c.root, true), run, true));
   });
 }
@@ -109,7 +110,7 @@ export function showPlanRun(q: PlanRunDetailQuery) {
   return executionResult(() => detail(readPlanRun(planRunRoot(context(q.workspaceDir, q.projectId).root), q.runId, q.projectId)));
 }
 
-export function validatePlanRunCompletion(q: PlanRunDetailQuery) {
+export function validatePlanRunCompletion(q: PlanRunDetailQuery, baselineMode: 'current' | 'recorded' = 'current') {
   return executionResult(() => {
     const c = context(q.workspaceDir, q.projectId);
     const root = planRunRoot(c.root);
@@ -118,7 +119,7 @@ export function validatePlanRunCompletion(q: PlanRunDetailQuery) {
     if (run.state !== 'completed' || latest?.id !== run.id)
       throw new ExecutionError('EXECUTION_CONFLICT', 'Completion requires the latest Plan run to be completed.');
     inputsValid(q, c, run);
-    const baseline = captureSnapshot(c.repo);
+    const baseline = baselineMode === 'current' ? captureSnapshot(c.repo) : run.baseline;
     if (baseline.digest !== run.baseline.digest)
       throw new ExecutionError('EXECUTION_CONFLICT', 'Repository baseline changed after Plan completion.');
     const history = listAttempts(c.root, q.projectId);
@@ -139,7 +140,7 @@ export function validatePlanRunCompletion(q: PlanRunDetailQuery) {
 }
 
 function inputsValid(q: PlanRunQuery, c: Context, run: PlanRun): void {
-  if (computePlanRevision(readPlan(c.plans, run.plan_id)) !== run.plan_revision) throw new ExecutionError('EXECUTION_CONFLICT', 'Plan input revision changed; create a new run for revised scope.');
+  if (computePlanExecutionRevision(readPlan(c.plans, run.plan_id)) !== run.plan_revision) throw new ExecutionError('EXECUTION_CONFLICT', 'Plan input revision changed; create a new run for revised scope.');
   for (const node of run.nodes) {
     const current = task(q, node.item_id);
     if (!sameTaskInput(node.input, current) || (node.attempt_ids.length === 0 && current.revision !== node.input.revision))
@@ -229,7 +230,7 @@ export class PlanRunRuntime {
         const prior = node.attempt_ids.at(-1) ?? history.at(-1)?.id;
         if (prior && !node.attempt_ids.includes(prior)) throw new ExecutionError('EXECUTION_CONFLICT', 'Existing task history is not owned by this run; inspect it before creating a new run.');
         const instructions = `Execute Plan ${run.plan_id} task ${node.key}.\n${node.input.body}\n\nRun instructions:\n${run.instructions}`;
-        const result = unwrap(this.execution.start({ ...q, itemId: node.item_id, expectedRevision: task(q, node.item_id).revision, instructions, ...(prior ? { retryOf: prior } : {}) }));
+        const result = unwrap(this.execution.start({ ...q, model: run.model, itemId: node.item_id, expectedRevision: task(q, node.item_id).revision, instructions, ...(prior ? { retryOf: prior } : {}) }));
         if (history.some(attempt => attempt.id === result.attempt.id)) throw new ExecutionError('EXECUTION_CONFLICT', 'Runner returned an existing attempt rather than starting this node.');
         node.attempt_ids.push(result.attempt.id);
         node.state = 'running';

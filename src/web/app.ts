@@ -20,6 +20,8 @@ import {
 } from "./state.js";
 import type { AppState, RouteState } from "./types.js";
 import { emptyDocsState } from "./docsView.js";
+import { rememberModel } from './modelSelector.js';
+import type { ModelCatalog } from '../execution/models.js';
 
 export type WorkbenchAppOptions = {
   container: HTMLElement;
@@ -43,6 +45,17 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
   let readRequestId = 0;
   let backlogNavigation = 0;
   let documentRequestId = 0;
+  let modelRequestId = 0;
+  async function loadModels() {
+    if (!apiClient.request) return;
+    const request = ++modelRequestId;
+    state = { ...state, modelSelection: { ...state.modelSelection, loading: true } };
+    const result = await apiClient.request<ModelCatalog>('/api/models');
+    if (destroyed || request !== modelRequestId) return;
+    state = { ...state, modelSelection: { ...state.modelSelection, loading: false,
+      ...(result.ok ? { ...result.data, error: '' } : { error: result.error.message }) } };
+    render();
+  }
   const backlog = createBacklogController(apiClient, (next) => {
     state = { ...state, backlog: next };
     render();
@@ -202,6 +215,7 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
 
   async function refresh(): Promise<void> {
     if (state.refreshing) return;
+    void loadModels();
     saveReadingPosition();
     const requestId = ++currentRequestId;
     state = setRefreshing(state, true);
@@ -396,6 +410,14 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
   }
 
   function handleChange(event: Event): void {
+    const modelSelect = event.target as HTMLSelectElement | null;
+    if (modelSelect?.id === 'model-select') {
+      const selected = modelSelect.value ? JSON.parse(modelSelect.value) : null;
+      state = { ...state, modelSelection: { ...state.modelSelection, selected } };
+      rememberModel(selected);
+      render();
+      return;
+    }
     const target = event.target as HTMLElement | null;
     if (target === null) return;
 
@@ -433,6 +455,7 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
   // Initial load
   const initialRoute = router.getCurrentRoute();
   void loadWorkspaceAndCurrentProject(initialRoute);
+  void loadModels();
 
   return {
     getState() {

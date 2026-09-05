@@ -20,6 +20,7 @@ export type AttemptMutation = AttemptQuery & {
     expectedRevision: string;
 };
 export type CreateExecutionRequest = ExecutionQuery & {
+    model?: ExecutionAttempt['input']['model'];
     itemId: string;
     instructions?: string;
     retryOf?: string;
@@ -71,6 +72,7 @@ export function createExecution(q: CreateExecutionRequest, checkout?: ExecutionA
             throw new ExecutionError('EXECUTION_CONFLICT', 'This attempt already has a retry.');
         const attempt: ExecutionAttempt = { schema: EXECUTION_SCHEMA, id: id(), execution_id: previous?.execution_id ?? id(), retry_of: previous?.id ?? null, project_id: q.projectId, item_id: q.itemId, task_ref: `project-ops:backlog/items/${q.itemId}.md`, revision: '', origin: q.origin ?? 'external', input: { item: structuredClone(item), instructions: q.instructions ?? '', plan }, started_at: new Date().toISOString(), ended_at: null, state: 'running', summary: '', snapshot: null, verifications: [], acceptance: null };
         if (checkout) attempt.checkout = structuredClone(checkout);
+        if (q.model) attempt.input.model = structuredClone(q.model);
         return detail(c.root, saveAttempt(c.root, attempt, true));
     });
 }

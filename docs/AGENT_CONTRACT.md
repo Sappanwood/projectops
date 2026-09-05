@@ -144,6 +144,25 @@ blocked 额外含 reasons（依赖 id/code/message）。ready 为 todo 且同项
 Workbench Plan 详情复用相同查询展示三类任务与依赖原因，可点击任务进入 Backlog 详情。
 这是只读建议；Agent 仍按任务验收、实际依赖与用户阶段确认推进，命令不自动改状态或启动执行。
 
+## Plan：显式标为完成
+
+所有映射 task 落地后，在 Web Plan 详情点击“标为完成”，或运行：
+
+```bash
+pops plan show projectops "$plan_id" --json
+pops plan complete projectops "$plan_id" --expected-revision "$plan_revision" --json
+```
+
+从 show 顶层 `revision` 取得 plan_revision。成功返回 `{ok:true,data:{plan,revision,no_op}}`，退出 0；
+失败返回 `{ok:false,error:{code,message}}`，退出 1；JSON 模式只输出 stdout。
+要求 approved 且已物化、至少一个 task、所有映射可读且全部 task done（epic 不要求 done）；
+已有最新串行/并行 run 还须通过完成证据校验。串行 Plan 结案使用 run 保存的完成基线，不要求当前 Repo 快照保持不变；仍校验当前任务输入、验收及证据完整性。Report 发布和运行中的基线门禁继续检查当前代码。未满足条件或 stale revision 时不写入。
+同当前 revision 重复完成 done Plan 返回 no_op；旧 revision 必须重新读取。
+
+完成操作只将 status 改为 done，不修改任务、批准、mapping 或执行快照，也不生成报告。
+done 计划不能修订、重新批准或创建新 run；后续范围另建计划。Backlog 后续变化不会自动撤销 done，
+Report 仍校验当前任务与执行证据。Web 冲突后使用 Refresh 核对最新版本再提交。
+
 ## Report：依据实际结果交付
 
 从同一项目的一份已批准、已 materialize Plan 生成 Report。所有映射 task 为 done 时才能得到 completed；
@@ -211,8 +230,8 @@ Overview 文档面板提供四份标准文档的直接链接与逐项问题，�
 Workbench 可浏览 Backlog 并在详情顶部修改状态；revision 位于技术信息中。五类内容正文默认阅读排版，
 可切换 Markdown 源码；Plan 通过任务目录定位正文，审批与 mapping 位于计划记录中。Plan 另有实时执行进度，按 task 计数，epic 不计入完成率；
 缺失或损坏任务仍占总数并显示诊断，未物化/零 task 不显示虚假的完成率。CLI 更新任务后点击 Refresh 查看最新进度，
-不通过修改 Plan 记录推进执行状态。点击 Plan 映射任务进入 Backlog，完成状态更新后点击“返回原 Plan”
-会重新加载进度与推荐并定位原计划。链接可直接打开/刷新；失效任务显示错误并保留返回入口。Plan 可预览并确认修订；Report、Docs、Retrospective 页面只读。任务详情也提供执行记录、控制和验收入口；创建及其他未提供的流转使用 CLI。
+进度查询不自动改写 Plan；全部落地后可显式标为完成。点击 Plan 映射任务进入 Backlog，完成状态更新后点击“返回原 Plan”
+会重新加载进度与推荐并定位原计划。链接可直接打开/刷新；失效任务显示错误并保留返回入口。未完成 Plan 可预览并确认修订，也可显式标为完成；Report、Docs、Retrospective 页面只读。任务详情也提供执行记录、控制和验收入口；创建及其他未提供的流转使用 CLI。
 Docs 可阅读四份标准文档和 `docs/` 下其他 Markdown，标准检查错误不阻止可读正文，扩展文档不参与标准检查。
 支持章节目录、相对 Markdown 链接和源码切换；路径范围受限，符号链接目标/祖先被拒绝。HTTP list/show
 为 `GET /api/projects/<id>/docs` 与 `GET /api/projects/<id>/docs?path=<repo-relative-path>`；未新增 CLI 子命令。
@@ -303,7 +322,7 @@ pops execution create projectops "$item_id" --retry-of "$attempt_id" \
 重复 rework/accept 不产生相反结论，先 show 核对已持久化决定。
 Web 任务详情可刷新查看输入、代码 diff、检查与证据诊断，并执行验收或要求继续。
 HTTP endpoint 为 `/api/projects/<project>/executions`（GET 可用 `item_id`），详情为 `/<attempt>`；
-`POST /start` 使用 item_id、任务 expected_revision、instructions 和可选 retry_of；
+`POST /start` 使用 item_id、任务 expected_revision、instructions 和可选 retry_of、model；
 `POST /<attempt>/stop|confirm-interrupted|decide` 使用尝试 expected_revision，后两项还含 note，decide 另含 accepted/rework decision。
 默认服务没有 runner，列表的 runner_available 为 false，网页禁用启动/重试；通过 Workbench `--pi` 参数启用真实 Pi 0.85.0 runner。
 
@@ -323,6 +342,12 @@ recover 只在原服务 owner 已退出且需要核对时使用，不对正在�
 ## Pi 工作进展与追加指示
 
 Workbench `--pi` 使用本机 Pi 的模型、凭据、AGENTS 与 skills，禁用 extensions/templates/themes，工具限定 read/bash/edit/write。无需给浏览器提供凭据。
+`GET /api/models` 返回 `{ok:true,data:{available,models:[{provider,id,name}]}}`；available 表示执行器支持模型选择，
+models 为空时应在本地 Pi 完成认证后刷新，读取失败返回不含原始配置的错误。无认证写接口。
+任务 start、串行 plan-runs POST、并行 parallel-runs POST 接受可选 `model:{provider,id}`；null 或省略使用 Pi 默认模型。
+只允许 provider/id 两个非空字符串字段，失效模型拒绝启动。默认模型按目标 Repo 的 Pi 设置在创建时解析成具体模型。
+模型保存在 attempt.input.model 或 run.model；run 后续派发、恢复和重试沿用快照，不接受控制请求更改模型。
+浏览器的切换只影响新启动的独立任务和新创建的 run；Pi 实际使用的模型独立保存在 progress.model。
 `POST /api/projects/<project>/executions/<attempt>/steer` 接收 `expected_revision` 与非空 `message`；只允许当前 running 且有活跃 handle 的尝试。
 `progress.events` 保存有界进展，`progress.session_id` 关联 runtime 内 Pi session。页面自动刷新，CLI show 同样可核对；进展不是验证证据，成功结束仍须 execution verify 和显式 accept。
 实际开发遵守任务前置；同项目其他活动或 unknown 尝试会阻止新的单任务 Pi 工作。请先确认旧工作，再决定停止、重试或继续。

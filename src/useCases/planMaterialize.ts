@@ -50,7 +50,7 @@ export function planMaterialize(
     io.stderr(`Error: plan id mismatch: expected ${planId}, got ${plan.id}`);
     return 1;
   }
-  if (plan.status !== "approved") {
+  if (plan.status !== "approved" && plan.status !== "done") {
     io.stderr(`Error: plan must be approved before materialization: ${planId}`);
     return 1;
   }

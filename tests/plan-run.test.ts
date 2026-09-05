@@ -1,3 +1,4 @@
+import { completePlan } from '../src/application/planComplete.js';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -60,6 +61,22 @@ function setup(chain = true) {
   return { q, repo, plan, scheduler, execution, controls, create, mutation, current, finish, accept };
 }
 
+test('serial run persists its model for successors after reload', async () => {
+  const f = setup();
+  const model = { provider: 'fixture', id: 'one' };
+  let run = data(createPlanRun({ ...f.q, expectedRevision: computePlanRevision(f.plan), model })).run;
+  model.id = 'two';
+  run = data(f.scheduler.advance(f.mutation(run))).run;
+  const first = data(showExecution({ ...f.q, attemptId: run.nodes[0]!.attempt_ids[0]! })).attempt;
+  assert.deepEqual(first.input.model, { provider: 'fixture', id: 'one' });
+  await f.finish(); f.accept(run);
+  const reloaded = new PlanRunRuntime(f.execution);
+  run = data(reloaded.advance(f.mutation(f.current(run)))).run;
+  const second = data(showExecution({ ...f.q, attemptId: run.nodes[1]!.attempt_ids[0]! })).attempt;
+  assert.deepEqual(second.input.model, first.input.model);
+  await f.finish('stopped');
+});
+
 test('serial plan run freezes inputs and dispatches successor only after verification and acceptance', async () => {
   const f = setup();
   let run = f.create();
@@ -80,6 +97,8 @@ test('serial plan run freezes inputs and dispatches successor only after verific
   run = data(f.scheduler.advance(f.mutation(run))).run;
   assert.equal(run.state, 'completed');
   assert.equal(run.nodes.every(n => n.state === 'accepted'), true);
+  assert.ok(completePlan({ ...f.q, expectedRevision: computePlanRevision(f.plan) }).ok);
+  assert.ok(validatePlanRunCompletion({ ...f.q, runId: run.id }).ok);
 });
 
 test('two ready tasks use stable selection and capacity one across repeated advance', () => {
@@ -302,4 +321,33 @@ test('run freezes additional instructions and preserves them in initial and retr
   const retried = data(showExecution({ ...f.q, attemptId: run.nodes[0]!.attempt_ids.at(-1)! })).attempt;
   assert.equal(retried.input.instructions, first.input.instructions);
   assert.equal(f.current(run).instructions, instructions);
+});
+
+test('historical Plan completion permits later development but still checks accepted evidence', async () => {
+  const f = setup();
+  let run = data(f.scheduler.advance(f.mutation(f.create()))).run;
+  await f.finish(); f.accept(run);
+  run = data(f.scheduler.advance(f.mutation(run))).run;
+  await f.finish();
+  const accepted = f.accept(run);
+  run = data(f.scheduler.advance(f.mutation(run))).run;
+  assert.equal(run.state, 'completed');
+  writeFileSync(path.join(f.repo, 'later-feature.txt'), 'Unrelated development after delivery');
+  const strict = validatePlanRunCompletion({ ...f.q, runId: run.id });
+  assert.equal(strict.ok, false);
+  if (!strict.ok) assert.match(strict.error.message, /baseline changed/);
+
+  const evidence = path.join(f.q.workspaceDir, 'ops/repo/executions', accepted.verifications[0]!.evidence_ref);
+  const original = readFileSync(evidence, 'utf8');
+  writeFileSync(evidence, 'corrupted evidence');
+  const rejected = completePlan({ ...f.q, expectedRevision: computePlanRevision(f.plan) });
+  assert.equal(rejected.ok, false);
+  assert.equal(readPlan(path.join(f.q.workspaceDir, 'ops/repo/plans'), f.plan.id).status, 'approved');
+  writeFileSync(evidence, original);
+
+  const completed = completePlan({ ...f.q, expectedRevision: computePlanRevision(f.plan) });
+  assert.equal(completed.ok, true, JSON.stringify(completed));
+  if (completed.ok) assert.equal(completed.data.plan.status, 'done');
+  assert.deepEqual(f.current(run), run);
+  assert.equal(validatePlanRunCompletion({ ...f.q, runId: run.id }).ok, false);
 });

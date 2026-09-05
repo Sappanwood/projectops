@@ -17,6 +17,7 @@ export type PlanRunNode = {
 };
 export type PlanRunReuse = { itemId: string; attemptId: string; note: string };
 export type PlanRun = {
+  model?: import('../execution/models.js').ModelRef;
   schema: typeof PLAN_RUN_SCHEMA;
   id: string;
   project_id: string;

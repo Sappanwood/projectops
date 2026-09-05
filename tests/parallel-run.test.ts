@@ -1,3 +1,4 @@
+import { completePlan } from '../src/application/planComplete.js';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
@@ -52,6 +53,21 @@ function setup(options: { permit?: boolean; shared?: boolean; serialNode?: boole
     const land = async (run: ParallelRun, key: string) => data(await scheduler.land({ ...mutation(run), nodeKey: key })).run;
     return { q, repo, baseCommit, plan, createRequest, create, mutation, current, running, scheduler, execution, finish, land };
 }
+test('parallel run freezes model across node dispatch and reloaded scheduler', async () => {
+    const f = setup(); const model = { provider: 'fixture', id: 'one' };
+    let run = data(createParallelRun({ ...f.createRequest, model })).run;
+    model.id = 'two';
+    run = data(f.scheduler.advance(f.mutation(run))).run;
+    await f.finish(run, 'a'); run = data(f.scheduler.advance(f.mutation(run))).run;
+    run = await f.land(run, 'a');
+    run = data(new ParallelRunRuntime(f.execution).advance(f.mutation(run))).run;
+    for (const node of run.nodes.filter(n => n.attempt_ids.length)) {
+        const attempt = data(showExecution({ ...f.q, attemptId: node.attempt_ids[0]! })).attempt;
+        assert.deepEqual(attempt.input.model, { provider: 'fixture', id: 'one' });
+    }
+    for (const key of ['b', 'c']) await f.finish(run, key, 'stopped');
+});
+
 test('parallel diamond executes two real handles in owned checkouts and only landed dependencies unlock join', async () => {
     const f = setup(); let run = data(f.scheduler.advance(f.mutation(f.create()))).run;
     assert.equal(f.running.size, 1); assert.notEqual(f.running.values().next().value!.dir, f.repo);
@@ -70,6 +86,7 @@ test('parallel diamond executes two real handles in owned checkouts and only lan
     await f.finish(run, 'd'); run = data(f.scheduler.advance(f.mutation(run))).run; run = await f.land(run, 'd');
     assert.equal(run.state, 'completed'); assert.equal(git(f.repo, 'rev-parse', 'HEAD'), f.baseCommit); assert.equal(git(f.repo, 'status', '--porcelain'), '');
     const query = { ...f.q, runId: run.id };
+    assert.ok(completePlan({ ...f.q, expectedRevision: computePlanRevision(f.plan) }).ok);
     const completion = data(validateParallelRunCompletion(query));
     assert.equal(completion.attempts.length, 4);
     assert.equal(completion.integrationHead, run.integration_head);

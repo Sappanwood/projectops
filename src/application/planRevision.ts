@@ -16,9 +16,10 @@ type PlanRequest = {workspaceDir: string; projectId: string; planId: string};
 export type PlanRevisionRequest = PlanRequest & {draft: unknown; expectedRevision: string; confirm?: string};
 export type PlanRevisionReceipt = {plan: Plan; revision: string; applied: boolean; confirmation_token: string; changes: {key: string; fields: string[]; item_id?: string}[]; affected_items: {id: string; revision: string}[]};
 export function computePlanRevision(plan: Plan): string { return digest(plan); }
+export function computePlanExecutionRevision(plan: Plan): string { return computePlanRevision({ ...plan, status: plan.status === "done" ? "approved" : plan.status }); }
 function digest(value: unknown): string { return createHash("sha256").update(JSON.stringify(value)).digest("hex"); }
 
-function context(request: PlanRequest): ApplicationResult<{plans: string; backlog: string; plan: Plan}> {
+export function loadPlanContext(request: PlanRequest): ApplicationResult<{plans: string; backlog: string; plan: Plan}> {
   try {
     const workspace = loadWorkspace(request.workspaceDir);
     if (!Object.hasOwn(workspace.manifest.projects, request.projectId)) return applicationFailure("PROJECT_NOT_FOUND", "Project is not registered.");
@@ -31,12 +32,13 @@ function context(request: PlanRequest): ApplicationResult<{plans: string; backlo
   } catch (error) { return error instanceof PlanNotFoundError ? applicationFailure("PLAN_NOT_FOUND", "Plan was not found.") : applicationFailure("PLAN_INVALID", "Plan or workspace is invalid or unreadable."); }
 }
 export function showPlanRevision(request: PlanRequest): ApplicationResult<{plan: Plan; revision: string}> {
-  const loaded = context(request); if (!loaded.ok) return loaded;
+  const loaded = loadPlanContext(request); if (!loaded.ok) return loaded;
   return applicationSuccess({plan: loaded.data.plan, revision: computePlanRevision(loaded.data.plan)});
 }
 export function revisePlan(request: PlanRevisionRequest): ApplicationResult<PlanRevisionReceipt> {
-  const loaded = context(request); if (!loaded.ok) return loaded;
+  const loaded = loadPlanContext(request); if (!loaded.ok) return loaded;
   const {plan: before, plans, backlog} = loaded.data;
+  if (before.status === "done") return applicationFailure("PLAN_INVALID", "Completed plans cannot be revised. Create a follow-up plan.");
   const revision = computePlanRevision(before);
   if (request.expectedRevision !== revision) return applicationFailure("REVISION_MISMATCH", `Plan revision mismatch: current ${revision}. Reload and preview again.`);
   const draft = parsePlanDraft(request.draft);

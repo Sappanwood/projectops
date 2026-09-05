@@ -41,9 +41,10 @@ export function createPlanRunUi(container: HTMLElement, api: ApiClient, getState
       const run = value.runs.find(entry => entry.id === value.selected);
       slot.innerHTML = `<h3>计划执行</h3><p>每次执行冻结计划与任务输入。串行任务逐个运行，前置任务经人工验收后才继续。</p>${button('refresh', '刷新计划执行', value.busy)}
         <details data-run-details="reuse"><summary>复用已验收任务</summary><p>如需复用已完成任务或外部依赖，逐行填写任务 ID、尝试 ID 和复用说明，以 Tab 分隔。</p><label>复用记录<textarea class="form-input" data-plan-run-field="reuse">${e(value.reuse)}</textarea></label></details>
-        <label>本次计划工作指示<textarea class="form-input" data-plan-run-field="instructions">${e(value.instructions)}</textarea></label>${button('create', '创建串行执行', value.busy)}
+        <label>本次计划工作指示<textarea class="form-input" data-plan-run-field="instructions">${e(value.instructions)}</textarea></label>${button('create', '创建串行执行', value.busy || state.readPages?.plans.find(entry => entry.id === plan)?.status === 'done')}
         ${value.runs.length ? `<ul>${value.runs.map(entry => `<li><button type="button" class="btn btn-secondary" data-plan-run-id="${e(entry.id)}">${e(entry.id)} · ${e(labels[entry.state]??entry.state)}</button></li>`).join('')}</ul>` : '<p>尚无计划执行。</p>'}
         ${run ? `<article><h4>${e(run.plan_snapshot.title)} · ${e(labels[run.state]??run.state)}</h4><p>执行 ID：${e(run.id)} · 冻结计划 revision：${e(run.plan_revision)} · 并发容量：${run.capacity}</p>
+          ${run.model ? `<p>固定模型：${e(run.model.provider)}/${e(run.model.id)}</p>` : ''}
           <details data-run-details="snapshot"><summary>查看本次冻结计划</summary><pre>${e(JSON.stringify(run.plan_snapshot, null, 2))}</pre></details>
           <ol>${run.nodes.map(node => `<li><a href="#/projects/${encodeURIComponent(project)}/backlog/${encodeURIComponent(node.item_id)}?plan=${encodeURIComponent(plan)}">${e(node.item_id)} — ${e(node.input.title)}</a><p>${e(labels[node.state]??node.state)} · 依赖：${e(node.depends_on.join(', ') || '无')}</p><p>尝试：${e(node.attempt_ids.join(', ') || '尚未启动')}</p>${node.reuse_note ? `<p>复用说明：${e(node.reuse_note)}</p>` : ''}</li>`).join('')}</ol>
           ${run.diagnostics.map(message => `<p role="alert">${e(message)}</p>`).join('')}
@@ -70,11 +71,12 @@ export function createPlanRunUi(container: HTMLElement, api: ApiClient, getState
     value.busy = true; value.request++; value.message = ''; render();
     let result;
     if (action === 'create') {
+      const model = getState().modelSelection.selected;
       const revision = await api.request<{ revision: string }>(`/api/projects/${encodeURIComponent(project)}/plans/${encodeURIComponent(plan)}`);
       if (!revision.ok) result = revision;
       else {
         const reuse = value.reuse.trim() ? value.reuse.trim().split('\n').map(line => { const [item_id, attempt_id, ...note] = line.split('\t'); return { item_id, attempt_id, note: note.join('\t') }; }) : undefined;
-        result = await api.request<PlanRunDetail>(base(project), { plan_id: plan, expected_revision: revision.data.revision, instructions: value.instructions, ...(reuse ? { reuse } : {}) }, 'POST');
+        result = await api.request<PlanRunDetail>(base(project), { model, plan_id: plan, expected_revision: revision.data.revision, instructions: value.instructions, ...(reuse ? { reuse } : {}) }, 'POST');
       }
     } else {
       const run = value.runs.find(entry => entry.id === value.selected);

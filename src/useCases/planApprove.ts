@@ -64,7 +64,7 @@ export function planApprove(
     io.stderr(`Error: plan id mismatch: expected ${planId}, got ${plan.id}`);
     return 1;
   }
-  if (plan.status === "approved") {
+  if (plan.status !== "draft") {
     io.stderr(`Error: plan already approved: ${planId}`);
     return 1;
   }

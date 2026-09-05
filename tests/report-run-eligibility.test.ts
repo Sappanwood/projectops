@@ -1,3 +1,4 @@
+import {completePlan} from '../src/application/planComplete.js';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {mkdtempSync,mkdirSync,writeFileSync} from 'node:fs';
@@ -21,6 +22,7 @@ test('Backlog done cannot produce completed Report while its real run is unconfi
  const created=createPlanRun({workspaceDir:workspaceRoot,projectId:'repo',planId:'plan-proof',expectedRevision:computePlanRevision(readPlan(plansRoot,'plan-proof'))});assert.equal(created.ok,true);
  cli(['backlog','update','repo','REP-001','--status','done']);
  const input={workspaceRoot,reportsRoot:path.join(workspaceRoot,'ops/repo/reports'),backlogRoot:path.join(workspaceRoot,'ops/repo/backlog'),plansRoot,projectId:'repo',planId:'plan-proof',verification:['fixture evidence']};
+ assert.equal(completePlan({workspaceDir:workspaceRoot,projectId:'repo',planId:'plan-proof',expectedRevision:computePlanRevision(readPlan(plansRoot,'plan-proof'))}).ok,false);
  assert.throws(()=>writeGeneratedReport(input),/run|运行/i);
  const partial=writeGeneratedReport({...input,partialAcceptance:'Fixture explicitly accepts pending run.'});assert.equal(partial.outcome,'partial');
 });

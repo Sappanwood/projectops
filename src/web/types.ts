@@ -52,6 +52,7 @@ export type AppError = {
 };
 
 export type AppState = {
+  modelSelection: import('./modelSelector.js').ModelSelectionState;
   route: RouteState;
   docs: DocsState;
   selectedPlanId: string | null;

@@ -3,6 +3,7 @@ import type { ApplicationResult } from '../application/result.js';
 import type { PlanRunRuntime } from '../application/planRunApi.js';
 
 type Http = {
+  model(value: unknown): Promise<import('../execution/models.js').ModelRef | undefined>;
   method(expected: string): void;
   noQuery(): void;
   query(name: string): string | undefined;
@@ -20,7 +21,7 @@ export async function handlePlanRunRoute(segments: string[], method: string | un
   http.noQuery();
   if (segments.length === 4) {
     http.method('POST');
-    const body = await http.body(['plan_id', 'expected_revision', 'reuse', 'instructions']);
+    const body = await http.body(['plan_id', 'expected_revision', 'reuse', 'instructions', 'model']);
     if (typeof body.plan_id !== 'string' || typeof body.expected_revision !== 'string' || (body.instructions !== undefined && typeof body.instructions !== 'string')) http.invalid('Plan ID and expected revision are required.');
     let reuse: { itemId: string; attemptId: string; note: string }[] | undefined;
     if (body.reuse !== undefined) {
@@ -30,7 +31,8 @@ export async function handlePlanRunRoute(segments: string[], method: string | un
         return { itemId: value.item_id, attemptId: value.attempt_id, note: value.note };
       });
     }
-    http.send(createPlanRun({ ...input, planId: body.plan_id, expectedRevision: body.expected_revision, ...(reuse ? { reuse } : {}), ...(typeof body.instructions === 'string' ? { instructions: body.instructions } : {}) })); return true;
+    const model = await http.model(body.model);
+    http.send(createPlanRun({ ...input, model, planId: body.plan_id, expectedRevision: body.expected_revision, ...(reuse ? { reuse } : {}), ...(typeof body.instructions === 'string' ? { instructions: body.instructions } : {}) })); return true;
   }
   if (segments.length === 5) {
     http.method('GET'); http.send(showPlanRun({ ...input, runId: segments[4]! })); return true;

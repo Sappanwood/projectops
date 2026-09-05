@@ -11,6 +11,7 @@ const notice = (message: string) => message ? `<p role="status" class="reading-n
 export function createFoundationUi(container: HTMLElement, api: ApiClient, getState: () => AppState, updated: () => Promise<void>) {
   const tasks = new Map<string, Editor>();
   const plans = new Map<string, PlanEditor>();
+  const completions = new Map<string, { busy: boolean; message: string }>();
   let destroyed = false;
   const taskKey = () => `${getState().selectedProjectId}/${getState().backlog.item?.id}`;
   const projectPath = () => `/api/projects/${encodeURIComponent(getState().selectedProjectId!)}`;
@@ -30,8 +31,14 @@ export function createFoundationUi(container: HTMLElement, api: ApiClient, getSt
       const id = card.dataset.planId!;
       let slot = card.querySelector<HTMLElement>('[data-foundation-plan]');
       if (!slot) { slot = container.ownerDocument.createElement('section'); slot.dataset.foundationPlan = id; card.append(slot); }
-      const editor = plans.get(`${state.selectedProjectId}/${id}`);
-      slot.innerHTML = `<h3>计划修订</h3>${editor ? `<label>计划 JSON 草案<textarea class="form-input" rows="16" data-plan-draft="${e(id)}" ${editor.busy ? 'disabled' : ''}>${e(editor.body)}</textarea></label><p>修改后先预览差异，再确认应用。已开始的任务受保护。</p>${button('preview-plan','预览修订',editor.busy)} ${button('reload-plan','重读版本并保留计划草案',editor.busy)}${editor.preview ? `<h4>修订差异与受影响任务</h4><pre>${e(JSON.stringify({ changes: editor.preview.changes, affected_items: editor.preview.affected_items },null,2))}</pre>${button('confirm-plan','确认应用修订',editor.busy || !editor.preview.confirmation_token)}` : ''}${notice(editor.message)}` : button('edit-plan','修订计划')}`;
+      const key = `${state.selectedProjectId}/${id}`;
+      const plan = state.readPages?.plans.find(entry => entry.id === id);
+      const completion = completions.get(key);
+      if (plan?.status === 'done') { slot.innerHTML = '<p class="success-text">计划已完成</p>'; continue; }
+      const eligible = plan?.status === 'approved' && plan.execution.completion_percent === 100 && !plan.execution.items.some(item => item.status === 'unreadable');
+      const completionUi = `<h3>计划完成</h3>${button('complete-plan', '标为完成', !eligible || completion?.busy === true)}${eligible ? '' : '<p class="muted">批准并生成任务后，所有 task 完成即可标记。</p>'}${notice(completion?.message ?? '')}`;
+      const editor = plans.get(key);
+      slot.innerHTML = `${completionUi}<h3>计划修订</h3>${editor ? `<label>计划 JSON 草案<textarea class="form-input" rows="16" data-plan-draft="${e(id)}" ${editor.busy ? 'disabled' : ''}>${e(editor.body)}</textarea></label><p>修改后先预览差异，再确认应用。已开始的任务受保护。</p>${button('preview-plan','预览修订',editor.busy)} ${button('reload-plan','重读版本并保留计划草案',editor.busy)}${editor.preview ? `<h4>修订差异与受影响任务</h4><pre>${e(JSON.stringify({ changes: editor.preview.changes, affected_items: editor.preview.affected_items },null,2))}</pre>${button('confirm-plan','确认应用修订',editor.busy || !editor.preview.confirmation_token)}` : ''}${notice(editor.message)}` : button('edit-plan','修订计划')}`;
     }
   }
   async function action(target: HTMLElement) {
@@ -42,6 +49,20 @@ export function createFoundationUi(container: HTMLElement, api: ApiClient, getSt
       const id = planSlot.dataset.foundationPlan!;
       const key = `${getState().selectedProjectId}/${id}`;
       const path = `${projectPath()}/plans/${encodeURIComponent(id)}`;
+      if (action === 'complete-plan') {
+        if (completions.get(key)?.busy) return;
+        const plan = getState().readPages?.plans.find(entry => entry.id === id);
+        if (!plan) return;
+        const completion = { busy: true, message: '' };
+        completions.set(key, completion); render();
+        const result = await api.request(`${path}/complete`, { expected_revision: plan.revision }, 'POST');
+        completion.busy = false;
+        completion.message = result.ok ? '计划已完成' : `${result.error.code}: ${result.error.message} 请刷新后核对。`;
+        if (result.ok) plans.delete(key);
+        render();
+        if (result.ok && key === `${getState().selectedProjectId}/${id}`) await updated();
+        return;
+      }
       if (action === 'edit-plan' || action === 'reload-plan') {
         const existing = plans.get(key);
         if (existing?.busy) return;

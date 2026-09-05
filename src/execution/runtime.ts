@@ -2,16 +2,20 @@ import { createExecution, executionResult, finishExecution, listExecutions, muta
 import { applicationFailure, applicationSuccess, type ApplicationResult } from '../application/result.js';
 import { activeStates, type ExecutionAttempt, type ExecutionEvent } from './attempt.js';
 import { context, executionRepo, ExecutionError, saveProgress } from './store.js';
+import { isModelRef, type AvailableModel, type ModelRef } from './models.js';
 export type RunnerResult = {
     outcome: 'succeeded' | 'failed' | 'stopped';
     summary: string;
 };
 export type RunnerContext = {
+    recordModel?(model: ModelRef): void;
     repo: string;
     workspaceDir: string;
     emit(event: Omit<ExecutionEvent, 'at'> & { at?: string }): void;
 };
 export type Runner = {
+    listModels?(): Promise<AvailableModel[]>;
+    resolveModel?(repo: string, selected?: ModelRef): Promise<ModelRef>;
     start(attempt: ExecutionAttempt, context: RunnerContext): {
         completion: Promise<RunnerResult>;
         stop(): void | Promise<void>;
@@ -25,6 +29,21 @@ export class ExecutionRuntime {
     }>();
     constructor(private runner?: Runner) { }
     get available() { return this.runner !== undefined; }
+    async listModels() {
+        return { available: !!this.runner?.listModels, models: await this.runner?.listModels?.() ?? [] };
+    }
+    async resolveModel(workspaceDir: string, projectId: string, value: unknown): Promise<ModelRef | undefined> {
+        if (value !== undefined && value !== null && !isModelRef(value)) throw new Error('模型选择必须包含 provider 和 id。');
+        if (!this.runner?.resolveModel) {
+            if (value != null) throw new Error('当前执行器不支持模型选择。');
+            return undefined;
+        }
+        const selected = value ?? undefined;
+        if (selected && !(await this.runner.listModels?.())?.some(m => m.provider === selected.provider && m.id === selected.id))
+            throw new Error('所选模型不可用，请在本地 Pi 完成认证后刷新。');
+        const c = context(workspaceDir, projectId);
+        return this.runner.resolveModel(c.repo, selected);
+    }
     start(q: CreateExecutionRequest): ApplicationResult<AttemptDetail> { return this.launch(q); }
     startManaged(q: CreateExecutionRequest, checkout: NonNullable<ExecutionAttempt['checkout']>): ApplicationResult<AttemptDetail> { return this.launch(q, checkout); }
     private launch(q: CreateExecutionRequest, checkout?: ExecutionAttempt['checkout']): ApplicationResult<AttemptDetail> {
@@ -51,7 +70,18 @@ export class ExecutionRuntime {
             return created;
         const a = created.data.attempt;
         try {
-            const handle = this.runner.start(structuredClone(a), { repo: target.data, workspaceDir: resolved.data.workspace, emit: event => this.append(q, a.id, event) });
+            const handle = this.runner.start(structuredClone(a), { repo: target.data, workspaceDir: resolved.data.workspace,
+                recordModel: model => {
+                    const current = showExecution({ ...q, attemptId: a.id });
+                    if (!current.ok || !isModelRef(model)) throw new Error('Invalid model record.');
+                    const saved = mutateExecution({ ...q, attemptId: a.id, expectedRevision: current.data.attempt.revision }, (attempt, c) => {
+                        attempt.progress ??= { events: [] };
+                        attempt.progress.model = { ...model };
+                        saveProgress(c.root, a.id, attempt.revision, attempt.progress);
+                        return true;
+                    });
+                    if (!saved.ok) throw new Error('Cannot record execution model.');
+                }, emit: event => this.append(q, a.id, event) });
             this.handles.set(a.id, handle);
             void handle.completion.then(result => this.complete(q, a.id, result), () => this.complete(q, a.id, { outcome: 'failed', summary: 'Runner failed.' }));
         }

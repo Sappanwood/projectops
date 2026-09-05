@@ -50,6 +50,9 @@ epic 不计入完成率，缺失或损坏任务仍计入总数并显示诊断。
 CLI 更新 Backlog 后点击 Refresh 可查看新进度。Plan 同时展示进行中、可开始和受阻任务，
 排序与 `pops plan next` 一致，受阻项显示依赖 ID 和原因。点击任务进入 Backlog 详情，更新后点击“返回原 Plan”
 会重新加载进度与推荐，并展开原计划；详情地址支持刷新和直接打开。
+全部 task done 后，可在 Plan 详情点击“标为完成”，状态由 `approved` 变为 `done`（已完成）。
+CLI 使用 `pops plan complete <project> <plan> --expected-revision <revision> --json`，revision 从 `plan show` 获取。
+操作还会校验现有执行记录的验收与落地证据；done 计划保留历史，新增范围另建计划。
 Plan 的交付报告区列出同项目关联报告，按生成时间降序排列，显示 outcome 与时间；点击报告可查看详情并返回原 Plan。
 全部任务完成但没有报告时会单独提示；报告是创建时快照，当前进度变化不会改写已有报告。Reports 页面可展开完整详情，查看
 交付 outcome、正文、验证、偏离与 workaround；技术记录折叠。关联 Plan、Backlog 和 Repo 文档可点击，并提供返回来源页面入口。
@@ -59,9 +62,9 @@ Retrospectives 展示 workspace 完整列表，默认过滤当前项目；支持
 精确过滤，project/task 留空表示全部，填写 `null` 表示 provenance 未记录。回顾按 inbox/active/archive 分组，
 列表从正文派生摘要，详情优先展示渲染正文、下一步和结案说明，技术信息折叠；关联任务可点击。
 Docs 与回顾详情支持直达地址；回顾筛选条件写入地址，刷新或任务往返后恢复。阅读位置与展开状态在当前页面会话内保留。
-malformed artifact 单独显示诊断。Reports、Docs、Retrospectives 保持只读；Plans 可预览并确认修订。点击顶部 Refresh 重读文件。Mermaid 暂按代码显示，图片不加载。
+malformed artifact 单独显示诊断。Reports、Docs、Retrospectives 保持只读；Plans 可预览并确认修订，也可显式标为完成。点击顶部 Refresh 重读文件。Mermaid 暂按代码显示，图片不加载。
 
-Overview 优先展示未完成计划和活动任务，分开显示计划审批状态、实时 task 进度与历史报告结果。
+Overview 优先展示未完成计划和活动任务，分开显示计划状态、实时 task 进度与历史报告结果。
 桌面两列、窄屏单列，条目标题完整换行；列表最多预览五条并显示对应范围数量，读取异常单独提示。
 点击任务、计划、报告、回顾标题或四份标准文档入口可直达详情，链接支持复制、新标签页和刷新定位；
 “返回 Overview”重读摘要并在当前页面会话内恢复滚动位置。回顾显示正文摘要，文档显示逐项可读性和标准检查问题。
@@ -98,7 +101,7 @@ server 使用隔离端口，不需要运行真实开发服务。整套 E2E 上�
 Linux 若提示系统库缺失，可按 [Playwright 浏览器安装说明](https://playwright.dev/docs/browsers) 安装所需依赖。
 
 Workbench 仅供受信任本地用户和 workspace 使用，监听 loopback；workspace 只能由启动参数指定。
-Web 支持 Backlog 状态/内容、Plan 修订及执行控制/验收；mutation 要求 JSON、同源 browser Origin 和相应 revision。
+Web 支持 Backlog 状态/内容、Plan 修订、完成及执行控制/验收；mutation 要求 JSON、同源 browser Origin 和相应 revision。
 它不提供用户账户、远程访问或对抗恶意本地并发的安全保证。
 
 ## 当前能力
@@ -195,7 +198,7 @@ capture 的显式和自动 ID 在三个状态目录中保持唯一；运行时�
 - `pops backlog init/add/list/show/update`：store bootstrap、CRUD、状态流转与 revision 保护
 - `pops plan next <project> <plan-id> [--json]`：只读查询该 Plan 的可开始、进行中和受阻 task，解释依赖原因；
   可开始任务按 P0 → P3、ID 排序，next 为首项或 null。依赖可以位于同项目 Plan 外，查询不自动改状态或启动任务
-- `pops plan create/list/show/validate/approve/materialize/revise`：从 JSON 草案创建、列出、查看、校验、批准并将已批准的 `plan/Plan@1` artifact 写入 Backlog；Plan ID 由 title 稳定生成，
+- `pops plan create/list/show/validate/approve/materialize/revise/complete`：从 JSON 草案创建、列出、查看、校验、批准并将已批准的 `plan/Plan@1` artifact 写入 Backlog；Plan ID 由 title 稳定生成，
   无 ASCII slug 的标题使用每个 Unicode code point 的 `u<hex>` token
 - `pops report create/list/show`：从已批准且 materialized 的 Plan 生成 completed 或显式 partial Delivery Report，并查询已生成的 Report；create 需要至少一条 `--verification`
 - `pops retrospective capture/list/show`：将调用方提供的 trigger、harness、model、project/task provenance 和 Markdown 证据捕获到 workspace 级 inbox，并按 status/project/task 查询；capture 不自动分类或流转
@@ -217,7 +220,7 @@ capture 的显式和自动 ID 在三个状态目录中保持唯一；运行时�
 - docs scaffold 只写入已登记 project 的固定文档路径；目标为非普通文件或 docs 目录越界时失败，并在 JSON receipt 中返回 `created` 与 `skipped` 清单
 - docs check 不写入 project 文件；缺失、非普通文件或缺少 Markdown 一级标题时返回非零，并在 `--json` 结果中返回稳定的 `problems` 诊断数组
 - 只有校验通过的 draft Plan 才能通过 approve 记录一次批准，批准需要非空 review note
-- 只有 approved Plan 才能 materialize；Plan 会保存每个局部 key 到 Backlog ID 的 `materialization.mapping`，重复执行完整 materialize 返回 `no_op`
+- 只有 approved Plan 才能 materialize；Plan 会保存每个局部 key 到 Backlog ID 的 `materialization.mapping`，重复执行完整 materialize（含 done Plan）返回 `no_op`
 - backlog update 支持 `--expected-revision` 防止覆盖并发修改
 - Report create 从 materialized Plan 和同一 project 的 Backlog 读取实际状态；未完成 task 必须提供非空 `--partial-acceptance`，Report 文件不会覆盖既有文件
 
@@ -235,6 +238,10 @@ Plan 修订采用草案 JSON 输入，先查看变更与受影响任务，再确
 
 本版已接入 Pi 0.85.0。使用 `npm run workbench -- --workspace <workspace> --port <port> --pi` 启用本机 Pi；默认不配置 runner，启动/重试入口不可用；
 可以通过 CLI 记录外部执行，在网页核对并验收。CLI 的 finish/verify 记录调用方提交的事实，不执行命令或替调用方验证真实性。
+启用 Pi 后，header 右上角可按 provider 选择可用模型，或使用 Pi 默认模型；选择保存在当前浏览器。
+认证在本地 Pi 内完成，Workbench 服务须使用相同用户和 Pi 配置目录，完成登录后点击网页“刷新”更新列表。
+切换仅影响之后启动的单项任务（含显式重试）；串行和并行 Plan Run 在创建时固定模型，后续派发及重试继续使用该快照。
+执行详情展示启动模型和实际模型；已保存的选择变得不可用时会提示重新选择，启动不会静默改用其他模型。
 服务管理的工作独立于浏览器连接，页面重新进入后重读记录；服务重启后未确认的工作显示待核对，不自动重放。
 外部 CLI 记录不归服务进程管理，不会因 Workbench 重启而被判定中断。
 

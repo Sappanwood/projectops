@@ -18,7 +18,7 @@ export type PlanExecution = {
   }>;
 };
 
-export type WorkbenchPlan = Plan & { execution: PlanExecution; next_tasks: PlanNextSummary; delivery_reports: Array<Pick<Report, "id" | "title" | "outcome" | "created_at">> };
+export type WorkbenchPlan = Plan & { revision: string; execution: PlanExecution; next_tasks: PlanNextSummary; delivery_reports: Array<Pick<Report, "id" | "title" | "outcome" | "created_at">> };
 
 export function readPlanExecution(
   request: { workspaceDir: string; projectId: string },

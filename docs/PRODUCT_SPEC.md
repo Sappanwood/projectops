@@ -44,7 +44,7 @@ Overview 桌面采用两列，按 Plans、Backlog、Reports、Retrospectives 排
 任务、计划、报告和回顾标题使用真实详情链接，支持新标签页、刷新定位及返回 Overview；
 返回时重读项目摘要并在当前会话内恢复来源滚动位置，回顾列表和详情入口携带项目筛选。
 Plans 将未完成（含草案、未物化和零 task）放在全部 task 已完成的计划之前，同组按 ID 排序；
-审批状态与从当前 Backlog 计算的 task 完成数/百分比分开显示，缺失映射保留分母和诊断。
+计划状态与从当前 Backlog 计算的 task 完成数/百分比分开显示，缺失映射保留分母和诊断。
 Backlog 优先展示进行中、待办，再按优先级与 ID 排序；没有活动条目时提示并展示最近更新，
 按更新时间倒序、ID 升序。Reports 按实际生成时间倒序、ID 升序，保留历史交付结果。
 以上三类列表最多预览五条，显示预览数与对应范围总数；读取异常时标注数量仅代表已读取记录，保留可读内容。
@@ -57,8 +57,13 @@ Project Docs 提供四份标准文档直达入口，逐项显示可读性与检�
 - Workspace topology、Backlog、Plan、Report、Docs 和 Retrospective 使用独立 versioned schema。
 - 不建立覆盖所有 artifact 的通用 schema 或生命周期。
 - 跨领域关联使用稳定 logical URI，不把机器绝对路径写入 artifact。
-- Plan 使用 `plan/Plan@1` JSON artifact：包含稳定 ID、标题、目标及以局部 key 关联的 Backlog item 草案，并以 `status: draft|approved` 表示生命周期；草案可用 `parent` 和 `depends_on` 引用其他局部 key。批准 Plan 额外包含一次 `approval` 记录（`approved_at` 与 `review_note`）；materialize 后增加 `materialization` 记录（`materialized_at` 与 `mapping`），保存局部 key 到 Backlog ID 的映射。
-- `pops plan materialize` 只接受通过 schema/依赖校验且 status 为 `approved` 的 Plan；按 parent/dependency 拓扑创建同一 project 的 epic/task，JSON 输出 mutation receipt。已有完整 mapping 的重试为 `no_op`，不创建或改写条目。
+- Plan 使用 `plan/Plan@1` JSON artifact：包含稳定 ID、标题、目标及以局部 key 关联的 Backlog item 草案，并以 `status: draft|approved|done` 表示生命周期；草案可用 `parent` 和 `depends_on` 引用其他局部 key。批准 Plan 额外包含一次 `approval` 记录（`approved_at` 与 `review_note`）；materialize 后增加 `materialization` 记录（`materialized_at` 与 `mapping`），保存局部 key 到 Backlog ID 的映射。
+- `pops plan materialize` 只接受通过 schema/依赖校验且 status 为 `approved` 的 Plan；按 parent/dependency 拓扑创建同一 project 的 epic/task，JSON 输出 mutation receipt。已有完整 mapping（含 `done` Plan）的重试为 `no_op`，不创建或改写条目。
+- Plan 完成采用显式 `approved → done`：CLI `pops plan complete` 和 Web“标为完成”共用 application 校验，必须携带当前 Plan revision。
+  要求已物化、至少一个 task、全部映射可读且全部 task 为 done；epic 不要求 done。若有串行/并行执行记录，最新记录须通过现有完成与验收/落地证据校验。
+  成功只更新 Plan status，保留批准、mapping 和输入；同 revision 的 done 重试为 no_op。未完成、无法读取和 revision 冲突不写文件。
+  done 显示“已完成”，不能重新批准、修订或创建新 run；新增范围另建后续计划。Backlog 后续变化不自动撤销 done，实时进度仍独立展示。
+  Report 继续从实时 Backlog 与执行证据校验，接受 approved 或 done Plan；生成报告不会自动标记完成，partial 也不允许跳过完成条件。
 - 派生索引和未来 UI preference 不得成为业务 authority。
 - Workbench Read Model 是按请求从现有领域读取能力组合的 projection：workspace overview 返回 workspace identity、
   project summaries 与 doctor diagnostics；project overview 返回 Backlog 状态计数/最近条目、Plan/Report 摘要、
@@ -72,12 +77,12 @@ Project Docs 提供四份标准文档直达入口，逐项显示可读性与检�
   workspace Retrospective 记录；不接受 query 参数、文件路径或 mutation。Plan 可展开 goal、status、approval、
   materialization mapping 和带 parent/dependencies 的 item；Report 可展开 outcome、Plan/Backlog references、
   verification、deviations、workarounds、repo docs 与 Markdown 正文。Report 正文默认渲染，支持源码切换；技术记录折叠，关联 Plan、Backlog 与 Repo 文档支持跳转和返回。
-- Plan 阅读页突出标题、审批状态与目标，长目标默认显示三行并可展开全文，提供带序号、标题和依赖的任务目录；点击目录定位并展开对应任务。
+- Plan 阅读页突出标题、计划状态与目标，长目标默认显示三行并可展开全文，提供带序号、标题和依赖的任务目录；点击目录定位并展开对应任务。
   任务正文独立展开，审批和 mapping 收入次级记录区；不展示不存在的审批字段。刷新保留展开状态。
 - Plan 的执行进度来自同项目 materialization mapping 对应的实时 Backlog；显示 task 总数、todo、in_progress、done 与无法读取数量。
   epic 不计入完成率；缺失/损坏任务保留在分母，逐项显示 ID、计划标题回退与诊断，有效条目显示实时标题及状态。
   已有 blocked/cancelled 状态按原值显示和计数，均不算完成。未物化显示未开始执行；零 task 显示无可执行任务，二者完成百分比均为 null。
-  完成百分比向下取整，只有全部 task done 才显示 100%。刷新重新读取 Backlog，审批状态与执行进度分开呈现，不新增持久化字段或 Plan 生命周期。
+  完成百分比向下取整，只有全部 task done 才显示 100%。刷新重新读取 Backlog，计划状态与执行进度分开呈现，进度查询不自动修改 Plan 生命周期。
 - Docs 页面提供四份标准文档入口及检查结果，同时列出 Repo `docs/` 下其他 Markdown。正文经独立 API 按需读取，不 scaffold、不修改文件。
   Retrospective 页面读取完整 workspace 列表，默认过滤当前 project；status/project/task 支持组合精确过滤，
   project/task 留空表示全部，`null` 表示未记录的 provenance。结果按 inbox/active/archive 分组，详情包含完整
@@ -207,6 +212,13 @@ Plan show 额外返回内容计算得到的 revision；revision 不是新的持�
 状态为 running、stop_requested、unknown、succeeded、failed、stopped；执行结束与验收是不同事实，重试创建新尝试而不改写旧输入。
 
 CLI 可记录外部工作；server 可接收受控 runner，默认无 runner；显式 `--pi` 启用服务端 Pi SDK，浏览器不能提供执行路径或任意启动命令。
+header 模型选择器按 provider 分组展示本地 Pi 可用模型，并提供“使用 Pi 默认模型”；认证继续由本地 Pi 完成。
+浏览器 localStorage 仅保存 provider/id 选择，刷新页面保留选择，“刷新”重读模型列表。无可用模型时提示本地认证，
+失效选择保留并提示重新选择；已发现认证配置不代表远端额度或授权必然有效，调用失败仍按执行失败处理。
+单项任务在启动请求时固定模型，显式重试使用当前选择；串行和并行 run 在创建时固定模型，后续派发、恢复和返工沿用。
+默认选项在启动/创建时使用目标 Repo 的 Pi 设置解析成具体模型。切换不修改既有 attempt/run，默认 Pi 配置文件也不被网页改写。
+attempt 的 `input.model` 保存启动模型，`progress.model` 保存 Pi session 实际模型；run 的可选 `model` 保存固定模型。
+模型记录均仅含 provider/id；Web 不提供认证操作，也不返回凭据、API key、模型 endpoint 或原始配置。
 同任务的重复启动返回已有活动尝试，unknown 阻止新工作；页面通过查询重读当前状态，断线不结束工作。
 停止请求先记录 stop_requested，runner 确认结束后才成为 stopped；无法确认的结果为 unknown。
 服务重启核对其管理的运行，缺少 handle 的活动记录为 unknown；外部工作记录不由服务恢复。
@@ -243,3 +255,5 @@ Repo 内最多两个节点并行，许可来自 Plan 的 `execution_policy.max_p
 节点在各自 worktree 工作，宿主提交成果、验证和验收后，系统串行构造最新 integration head 上的合并候选。验证通过且 expected-ref 未变才推进专用 integration ref。冲突、检查失败和 ref 漂移均保留证据并暂停派发；未知工作需要人工核对。返工产生新尝试与 checkout，不覆盖已接受的历史。
 
 并行范围完成表示所有节点已验证、验收、落地，实际 ref 与落地证据仍匹配。交付显示最终 ref/head，不自动修改用户 checkout、合并用户分支或 push。仅 Backlog 状态不能代替执行证据生成完成 Report。
+
+串行 Plan 标为 done 是对已完成 run 的结案：后续 Repo 开发不撤销历史验收，结案校验保存的完成基线、当前任务输入和完整验收证据。它不表示当前代码重新通过了验证；Report 发布仍校验当前代码基线。

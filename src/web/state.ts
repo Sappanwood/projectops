@@ -8,9 +8,11 @@ import type {
 } from "./types.js";
 import { emptyBacklogState } from "./backlogController.js";
 import { emptyDocsState } from "./docsView.js";
+import { initialModelSelection } from './modelSelector.js';
 
 export function createInitialState(route?: RouteState): AppState {
   return {
+    modelSelection: initialModelSelection(),
     route: route ?? {projectId:null, view:"overview"},
     docs: emptyDocsState(),
     selectedPlanId: route?.planId ?? null,

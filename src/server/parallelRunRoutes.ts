@@ -5,6 +5,7 @@ import { captureSnapshot } from '../execution/snapshot.js';
 import type { ApplicationResult } from '../application/result.js';
 
 type Http = {
+  model(value: unknown): Promise<import('../execution/models.js').ModelRef | undefined>;
   method(expected: string): void;
   noQuery(): void;
   query(name: string): string | undefined;
@@ -22,11 +23,12 @@ export async function handleParallelRunRoute(segments: string[], method: string 
   http.noQuery();
   if (segments.length === 4) {
     http.method('POST');
-    const body = await http.body(['plan_id', 'expected_revision']);
+    const body = await http.body(['plan_id', 'expected_revision', 'model']);
     if (typeof body.plan_id !== 'string' || typeof body.expected_revision !== 'string') http.invalid('Plan ID and expected revision are required.');
+    const model = await http.model(body.model);
     const base = executionResult(() => captureSnapshot(context(workspaceDir, input.projectId).repo).head);
     if (!base.ok) http.send(base);
-    else http.send(createParallelRun({ ...input, planId: body.plan_id, expectedRevision: body.expected_revision, baseCommit: base.data, commands }));
+    else http.send(createParallelRun({ ...input, model, planId: body.plan_id, expectedRevision: body.expected_revision, baseCommit: base.data, commands }));
     return true;
   }
   if (segments.length === 5) {

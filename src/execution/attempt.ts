@@ -1,4 +1,5 @@
 import type { BacklogItem } from '../backlog/item.js';
+import type { ModelRef } from './models.js';
 export const EXECUTION_SCHEMA = 'execution/Attempt@1';
 export type ExecutionState = 'running' | 'stop_requested' | 'unknown' | 'succeeded' | 'failed' | 'stopped';
 export type CodeSnapshot = {
@@ -22,7 +23,7 @@ export type ExecutionEvent = {
 };
 export type ExecutionAttempt = {
     checkout?: { run_id: string; node_id: string };
-    progress?: { events: ExecutionEvent[]; session_id?: string };
+    progress?: { events: ExecutionEvent[]; session_id?: string; model?: ModelRef };
     schema: typeof EXECUTION_SCHEMA;
     id: string;
     execution_id: string;
@@ -33,6 +34,7 @@ export type ExecutionAttempt = {
     revision: string;
     origin: 'external' | 'runtime';
     input: {
+        model?: ModelRef;
         item: BacklogItem;
         instructions: string;
         plan: {

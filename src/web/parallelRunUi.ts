@@ -40,9 +40,10 @@ export function createParallelRunUi(container: HTMLElement, api: ApiClient, getS
       const opened = new Set([...slot.querySelectorAll<HTMLDetailsElement>('details[open]')].map(detail => detail.dataset.parallelDetails));
       const run = value.runs.find(entry => entry.id === value.selected);
       const terminal = run && ['completed', 'stopped'].includes(run.state);
-      slot.innerHTML = `<h3>有界并行执行</h3><p>${permission ? '计划已显式允许并行，最大容量为 2。' : '计划尚未显式允许并行；请先修订并批准并行许可。'} 每个任务使用独立 checkout，前置任务验收并落地后才解锁依赖。</p>${button('refresh', '刷新并行执行', value.busy)} ${button('create', '创建有界并行执行', value.busy || !permission)}
+      slot.innerHTML = `<h3>有界并行执行</h3><p>${permission ? '计划已显式允许并行，最大容量为 2。' : '计划尚未显式允许并行；请先修订并批准并行许可。'} 每个任务使用独立 checkout，前置任务验收并落地后才解锁依赖。</p>${button('refresh', '刷新并行执行', value.busy)} ${button('create', '创建有界并行执行', value.busy || !permission || state.readPages?.plans.find(entry => entry.id === plan)?.status === 'done')}
         ${value.runs.length ? `<ul>${value.runs.map(entry => `<li><button type="button" class="btn btn-secondary" data-parallel-id="${e(entry.id)}">${e(entry.id)} · ${e(labels[entry.state] ?? entry.state)}</button></li>`).join('')}</ul>` : '<p>尚无并行执行。</p>'}
         ${run ? `<article><h4>${e(run.plan_snapshot.title)} · ${e(labels[run.state] ?? run.state)}</h4><p>执行 ID：${e(run.id)} · 冻结计划 revision：${e(run.plan_revision)} · 并发容量：${run.capacity}</p>
+          ${run.model ? `<p>固定模型：${e(run.model.provider)}/${e(run.model.id)}</p>` : ''}
           <p>集成 HEAD：<code>${e(run.integration_head)}</code></p><p>集成 checkout：<code>${e(run.workspace.integrationDir)}</code></p>
           <details data-parallel-details="snapshot"><summary>查看并行执行冻结计划</summary><pre>${e(JSON.stringify(run.plan_snapshot, null, 2))}</pre></details>
           <details data-parallel-details="commands"><summary>查看服务端落地验证命令</summary><pre>${e(JSON.stringify(run.commands, null, 2))}</pre></details>
@@ -75,9 +76,10 @@ export function createParallelRunUi(container: HTMLElement, api: ApiClient, getS
     value.busy = true; value.request++; value.message = ''; render();
     let result;
     if (action === 'create') {
+      const model = getState().modelSelection.selected;
       const revision = await api.request<{ revision: string }>(`/api/projects/${encodeURIComponent(project)}/plans/${encodeURIComponent(plan)}`);
       if (!revision.ok) result = revision;
-      else result = await api.request<{ run: ParallelRun; diagnostics: string[] }>(base(project), { plan_id: plan, expected_revision: revision.data.revision }, 'POST');
+      else result = await api.request<{ run: ParallelRun; diagnostics: string[] }>(base(project), { model, plan_id: plan, expected_revision: revision.data.revision }, 'POST');
     } else {
       const run = value.runs.find(entry => entry.id === value.selected);
       if (!run) { value.busy = false; render(); return; }

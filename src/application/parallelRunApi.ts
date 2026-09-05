@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { promisify } from 'node:util';
 import { showBacklogItem, updateBacklogItemStatus } from './backlogApi.js';
 import { executionResult } from './executionApi.js';
-import { computePlanRevision } from './planRevision.js';
+import { computePlanRevision, computePlanExecutionRevision } from './planRevision.js';
 import { type ApplicationResult } from './result.js';
 import { activeStates, type ExecutionAttempt } from '../execution/attempt.js';
 import { ExecutionRuntime } from '../execution/runtime.js';
@@ -30,7 +30,7 @@ function validateCommands(commands: string[][]) {
         !Array.isArray(command) || !command.length || command.length > 128 || command.some(arg => typeof arg !== 'string' || arg.includes('\0')) || !command[0]?.trim()))
         throw new ExecutionError('EXECUTION_INVALID', 'Landing requires 1–20 structured commands with explicit executable and bounded arguments.');
 }
-export function createParallelRun(q: ParallelRunQuery & { planId: string; expectedRevision: string; baseCommit: string; commands: string[][] }) {
+export function createParallelRun(q: ParallelRunQuery & { planId: string; expectedRevision: string; baseCommit: string; commands: string[][]; model?: ParallelRun['model'] }) {
     return executionResult(() => {
         validateCommands(q.commands); const c = context(q.workspaceDir, q.projectId); const plan = readPlan(c.plans, q.planId);
         if (computePlanRevision(plan) !== q.expectedRevision) throw new ExecutionError('REVISION_MISMATCH', 'Plan revision changed.');
@@ -57,6 +57,7 @@ export function createParallelRun(q: ParallelRunQuery & { planId: string; expect
         const run: ParallelRun = { schema: PARALLEL_RUN_SCHEMA, id, project_id: q.projectId, plan_id: plan.id, plan_revision: q.expectedRevision, plan_snapshot: structuredClone(plan),
             mapping: structuredClone(mapping), revision: '', created_at: at, updated_at: at, state: 'ready', capacity: 2, workspace, integration_head: workspace.baseCommit,
             commands: structuredClone(q.commands), nodes, controls: [], diagnostics: [] };
+        if (q.model) run.model = structuredClone(q.model);
         return detail(saveParallelRun(parallelRoot(c.root, true), run, true));
     });
 }
@@ -76,7 +77,7 @@ function accepted(c: Context, run: ParallelRun, node: ParallelNode, attempt: Exe
     if (checkSnapshot && captureSnapshot(executionRepo(c, attempt)).digest !== attempt.acceptance.snapshot_digest) invalid(`Task ${node.item_id} checkout changed after acceptance.`);
 }
 function inputsValid(q: ParallelRunQuery, c: Context, run: ParallelRun, checkHead = true) {
-    if (computePlanRevision(readPlan(c.plans, run.plan_id)) !== run.plan_revision) invalid('Plan input changed; use a newly reviewed run for revised scope.');
+    if (computePlanExecutionRevision(readPlan(c.plans, run.plan_id)) !== run.plan_revision) invalid('Plan input changed; use a newly reviewed run for revised scope.');
     for (const node of run.nodes) {
         const current = task(q, node.item_id);
         if (!sameTaskInput(current, node.input) || (node.attempt_ids.length === 0 && current.revision !== node.input.revision) || ['blocked', 'cancelled'].includes(current.status)) invalid(`Task input changed: ${node.item_id}.`);
@@ -173,7 +174,7 @@ export class ParallelRunRuntime {
                     const lastLanding = node.landings.at(-1);
                     const reworkInstructions = rework ? `\nRework requested: ${rework.note.slice(0, 8000)}${lastLanding && lastLanding.outcome !== 'landed'
                         ? `\nPrevious landing ${lastLanding.outcome}: ${lastLanding.evidenceFile}\n${lastLanding.evidence.slice(0, 4000)}` : ''}` : '';
-                    const result = unwrap(this.execution.startManaged({ ...q, itemId: node.item_id, expectedRevision: task(q, node.item_id).revision,
+                    const result = unwrap(this.execution.startManaged({ ...q, model: run.model, itemId: node.item_id, expectedRevision: task(q, node.item_id).revision,
                         instructions: `Execute Plan ${run.plan_id} node ${node.key} in this owned checkout. Do not change the original repository or task/Plan state.\n${node.input.body}${reworkInstructions}`,
                         ...(prior ? { retryOf: prior } : {}) }, { run_id: run.id, node_id: workspace.nodeId }));
                     node.workspace = workspace; node.attempt_ids.push(result.attempt.id); node.state = 'running';

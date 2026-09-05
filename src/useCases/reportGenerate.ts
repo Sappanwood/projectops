@@ -188,7 +188,7 @@ function readSourcePlan(plansRoot: string, planId: string): Plan {
 
 function validateMaterializedPlan(plan: Plan): void {
   if (plan.schema !== PLAN_SCHEMA) throw new ReportGenerationError("unexpected plan schema");
-  if (plan.status !== "approved") {
+  if (plan.status !== "approved" && plan.status !== "done") {
     throw new ReportGenerationError("plan must be approved before Report generation");
   }
   if (plan.materialization === undefined) {

@@ -175,7 +175,7 @@ test("read page requests discard stale responses and expose retry after a read f
   run(["project", "add", "beta"]);
   type Result = import("../src/web/apiClient.js").ApiResult<WorkbenchReadPages>;
   const pending: Array<(result: Result) => void> = [];
-  const pages = (title: string): WorkbenchReadPages => ({ plans: [{ schema: "plan/Plan@1", id: "plan-test", title, goal: title, status: "draft", items: [], execution: { materialized: false, counts: { total: 0, todo: 0, in_progress: 0, done: 0, blocked: 0, cancelled: 0, unreadable: 0 }, completion_percent: null, items: [] }, next_tasks: { plan_id: "plan-test", ready: [], in_progress: [], blocked: [], next: null, diagnostics: [] }, delivery_reports: [] }], reports: [], documents: [], retrospectives: [], diagnostics: [] });
+  const pages = (title: string): WorkbenchReadPages => ({ plans: [{ revision: "fixture-revision", schema: "plan/Plan@1", id: "plan-test", title, goal: title, status: "draft", items: [], execution: { materialized: false, counts: { total: 0, todo: 0, in_progress: 0, done: 0, blocked: 0, cancelled: 0, unreadable: 0 }, completion_percent: null, items: [] }, next_tasks: { plan_id: "plan-test", ready: [], in_progress: [], blocked: [], next: null, diagnostics: [] }, delivery_reports: [] }], reports: [], documents: [], retrospectives: [], diagnostics: [] });
   const handlers: Record<string, (event: any) => void> = {};
   const container = { innerHTML: "", addEventListener: (name: string, handler: any) => { handlers[name] = handler; }, removeEventListener() {} };
   let route: import("../src/web/types.js").RouteState = { projectId: "alpha", view: "plans" };

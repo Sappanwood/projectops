@@ -1,3 +1,4 @@
+import { renderModelSelector } from './modelSelector.js';
 import { formatRoute } from "./router.js";
 import { isReadPage, renderReadPages } from "./readPagesView.js";
 import { renderDocs } from "./docsView.js";
@@ -57,6 +58,7 @@ export function renderHeader(state: AppState): string {
         <span class="workspace-name">${escapeHtml(workspaceName)}</span>
       </div>
       <div class="header-controls">
+        ${renderModelSelector(state.modelSelection)}
         <div class="header-status" aria-live="polite">${statusBadge}</div>
         <button
           id="btn-refresh"

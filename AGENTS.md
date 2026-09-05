@@ -145,5 +145,6 @@ node dist/cli.js --version
 Workspace Control Catalog 已登记 `projectops` 单端口服务，Web/API 共用 `127.0.0.1:12500`。
 使用 `/home/ling/workspace/workspace-control/bin/workspace dev start projectops` 启动；
 命令会先构建，再以 `/home/ling/workspace` 为 ProjectOps 数据 workspace。
+该开发服务通过 `--pi` 启用本地 Pi runner，header 可选择本地已认证模型；认证由同用户的本地 Pi 管理。
 该目录的 `.pops/workspace.json` 是 ProjectOps 自己的 manifest；不自动导入 Workspace Control Catalog。
 端口与启动命令的 authority 仍是 Workspace Control Catalog，调整时同步本节。

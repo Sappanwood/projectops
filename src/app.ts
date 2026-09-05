@@ -14,6 +14,7 @@ import { planShow } from "./useCases/planShow.js";
 import { planValidate } from "./useCases/planValidate.js";
 import { planApprove } from "./useCases/planApprove.js";
 import { planMaterialize } from "./useCases/planMaterialize.js";
+import { planComplete } from "./useCases/planComplete.js";
 import { planRevise } from "./useCases/planRevise.js";
 import { executionCommand } from "./useCases/executionCommand.js";
 import { planRunCommand } from './useCases/planRunCommand.js';
@@ -58,6 +59,7 @@ Commands:
   plan validate <project> <plan>  Validate a Plan
   plan approve <project> <plan> --review-note <note>  Approve a validated Plan
   plan materialize <project> <plan>  Materialize an approved Plan into Backlog
+  plan complete <project> <plan> --expected-revision <revision>  Mark a delivered Plan done
   plan revise <project> <plan> --input <draft.json> --expected-revision <revision> [--confirm <token>]  Preview or confirm a revision
   plan-run create <project> <plan> --expected-revision <plan-revision>  Freeze a Plan run
   plan-run list <project> [--plan <plan>]  List Plan execution runs
@@ -173,6 +175,10 @@ export function runCli(args: readonly string[], io: CliIO, cwd = process.cwd()):
       }
       if (sub === "materialize") {
         return planMaterialize(first, forwarded.find((arg) => !arg.startsWith("--")), json, io, cwd);
+      }
+      if (sub === "complete") {
+        const [planId, ...completeArgs] = forwarded;
+        return planComplete(first, planId, completeArgs, json, io, cwd);
       }
       if (sub === "revise") {
         const [planId, ...revisionArgs] = forwarded;

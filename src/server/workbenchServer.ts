@@ -26,6 +26,7 @@ import {
 } from "../application/workbenchReadModel.js";
 import { getWorkspaceSummary } from "../application/workspaceApi.js";
 import { listDocuments, showDocument } from "../application/docsApi.js";
+import { completePlan } from "../application/planComplete.js";
 import { showPlanRevision, revisePlan } from "../application/planRevision.js";
 import { decideExecution, listExecutions, showExecution } from "../application/executionApi.js";
 import { ExecutionRuntime, type Runner } from "../execution/runtime.js";
@@ -197,6 +198,17 @@ async function handleRequest(
     const url = parseRequestUrl(request, context.origin);
     const segments = decodePathSegments(url.pathname);
 
+    if (matches(segments, ['api', 'models'])) {
+      requireMethod(request, 'GET'); requireNoQuery(url);
+      try { sendApplicationResult(response, { ok: true, data: await context.runtime.listModels() }); }
+      catch { throw new HttpError(400, 'INVALID_REQUEST', 'Pi 模型列表读取失败，请检查本地 Pi 配置后刷新。'); }
+      return;
+    }
+    const resolveModel = async (value: unknown) => {
+      try { return await context.runtime.resolveModel(context.workspaceDir, segments[2]!, value); }
+      catch { throw new HttpError(400, 'INVALID_REQUEST', '模型选择无效或不可用，请在本地 Pi 完成认证后刷新并重新选择。'); }
+    };
+
     if (matches(segments, ["api", "workspace"])) {
       requireMethod(request, "GET");
       requireNoQuery(url);
@@ -307,6 +319,7 @@ async function handleRequest(
     }
 
     if (await handleParallelRunRoute(segments, request.method, context.workspaceDir, context.parallelRuns, context.parallelCommands, {
+      model: resolveModel,
       method: expected => requireMethod(request, expected), noQuery: () => requireNoQuery(url),
       query: name => singleQueryValue(url, name),
       body: async keys => { requireAllowedOrigin(request, context.origin); requireJsonContentType(request); return readJsonRecord(request, keys); },
@@ -315,6 +328,7 @@ async function handleRequest(
     })) return;
 
     if (await handlePlanRunRoute(segments, request.method, context.workspaceDir, context.planRuns, {
+      model: resolveModel,
       method: expected => requireMethod(request, expected), noQuery: () => requireNoQuery(url),
       query: name => singleQueryValue(url, name),
       body: async keys => { requireAllowedOrigin(request, context.origin); requireJsonContentType(request); return readJsonRecord(request, keys); },
@@ -344,9 +358,9 @@ async function handleRequest(
         requireMethod(request, "POST");
         requireAllowedOrigin(request, context.origin);
         requireJsonContentType(request);
-        const body = await readJsonRecord(request, ["item_id", "instructions", "retry_of", "expected_revision"]);
+        const body = await readJsonRecord(request, ["item_id", "instructions", "retry_of", "expected_revision", "model"]);
         if (typeof body.item_id !== "string" || typeof body.expected_revision !== "string"
-          || Object.values(body).some(value => typeof value !== "string")) {
+          || Object.entries(body).some(([key, value]) => key !== 'model' && typeof value !== "string")) {
           throw new HttpError(400, "INVALID_REQUEST", "Execution input is invalid.");
         }
         const task = showBacklogItem({ ...input, itemId: body.item_id });
@@ -355,7 +369,8 @@ async function handleRequest(
           sendApplicationResult(response, { ok: false, error: { code: "REVISION_MISMATCH", message: "Task changed; reload before starting work." } });
           return;
         }
-        sendApplicationResult(response, context.runtime.start({ ...input, itemId: body.item_id,
+        const model = await resolveModel(body.model);
+        sendApplicationResult(response, context.runtime.start({ ...input, model, itemId: body.item_id,
           ...(typeof body.instructions === "string" ? { instructions: body.instructions } : {}),
           ...(typeof body.retry_of === "string" ? { retryOf: body.retry_of } : {}),
         }));
@@ -398,6 +413,17 @@ async function handleRequest(
       if (segments.length === 5) {
         requireMethod(request, "GET");
         sendApplicationResult(response, showPlanRevision(input));
+        return;
+      }
+      if (segments.length === 6 && segments[5] === "complete") {
+        requireMethod(request, "POST");
+        requireAllowedOrigin(request, context.origin);
+        requireJsonContentType(request);
+        const body = await readJsonRecord(request, ["expected_revision"]);
+        if (typeof body.expected_revision !== "string" || !body.expected_revision.trim()) {
+          throw new HttpError(400, "INVALID_REQUEST", "Plan revision is required.");
+        }
+        sendApplicationResult(response, completePlan({ ...input, expectedRevision: body.expected_revision }));
         return;
       }
       if (segments.length === 6 && segments[5] === "revision") {

@@ -60,7 +60,7 @@ function renderPlan(plan: WorkbenchPlan, projectId: string): string {
   const taskId = (key: string) => `${plan.id}--${key}`;
   const titleFor = (key: string) => plan.items.find((item) => item.key === key)?.title ?? key;
   return `<details class="plan-card" data-plan-id="${e(plan.id)}" data-reading-key="${e(plan.id)}"><summary class="plan-summary">
-    <span class="plan-title">${e(plan.title)}</span><span class="plan-summary-meta"><span class="badge badge-${e(plan.status)}">${plan.status === "draft" ? "草案" : "已批准"}</span><span>${plan.items.length} 项任务</span></span></summary>
+    <span class="plan-title">${e(plan.title)}</span><span class="plan-summary-meta"><span class="badge badge-${e(plan.status)}">${plan.status === "draft" ? "草案" : plan.status === "done" ? "已完成" : "已批准"}</span><span>${plan.items.length} 项任务</span></span></summary>
     <div class="plan-intro"><p class="eyebrow">计划目标</p>${plan.goal.length > 220 ? `<details class="goal-toggle" data-reading-key="goal-${e(plan.id)}"><summary><span class="show-source">展开完整目标</span><span class="show-reading">收起目标</span></summary></details>` : ""}<p class="plan-goal">${e(plan.goal)}</p></div>
     ${renderExecution(plan.execution, projectId, plan.id)}
     ${renderNextTasks(plan.next_tasks, projectId, plan.id)}

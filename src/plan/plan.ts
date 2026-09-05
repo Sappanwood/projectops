@@ -3,7 +3,7 @@
 export const PLAN_SCHEMA = "plan/Plan@1";
 export const PLAN_ITEM_TYPES = ["task", "epic"] as const;
 export const PLAN_PRIORITIES = ["P0", "P1", "P2", "P3"] as const;
-export const PLAN_STATUSES = ["draft", "approved"] as const;
+export const PLAN_STATUSES = ["draft", "approved", "done"] as const;
 
 export type PlanItemType = (typeof PLAN_ITEM_TYPES)[number];
 export type PlanPriority = (typeof PLAN_PRIORITIES)[number];
@@ -96,11 +96,12 @@ export function parsePlan(value: unknown): Plan | string {
   if (status === "draft" && value.materialization !== undefined) {
     return "draft plan must not have a materialization record";
   }
-  if (status === "approved") {
+  if (status === "approved" || status === "done") {
     const approval = parseApproval(value.approval);
     if (typeof approval === "string") return approval;
     const materialization = parseMaterialization(value.materialization, draft.items);
     if (typeof materialization === "string") return materialization;
+    if (status === "done" && !materialization) return "done plan must have a materialization record";
     return {
       schema: PLAN_SCHEMA,
       id: value.id,

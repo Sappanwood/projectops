@@ -1,3 +1,4 @@
+import { computePlanRevision } from "./planRevision.js";
 import { readPlanNext } from "./planNext.js";
 import { readPlanExecution, type PlanExecution, type WorkbenchPlan } from "./planExecution.js";
 import type { Plan } from "../plan/plan.js";
@@ -423,7 +424,7 @@ export function getWorkbenchReadPages(
   const diagnostics: WorkbenchDiagnostic[] = [];
   const reports = readReports(workspace.root, roots.reports, diagnostics);
   const plans = readPlans(roots.plans, diagnostics).map((plan) => ({
-    ...plan, execution: readPlanExecution(request, plan), next_tasks: readPlanNext(request, plan),
+    ...plan, revision: computePlanRevision(plan), execution: readPlanExecution(request, plan), next_tasks: readPlanNext(request, plan),
     delivery_reports: reports
       .filter(report => report.project === request.projectId && report.plan === `project-ops:plans/${plan.id}.json`)
       .sort((a, b) => ((Date.parse(b.created_at) || 0) - (Date.parse(a.created_at) || 0)) || a.id.localeCompare(b.id))

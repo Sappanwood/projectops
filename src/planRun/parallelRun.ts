@@ -12,6 +12,7 @@ export type ParallelNode = {
     attempt_ids: string[]; workspace: NodeWorkspace | null; landings: LandingResult[];
 };
 export type ParallelRun = {
+    model?: import('../execution/models.js').ModelRef;
     schema: typeof PARALLEL_RUN_SCHEMA; id: string; project_id: string; plan_id: string; plan_revision: string;
     plan_snapshot: Plan; mapping: Record<string, string>; revision: string; created_at: string; updated_at: string;
     state: 'ready' | 'running' | 'paused' | 'completed' | 'stopped'; capacity: 2;

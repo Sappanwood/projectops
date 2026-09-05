@@ -76,6 +76,7 @@ src/
     workbenchReadModel.ts workspace/project 跨领域只读 projection
     docsApi.ts            文档列表与单篇正文的共享 application API
     planExecution.ts      Plan mapping 与同项目 Backlog 的实时执行进度 projection
+    planComplete.ts       显式完成 Plan，共享 revision、任务及执行完成校验
     planNext.ts           Plan 查询与共享就绪任务分类、排序、依赖诊断
   server/
     workbenchServer.ts    HTTP routes、request boundary、static assets 与 server lifecycle
@@ -200,7 +201,7 @@ SIGTERM，2 秒未退出则 SIGKILL，4 秒仍未退出则报错；随后清理�
   sha256 前 8 位，用于 `update --expected-revision` 的冲突保护。
 - `INDEX.md` 是从 item 文件重建的可读 projection；add 和真实状态变更后同步刷新，no-op 不改写。
 - Plan：`plans/plan-<title-slug>.json`，schema 为 `plan/Plan@1`；包含标题、目标与带局部 key、parent/依赖的 item 草案，
-  以及 `status: draft|approved`；批准 Plan 以单个 `approval` 对象记录 `approved_at` 和 `review_note`，materialize 后以
+  以及 `status: draft|approved|done`；批准 Plan 以单个 `approval` 对象记录 `approved_at` 和 `review_note`，materialize 后以
   `materialization.mapping` 记录局部 key 到 Backlog ID 的映射以及 `materialized_at`。
   无 ASCII slug 的标题使用 Unicode code point 的 `u<hex>` token。create 验证 plans descriptor 为精确 schema type，
   并在写入前验证 plans root 的 canonical 路径仍在 workspace 内；随后使用 `wx` no-clobber 写入。list/show 读取同一
@@ -371,6 +372,11 @@ Docs HTTP 测试覆盖正常阅读、缺失、非 Markdown、路径越界和 sym
 
 `execution/piRunner.ts` 以固定 Pi SDK 0.85.0 实现 Runner port，生产 Node 最低版本为 22.19.0。`ExecutionRuntime` 从 manifest 解析 Repo，注入 repo/workspaceDir/emit；runner 不接受浏览器路径。
 `workbench.ts --pi` 是显式启用入口。SDK 默认 SettingsManager/模型运行时读取本机模型和凭据；DefaultResourceLoader 加载 AGENTS 与 skills，明确关闭 extensions/templates/themes；tools allowlist 为 read/bash/edit/write。
+`execution/piModels.ts` 通过同一 `getAgentDir()` 创建 ModelRuntime，每次列表请求重读本地认证与模型配置，
+仅投影 provider/id/name。Runner 的可选 listModels/resolveModel port 为 HTTP 提供列表及启动前解析；
+默认选择通过禁用工具、extensions 和 skills 的内存 SDK session 解析，使用目标 Repo 设置，随即 dispose，不发送模型请求。
+`web/modelSelector.ts` 管理 header 展示与浏览器选择记忆；启动请求携带 model，服务端校验可用性后写入 attempt 输入或 run 快照。
+串行与并行 scheduler 从 run.model 派发，Pi runner 显式传入模型且不对失效选择回退；recordModel 回调将实际模型保存到 progress.model。
 
 每次尝试建立独立 `.pops/runtime/pi/<attempt-id>/` session，逐级拒绝 symlink/非目录。执行记录只保存 session ID、模型/加载清单状态与有界进展；不把凭据或 Pi 全量 session 复制进 artifact。
 开始异步返回，runtime 持久化 emit 事件；HTTP steer 使用相同 revision 与请求保护，再调用 handle.steer。停止先 clearQueue 再 abort；完成 await prompt，不使用中间 agent_end 事件。最终 stopReason 区分错误和中止，SDK session 最后 dispose。
@@ -398,3 +404,15 @@ Report 写入先按当前 Plan/Backlog 规则派生，再核对最新 matching r
 并行记录保存于 execution root 的 `parallel-runs/`；`planRun/worktrees.ts` 在 workspace runtime 下为 run 建专用 integration、节点和候选 worktree。Git expected-ref 更新约束正常并发，metadata 和静态 containment 防止误用其他目录。受支持边界是受信任本地 Linux workspace、静态 symlink 检查和正常并发 no-clobber；不承诺同用户恶意 ancestor-swap resistance，不依赖 native helper。
 
 每次落地先重验节点当前快照和接受证据，再从当前 integration head 创建独立候选，执行固定 argv 验证命令并保存 verification/landing JSON。只有验证成功、integration checkout 仍 clean/detached 且 ref CAS 成功时推进 head。失败候选、旧接受记录与新返工尝试分别保留。Report 发布再次校验实际 run/evidence/ref，不依赖 UI 状态推断完成。
+
+## Plan 显式完成
+
+`pops plan complete` 和 `POST /api/projects/<project>/plans/<plan>/complete` 复用 `completePlan`，输入为当前
+`expected_revision`。application 从 manifest 解析固定 Plan 目标，复用 revision/containment context、
+实时 mapping projection 和最新串行/并行 run 完成校验；在全部条件通过后仅写入 `status: done`。
+沿用受信任本地 workspace 边界，不增加 native helper、跨进程事务或对抗性 ancestor-swap 承诺。
+
+Plan artifact revision 包含 status，完成操作会使旧编辑 revision 失效；run 输入比较只将 done 归一到 approved，
+保持原快照与 digest 不变，其他输入变化仍阻止完成验证。done 仍可读取、生成 Report 和幂等 materialize，
+不能修订、重新批准或创建新 run。完成资格不接受 partial；Report 独立保留其 partial 工作流。
+read-pages 提供计算得到的 Plan revision；Web 以已加载 revision 提交，冲突要求刷新再操作，成功后重读计划和项目摘要。

@@ -2,6 +2,7 @@ import { lstatSync, mkdirSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 import type { ExecutionAttempt } from './attempt.js';
 import type { Runner, RunnerResult } from './runtime.js';
+import { createPiModelRuntime, listPiModels, resolvePiModel } from './piModels.js';
 
 export type PiSession = {
   sessionId: string;
@@ -19,7 +20,7 @@ type SessionFactory = (attempt: ExecutionAttempt, context: StartContext) => Prom
 class PiConfigurationError extends Error {}
 
 export function createPiRunner(factory: SessionFactory = openPiSession): Runner {
-  return { start(attempt, context) {
+  return { listModels: listPiModels, resolveModel: resolvePiModel, start(attempt, context) {
     let stopped = false;
     let session: PiSession | undefined;
     let unsubscribe: (() => void) | undefined;
@@ -27,6 +28,7 @@ export function createPiRunner(factory: SessionFactory = openPiSession): Runner 
     const completion = (async (): Promise<RunnerResult> => {
       try {
         session = await ready;
+        if (session.model) context.recordModel?.({ provider: session.model.provider, id: session.model.id });
         context.emit({ type: 'session', text: session.sessionId });
         context.emit({ type: 'status', text: `Pi 0.85.0 · ${session.model?.provider ?? 'unknown'}/${session.model?.id ?? 'unknown'}` });
         unsubscribe = session.subscribe(raw => {
@@ -61,12 +63,17 @@ async function openPiSession(attempt: ExecutionAttempt, context: StartContext): 
     if (!lstatSync(sessionDir).isDirectory() || lstatSync(sessionDir).isSymbolicLink()) throw Error('Invalid Pi session directory.');
   }
   const agentDir = getAgentDir();
+  const modelRuntime = await createPiModelRuntime();
+  const selected = attempt.input.model;
+  const model = selected ? (await modelRuntime.getAvailable()).find(m => m.provider === selected.provider && m.id === selected.id) : undefined;
+  if (selected && !model) throw new PiConfigurationError('所选模型不可用，请在本地 Pi 完成认证后重试。');
   const settingsManager = SettingsManager.create(context.repo, agentDir);
   if (settingsManager.drainErrors().length) throw new PiConfigurationError('Pi 配置读取失败，请检查服务端配置文件与临时锁权限。');
   const loader = new DefaultResourceLoader({ cwd: context.repo, agentDir, settingsManager, noExtensions: true, noPromptTemplates: true, noThemes: true });
   await loader.reload();
   context.emit({ type: 'status', text: `已加载 instructions: ${loader.getAgentsFiles().agentsFiles.map(f => f.path).join(', ')}；skills: ${loader.getSkills().skills.map(s => s.name).join(', ')}；tools: read, bash, edit, write；extensions 已禁用。` });
   const { session } = await createAgentSession({ cwd: context.repo, agentDir, settingsManager, resourceLoader: loader,
+    modelRuntime, ...(model ? { model } : {}),
     tools: ['read', 'bash', 'edit', 'write'], sessionManager: SessionManager.create(context.repo, sessionDir) });
   return session;
 }
