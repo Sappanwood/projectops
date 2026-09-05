@@ -32,7 +32,7 @@ Markdown/JSON artifact 为权威数据，通过统一 `pops` CLI 和 Local Web W
 | Report | delivery evidence 生成和关联 | 部分实现（Report@1 schema/storage、单 Plan 生成资格校验与 `pops report create/list/show`；已覆盖 completed/partial/no-clobber CLI smoke） |
 | Project Docs | roles、templates、scaffold、check | scaffold/check 已实现 |
 | Retrospective | workspace 级 Markdown 记录、inbox/active/archive store 与派生索引 | 已实现（Retrospective@1、Store@1、manifest 路由、`pops init` bootstrap、`pops retrospective capture/list/show/triage/archive` 与 revision 保护；Workbench 只读列表、过滤与详情已实现） |
-| Workbench | 统一浏览和受控写入 | Backlog 可写切片已实现（完整列表、详情、revision-protected 状态更新与冲突重试）；Plan、Report、Docs、Retrospective 完整只读视图已实现；浏览器 E2E 待交付 |
+| Workbench | 统一浏览和受控写入 | Backlog 可写切片已实现（完整列表、详情、revision-protected 状态更新与冲突重试）；Plan、Report、Docs、Retrospective 完整只读视图已实现；Chromium 浏览器 E2E 已覆盖启动、导航、读写和失败路径 |
 | CLI bootstrap | `pops --help`、`pops --version` | 已实现 |
 
 ## 数据契约原则
@@ -93,5 +93,5 @@ Markdown/JSON artifact 为权威数据，通过统一 `pops` CLI 和 Local Web W
 1. ~~Workspace/Catalog 与 Backlog 纵向闭环。~~（基础版已交付：init、显式 project 登记、doctor、backlog store 与 CRUD、状态流转）
 2. Plan、Project Docs 和 materialization。（Plan 到 Backlog materialization 已实现。）
 3. ~~Report 与 Retrospective 闭环。~~（Report 与 Retrospective 的 CLI 纵向闭环已实现；Workbench 只读视图已实现。）
-4. Local Web Workbench。（Backlog 首个可写切片已完成；Plan、Report、Docs、Retrospective 完整只读视图已完成；浏览器 E2E 待交付。）
+4. ~~Local Web Workbench。~~（Backlog 首个可写切片已完成；Plan、Report、Docs、Retrospective 完整只读视图已完成；Chromium 浏览器 E2E 已覆盖启动、导航、读写和失败路径。）
 5. 安装发行、升级和按真实需求补充 hardening。

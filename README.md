@@ -42,6 +42,27 @@ Plans 和 Reports 页面可展开完整详情，分别查看审批、materializa
 开发者也可以增加 `--static-dir <path>` 覆盖静态资源目录。可选 `--host` 只接受
 loopback 地址，`--port 0` 仅适合测试或一次性隔离运行。使用 `Ctrl-C` 或发送 `SIGTERM` 会关闭 listener。
 
+## 验证 Workbench
+
+```bash
+npm ci
+npx playwright install chromium
+npm test
+npm run typecheck
+npm run test:e2e
+```
+
+`npm run test:e2e` 先生成生产 build，再用 headless Chromium 运行浏览器 smoke：选择项目、浏览详情、
+更新 Backlog、revision 冲突后刷新重试，以及四个只读领域的正常、空和 diagnostic 页面。
+它也验证未知项目和 server 断连不会修改 authority 文件。每个测试自动创建并清理临时 workspace，
+server 使用隔离端口，不需要运行真实开发服务。整套 E2E 上限 120 秒，单项 30 秒；失败 trace 保留在
+已被 Git 忽略的 `test-results/`。浏览器版本由 Playwright 锁定，升级依赖后重新运行浏览器安装命令。
+Linux 若提示系统库缺失，可按 [Playwright 浏览器安装说明](https://playwright.dev/docs/browsers) 安装所需依赖。
+
+Workbench 仅供受信任本地用户和 workspace 使用，监听 loopback；workspace 只能由启动参数指定。
+Web mutation 仅限 Backlog 状态，要求 JSON 和同源 browser Origin，并携带已加载 revision；其余领域只读。
+它不提供用户账户、远程访问或对抗恶意本地并发的安全保证。
+
 ## 当前能力
 
 当前已可完成 workspace、project、Backlog、Plan 审批到 materialize、Delivery Report 生成与查询，以及 Workflow Retrospective 从捕获、查询到分类和归档的完整工作流；Local Workbench server 与前端壳已提供 workspace/project overview 和 Backlog、Plans、Reports、Docs、Retrospective 统一导航及 HTTP API。

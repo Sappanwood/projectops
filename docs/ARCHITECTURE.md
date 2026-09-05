@@ -38,7 +38,7 @@ completed 路径、logical references、验证证据和 no-clobber 行为。Retr
 | Language | TypeScript | 共享 domain、application、CLI 和 Web contract |
 | Package manager | npm | 降低初始工具数量 |
 | Persistence | Markdown/JSON files | 人类可读、Git-friendly、Agent 可操作 |
-| Tests | Node test runner + tsx | 无额外测试框架，覆盖代表性 happy path |
+| Tests | Node test runner + tsx；Playwright Test + Chromium | Node 测试覆盖领域与 HTTP，浏览器 E2E 验证生产 UI 闭环 |
 | HTTP | Node.js `node:http` | 直接复用单运行时，不增加 server framework |
 | Web UI | 纯 TypeScript + 原生 ESM + 现代 CSS | 保持单运行时与零重型外部依赖，兼顾可访问性与直接静态托管 |
 
@@ -167,8 +167,19 @@ workspace 连接重试期间的路由变化只更新目标路由，待 workspace
 
 测试以隔离临时 workspace、port `0` 和真实 HTTP API 覆盖列表、DOM 事件分发、更新后的 authority 文件、
 project summary、revision conflict 与刷新重试；只读视图测试覆盖四领域正常、空状态与诊断、完整详情、回顾过滤、刷新和读取前后文件不变；
-异步单元测试覆盖项目切换和重复提交。完整浏览器 E2E
-仍属于后续收口阶段。
+异步单元测试覆盖项目切换和重复提交。
+
+`tests/browser/` 与 `playwright.config.ts` 提供独立 `npm run test:e2e` 门禁。它先构建，使用 built CLI
+在每项测试的 `mkdtemp` workspace 中准备数据，再启动 `dist/workbench.js --port 0` 子进程，读取实际绑定地址。
+真实 Chromium 从 server 托管的 `dist/web` 加载前端，使用可访问性 locator 操作项目选择、导航、详情、
+Backlog 状态更新与冲突重试、Retrospective 过滤；文件快照核对只读浏览、stale revision、未知项目及
+server 断连均不产生错误写入。测试不用真实用户 workspace，不依赖预先启动的固定端口服务。
+
+fixture 的 CLI 调用与 server 启动各限时 10 秒；Playwright browser launch/navigation 限时 10 秒，
+action/assertion 限时 5 秒，单测试 30 秒、整套 120 秒，不自动重试。server 在 fixture `finally` 中发送
+SIGTERM，2 秒未退出则 SIGKILL，4 秒仍未退出则报错；随后清理本次临时目录。浏览器和隔离 context
+由 Playwright fixture teardown 关闭，失败 trace 留在 Git 忽略的 `test-results/`。测试采用受信任本地
+临时目录边界，不增加 native helper 或恶意 ancestor-swap 承诺。Playwright 仅是 devDependency，生产运行时仍为 Node.js。
 
 ## 数据文件格式
 
