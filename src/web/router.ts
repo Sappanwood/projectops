@@ -18,13 +18,37 @@ export function parseRoute(rawHash: string): RouteState {
     }
     const rawView = segments[2] ?? "overview";
     const view: ViewType = isValidView(rawView) ? rawView : "overview";
-    return { projectId, view };
+    const decode = (value: string) => { try { return decodeURIComponent(value); } catch { return value; } };
+    const detail = segments[3] ? decode(segments[3]) : undefined;
+    const params = new URLSearchParams(hash.split("?")[1] ?? "");
+    const plan = params.get("plan");
+    const from = params.get("from");
+    return { projectId, view,
+      ...(from && isReturnRoute(from) ? {returnTo:from} : {}),
+      ...(view === "retrospectives" && detail ? {retrospectiveId:detail} : {}),
+      ...(view === "retrospectives" && ["filter_project","status","task"].some(key => params.has(key)) ? {retrospectiveFilters:{project:params.get("filter_project") ?? projectId,status:params.get("status") ?? "",task:params.get("task") ?? ""}} : {}),
+      ...(view === "docs" && params.has("path") ? {documentPath:params.get("path")!} : {}),
+      ...(view === "docs" && params.has("section") ? {section:params.get("section")!} : {}),
+      ...(view === "plans" && detail ? { planId: detail } : {}),
+      ...(view === "backlog" && detail ? { itemId: detail } : {}),
+      ...(view === "reports" && detail ? { reportId: detail } : {}),
+      ...((view === "backlog" || view === "reports") && plan ? { planId: plan } : {}),
+    };
   }
 
   return { projectId: null, view: "overview" };
 }
 
 export function formatRoute(route: RouteState): string {
+  const base = formatBaseRoute(route);
+  return route.returnTo && isReturnRoute(route.returnTo) ? `${base}${base.includes("?") ? "&" : "?"}from=${encodeURIComponent(route.returnTo)}` : base;
+}
+
+function isReturnRoute(value: string): boolean {
+  return value.length < 8192 && !/[\x00-\x1f]/.test(value) && /^#\/projects\/[^/?#]+\/(backlog|plans|reports|docs|retrospectives)(?:[/?]|$)/.test(value);
+}
+
+function formatBaseRoute(route: RouteState): string {
   if (route.projectId === null || route.projectId.trim() === "") {
     return "#/";
   }
@@ -32,7 +56,22 @@ export function formatRoute(route: RouteState): string {
   if (route.view === "overview") {
     return `#/projects/${encodedId}`;
   }
-  return `#/projects/${encodedId}/${route.view}`;
+  const base = `#/projects/${encodedId}/${route.view}`;
+  if (route.view === "retrospectives") {
+    const filters = route.retrospectiveFilters;
+    const params = filters ? new URLSearchParams({filter_project:filters.project,status:filters.status,task:filters.task}) : null;
+    return `${base}${route.retrospectiveId ? `/${encodeURIComponent(route.retrospectiveId)}` : ""}${params ? `?${params}` : ""}`;
+  }
+  if (route.view === "docs") {
+    const params = new URLSearchParams();
+    if (route.documentPath !== undefined) params.set("path",route.documentPath);
+    if (route.section !== undefined) params.set("section",route.section);
+    return base + (params.size ? `?${params}` : "");
+  }
+  if (route.view === "plans" && route.planId) return `${base}/${encodeURIComponent(route.planId)}`;
+  if (route.view === "backlog") return `${base}${route.itemId ? `/${encodeURIComponent(route.itemId)}` : ""}${route.planId ? `?plan=${encodeURIComponent(route.planId)}` : ""}`;
+  if (route.view === "reports") return `${base}${route.reportId ? `/${encodeURIComponent(route.reportId)}` : ""}${route.planId ? `?plan=${encodeURIComponent(route.planId)}` : ""}`;
+  return base;
 }
 
 export type Router = {

@@ -65,8 +65,9 @@ test("Workbench Backlog lists, reads, updates and recovers from a real HTTP revi
 
     const handlers: Record<string, (event: any) => void> = {};
     const container = { innerHTML: "", addEventListener: (name: string, handler: any) => { handlers[name] = handler; }, removeEventListener() {} };
+    let route: import("../src/web/types.js").RouteState = { projectId: "alpha", view: "backlog" };
     const app = createWorkbenchApp({ container: container as unknown as HTMLElement, apiClient: api,
-      router: { getCurrentRoute: () => ({ projectId: "alpha", view: "backlog" }), navigate() {}, cleanup() {} } });
+      router: (onChange) => ({ getCurrentRoute: () => route, navigate(next) { route = next; onChange(next); }, cleanup() {} }) });
     async function until(predicate: () => boolean) {
       const deadline = Date.now() + 3000;
       while (!predicate()) {

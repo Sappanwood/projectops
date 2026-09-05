@@ -228,7 +228,7 @@ function ensureWithinForCheck(base: string, target: string, message: string): vo
   }
 }
 
-function hasLevelOneHeading(content: string): boolean {
+export function hasLevelOneHeading(content: string): boolean {
   const lines = content.split(/\r?\n/);
   for (const line of lines) {
     if (/^ {0,3}#(?:[ \t]+.*|[ \t]*)$/.test(line)) {

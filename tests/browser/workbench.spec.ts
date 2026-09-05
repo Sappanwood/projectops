@@ -56,7 +56,7 @@ test("four read-only pages show details, empty states and malformed diagnostics"
   for (const document of ["README.md", "AGENTS.md", "docs/PRODUCT_SPEC.md", "docs/ARCHITECTURE.md"]) {
     await expect(page.getByRole("tabpanel")).toContainText(document);
   }
-  await expect(page.getByRole("tabpanel").getByText("Healthy", { exact: true })).toHaveCount(4);
+  await expect(page.getByRole("tabpanel").getByText("标准文档 · 检查通过", { exact: true })).toHaveCount(4);
   await page.getByRole("tab", { name: /^Retrospectives/ }).click();
   await page.locator("summary").filter({ hasText: "browser" }).click();
   await expect(page.getByRole("tabpanel")).toContainText("Browser retrospective body");
@@ -65,11 +65,11 @@ test("four read-only pages show details, empty states and malformed diagnostics"
   await expect(page.getByRole("tabpanel")).toContainText("No inbox retrospectives found.");
   await page.getByLabel("Task", { exact: true }).fill("ALP-001");
   await page.getByRole("button", { name: "Apply filters" }).click();
-  await expect(page.locator("summary")).toContainText("browser");
+  await expect(page.locator('[data-retrospective-id="browser"] > summary')).toContainText("browser");
 
   await page.getByLabel("Select active project").selectOption("empty");
   await expect(page.getByRole("tabpanel")).toContainText("No inbox retrospectives found.");
-  for (const [tab, empty] of [["Plans", "No plans found."], ["Reports", "No delivery reports found."], ["Docs", "document is missing"]]) {
+  for (const [tab, empty] of [["Plans", "No plans found."], ["Reports", "No delivery reports found."], ["Docs", "文档不存在"]]) {
     await page.getByRole("tab", { name: new RegExp(`^${tab}`) }).click();
     await expect(page.getByRole("tabpanel")).toContainText(empty!);
   }
@@ -81,7 +81,8 @@ test("four read-only pages show details, empty states and malformed diagnostics"
   writeFileSync(path.join(workbench.root, "empty/README.md"), "Missing heading");
   const malformed = workbench.snapshot();
   await page.getByRole("button", { name: "Refresh workspace and project data" }).click();
-  await expect(page.getByRole("tabpanel")).toContainText("document is missing a level-one Markdown heading");
+  await expect(page.getByRole("tabpanel")).toContainText("缺少一级 Markdown 标题；仍可阅读");
+  await expect(page.locator('.markdown-content')).toContainText("Missing heading");
   for (const tab of ["Plans", "Reports", "Retrospectives"]) {
     await page.getByRole("tab", { name: new RegExp(`^${tab}`) }).click();
     await expect(page.getByRole("tabpanel")).toContainText("ARTIFACT_INVALID");
@@ -102,5 +103,39 @@ test("unknown project and disconnected server show errors without authority writ
   await page.getByRole("button", { name: "Refresh workspace and project data" }).click();
   await expect(page.getByRole("heading", { name: "Server Connection Error" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Retry Connection" })).toBeVisible();
+  expect(workbench.snapshot()).toEqual(before);
+});
+
+test("Backlog reading mode and Plan task navigation work without changing authority", async ({ workbench, page }) => {
+  const draft = path.join(workbench.root, "reading-plan.json");
+  writeFileSync(draft, JSON.stringify({ title: "Reading plan", goal: "Review four tasks", items: [1, 2, 3, 4].map((n) => ({
+    key: `step-${n}`, title: `Reading task ${n}`, item_type: "task", priority: "P1",
+    depends_on: n === 1 ? [] : [`step-${n - 1}`],
+    body: `## Acceptance ${n}\n\n- Read **clearly**\n- Keep state\n\n\`code\` and <script>unsafe</script>`,
+  })) }));
+  workbench.cli(["plan", "create", "alpha", "--input", draft]);
+  const before = workbench.snapshot();
+  await page.goto(`${workbench.origin}/#/projects/alpha/backlog`);
+  await page.getByRole("button", { name: /ALP-001 — Browser task/ }).click();
+  const detail = page.getByRole("region", { name: "Backlog item detail" });
+  await expect(detail.getByRole("heading", { name: "Intent", exact: true })).toBeVisible();
+  await detail.getByText("查看 Markdown 源码", { exact: true }).click();
+  await expect(detail.locator(".source-body")).toContainText("## Intent");
+  await expect(detail.locator(".markdown-content")).toBeHidden();
+  await detail.getByText("返回阅读视图", { exact: true }).click();
+  await expect(detail.locator(".markdown-content")).toBeVisible();
+  await expect(detail.locator("script")).toHaveCount(0);
+  await page.getByRole("tab", { name: /^Plans/ }).click();
+  const plan = page.locator(".plan-card").filter({ hasText: "Review four tasks" });
+  await plan.locator(":scope > summary").click();
+  await expect(plan.getByRole("navigation", { name: "任务目录" }).getByRole("button")).toHaveCount(4);
+  await plan.getByRole("button", { name: /Reading task 3 依赖/ }).click();
+  await expect(plan.getByRole("heading", { name: "Acceptance 3" })).toBeVisible();
+  await expect(plan.getByRole("heading", { name: "Acceptance 2" })).toBeHidden();
+  await page.getByRole("button", { name: "Refresh workspace and project data" }).click();
+  await expect(plan.getByRole("heading", { name: "Acceptance 3" })).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(plan.getByRole("heading", { name: "Acceptance 3" })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   expect(workbench.snapshot()).toEqual(before);
 });

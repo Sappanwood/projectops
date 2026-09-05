@@ -8,6 +8,7 @@ import type {
 } from "../application/workbenchReadModel.js";
 import type { WorkspaceProjectSummary } from "../application/workspaceApi.js";
 import type { BacklogViewState } from "./backlogController.js";
+import type { DocsState } from "./docsView.js";
 
 export type ViewType =
   | "overview"
@@ -31,6 +32,14 @@ export function isValidView(view: string): view is ViewType {
 }
 
 export type RouteState = {
+  retrospectiveId?: string | undefined;
+  retrospectiveFilters?: RetrospectiveFilters | undefined;
+  returnTo?: string | undefined;
+  documentPath?: string | undefined;
+  section?: string | undefined;
+  itemId?: string;
+  reportId?: string;
+  planId?: string;
   projectId: string | null;
   view: ViewType;
 };
@@ -43,6 +52,10 @@ export type AppError = {
 };
 
 export type AppState = {
+  route: RouteState;
+  docs: DocsState;
+  selectedPlanId: string | null;
+  selectedReportId: string | null;
   readPages: WorkbenchReadPages | null;
   readPagesLoading: boolean;
   readPagesError: AppError | null;

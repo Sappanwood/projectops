@@ -28,7 +28,7 @@ flowchart TD
 当前 Repo 已落地 Workspace/Catalog、Backlog、Plan authoring/query/validation/approval/materialization、Project Docs
 scaffold/check，以及 Report@1 schema、Markdown filesystem adapter、单 Plan Report 生成资格校验和
 `pops report create/list/show`；独立临时 workspace 的 built CLI smoke 已覆盖 Plan → Backlog → Report 的
-completed 路径、logical references、验证证据和 no-clobber 行为。Retrospective 的 Retrospective@1/Store@1 schema、workspace manifest 路由、Markdown store bootstrap、可重建索引、capture/query 与 revision-protected triage/archive lifecycle 已落地；独立临时 workspace 的 built CLI E2E 还验证了 metadata 保留、唯一 authority 移动、索引计数和 stale revision 不变式。Workbench 的 UI-neutral typed Application API、按请求重建的 workspace/project Read Model、loopback-only Local HTTP server 以及基于纯 TypeScript/原生 ESM 的可导航 Workbench 前端壳已落地，生产 build 由本地 server 直接托管；Backlog 可写切片和 Plan/Report/Docs/Retrospective 完整只读视图已交付。上图是新增纵向能力时必须保持的目标依赖方向。
+completed 路径、logical references、验证证据和 no-clobber 行为。Retrospective 的 Retrospective@1/Store@1 schema、workspace manifest 路由、Markdown store bootstrap、可重建索引、capture/query 与 revision-protected triage/archive lifecycle 已落地；独立临时 workspace 的 built CLI E2E 还验证了 metadata 保留、唯一 authority 移动、索引计数和 stale revision 不变式。Workbench 的 UI-neutral typed Application API、按请求重建的 workspace/project Read Model、loopback-only Local HTTP server 以及基于纯 TypeScript/原生 ESM 的可导航 Workbench 前端壳已落地，生产 build 由本地 server 直接托管；Backlog 可写切片、Plan/Report/Retrospective 阅读视图和 Docs 文档阅读已交付。上图是新增纵向能力时必须保持的目标依赖方向。
 
 ## 核心技术栈
 
@@ -74,6 +74,9 @@ src/
     backlogApi.ts         Backlog list/show/revision-protected update API
     workspaceInspection.ts workspace doctor 的 typed inspection API
     workbenchReadModel.ts workspace/project 跨领域只读 projection
+    docsApi.ts            文档列表与单篇正文的共享 application API
+    planExecution.ts      Plan mapping 与同项目 Backlog 的实时执行进度 projection
+    planNext.ts           Plan 查询与共享就绪任务分类、排序、依赖诊断
   server/
     workbenchServer.ts    HTTP routes、request boundary、static assets 与 server lifecycle
   web/
@@ -84,6 +87,8 @@ src/
     apiClient.ts          HTTP API 客户端与网络/格式错误收敛
     backlogController.ts Backlog 列表、详情、revision mutation 与异步响应隔离
     backlogView.ts        Backlog 分组列表、详情、依赖提示和更新控件
+    markdown.ts           五类内容共用阅读子集与源码切换，HTML 转义、受限链接和标题回调
+    docsView.ts           文档导航、正文、章节目录及相对链接解析
     state.ts              前端状态机核心与不可变状态转移
     readPagesView.ts       Plan/Report/Docs/Retrospective 只读详情与回顾过滤
     render.ts             语义化 HTML 纯函数渲染与可访问性属性
@@ -109,6 +114,7 @@ src/
   docs/
     projectDocs.ts        Project Docs domain：固定角色和内置 Markdown 模板
     projectDocsFs.ts      filesystem adapter：预检、canonical containment、no-clobber scaffold
+    documentReader.ts     有界 Markdown 枚举与只读文件读取，静态 ancestor/target 校验
   useCases/
     docsScaffold.ts       application：创建固定 Project Docs 文件
     docsCheck.ts          application：只读检查固定 Project Docs 文件
@@ -139,8 +145,8 @@ Docs check、project-scoped Retrospective 计数和最近记录。projection 不
 
 `workbenchServer.ts` 是 application API 外的薄 HTTP adapter。启动参数固定唯一 workspace，并默认绑定
 `127.0.0.1:7331`；host 只接受 loopback，测试可使用 port `0` 获取隔离端口。路由提供 workspace/project
-overview、Backlog list/show/update 和 `GET /api/projects/<id>/read-pages`，统一返回 `{ ok, data }` 或 `{ ok, error }` JSON envelope，并把 stale
-revision 映射为 HTTP 409。请求不能提供 workspace path；除 Backlog list 的 `status` 外拒绝 query 参数。
+overview、Backlog list/show/update、Docs list/show 和 `GET /api/projects/<id>/read-pages`，统一返回 `{ ok, data }` 或 `{ ok, error }` JSON envelope，并把 stale
+revision 映射为 HTTP 409。请求不能提供 workspace path；除 Backlog list 的 `status` 和 Docs show 的 `path` 外拒绝 query 参数。
 PATCH 只接受 `application/json`、无 Origin 或与 server origin 完全相同的 Origin，以及仅含 `status` 和可选
 `expected_revision` 的有界 body。server 可从显式 static root 提供前端资源，realpath containment 防止 URL
 访问 root 外文件；未提供 static root 时自动查找内置 `dist/web` 生产资源，只有资源尚未构建时才返回占位页。
@@ -152,17 +158,19 @@ Plan、Report 保留各自 domain 类型，Docs 从 `PROJECT_DOC_TEMPLATES` 派�
 CLI JSON 或前端 schema parser 读取数据。此 projection 按需从 read-pages endpoint 加载，Alpha 阶段一次返回
 四个领域的完整内容，无分页或持久化缓存；overview 继续保留轻量摘要契约。
 
-`readPagesView.ts` 以原生 `<details>` 提供可键盘展开的 Plan、Report 和 Retrospective 详情，正文转义后以源文显示。
+`readPagesView.ts` 以原生 `<details>` 提供可键盘展开的 Plan、Report 和 Retrospective 详情，Report/Retrospective 正文默认通过共享阅读组件渲染，源码可切换；正文和关键行动优先，metadata 折叠。Plan 采用任务目录与独立折叠正文，技术记录单独折叠。
 Retrospective 在完整 typed 列表上按 status/project/task 精确过滤，默认 project 为当前项目，留空表示全部，
 `null` 表示 provenance 未记录；按 inbox/active/archive 分组并保留不受过滤影响的 malformed diagnostics。
-Docs 只展示固定路径和共享检查结果。`app.ts` 管理按需加载、重试、刷新和过滤状态，使用请求序号隔离过期响应；
-项目切换清除旧 projection 并重置过滤。四个领域没有 Web mutation 或任意文件读取接口。
+Docs 页面独立调用 docs endpoint 获取列表和单篇正文，`read-pages.documents` 仍仅保留固定路径检查摘要。`app.ts` 管理按需加载、重试、刷新和过滤状态，使用请求序号隔离过期响应；
+项目切换清除旧 projection 并重置过滤。四个领域没有 Web mutation；Docs 仅提供限定文档范围的读取接口。
 
 Workbench Backlog 页面通过 HTTP list/show/update 获取完整数据，独立于 overview 的最近五条摘要。
 `backlogController.ts` 管理列表、当前详情和提交状态：提交携带已加载 revision，成功后重读列表和详情并刷新
 project overview；409 保留旧详情和当前选择，用户显式刷新后才能再次提交。项目切换会废弃旧请求的 UI
 结果，进行中的提交不允许重复触发。页面依据 `depends_on` 与已读取 item 状态显示未完成/缺失依赖提示，
-不引入额外的 mutation 规则。Markdown 正文以转义的源文显示，不解释其中 HTML。
+不引入额外的 mutation 规则。五个内容页面经 `markdown.ts` 渲染受限阅读子集，所有输入文本转义；HTTP(S) 外链可点击，Docs/Report 通过各自链接解析器生成受限内部路由；
+原始 HTML、图片及未支持语法不执行，可展开源码切回原文。源码模式与 details 展开状态仅保存在会话内存，
+`app.ts` 按项目和条目 key 在重新渲染时恢复，不增加持久化状态；Plan 目录通过 DOM 定位，不改写 router hash。
 workspace 连接重试期间的路由变化只更新目标路由，待 workspace 响应到达后再加载项目。
 
 测试以隔离临时 workspace、port `0` 和真实 HTTP API 覆盖列表、DOM 事件分发、更新后的 authority 文件、
@@ -224,6 +232,9 @@ SIGTERM，2 秒未退出则 SIGKILL，4 秒仍未退出则报错；随后清理�
 `project doctor` 校验 Manifest@1 的 typed artifact 声明以及 project/artifact root 的目录类型。结构损坏的
 manifest 在进入 use case 前作为明确错误拒绝；doctor 只报告问题，不自动修复。
 
+`init` 路由单独提取 `--json` 并将输出模式传给 initialization use case，避免把该选项当作目录。
+use case 在既有初始化与回滚边界内将成功和失败格式化为 JSON 或文本，不增加兼容分支或数据迁移。
+
 ## 数据与运行时边界
 
 - 业务数据使用 versioned Markdown/JSON schema。
@@ -249,3 +260,63 @@ manifest 在进入 use case 前作为明确错误拒绝；doctor 只报告问题
 - 各领域拥有独立 schema 与 lifecycle。
 - Workbench 是 application API 的交互入口，不拥有第二套业务实现。
 - 现有 Workspace Control 不属于运行时依赖，也不在核心实现中加入兼容或迁移代码。
+
+## Plan 执行进度 projection
+
+`getWorkbenchReadPages` 返回的 `plans[]` 在 Plan 数据上附加 `execution`，持久化 Plan schema 不变。
+`readPlanExecution` 通过共享 `showBacklogItem` 逐项读取同项目 mapping；局部读取失败只影响该条目，
+不使用全量 Backlog 列表失败结果覆盖其他有效任务。`execution` 包含 `materialized`、`counts`、
+`completion_percent` 和按 Plan 顺序的 `items`（key、id、title、item_type、status、可选 diagnostic）。
+counts 按 Plan task 统计 total、todo、in_progress、done、blocked、cancelled、unreadable；epic 仅展示。
+缺失、损坏、项目/类型不匹配和不可读取的目标使用计划标题回退及逐项诊断，不泄露本机路径。
+未物化或零 task 的完成百分比为 null；其余为 done/total 百分比向下取整。Web 只渲染该 projection，
+Refresh 重建数据，不写 Plan/Backlog 或缓存进度。HTTP 测试验证只读、失败隔离及计数；浏览器测试验证 CLI 更新后的刷新与窄屏显示。
+
+## Plan 就绪任务查询
+
+`application/planNext.ts` 的 `getPlanNext` 解析 workspace/project 与 Plan，返回 `ApplicationResult<PlanNextSummary>`；
+`readPlanNext` 对已读取 Plan 生成同一份就绪 projection，供后续 Web 调用。它通过共享 `showBacklogItem`
+读取映射 task 和其直接依赖，逐项收敛不可读数据；不依赖全量 Backlog list 的整体成功，也不递归遍历依赖。
+分类与排序均在 application 层完成，`useCases/planNext.ts` 只处理 CLI 参数、文本/JSON 格式与退出码。
+CLI 将成功 data 展开到顶层，将失败转换为 `{ok:false,error}`，JSON 模式只写 stdout。
+Workbench read-pages 在 `plans[].next_tasks` 中复用 `readPlanNext`，不新增独立推荐 endpoint；持久化 Plan、Backlog 契约不变。
+隔离测试覆盖多优先级排序、同项目 Plan 外依赖、失败隔离、空推荐、共享 API/CLI 等价以及 built CLI 的只读和错误行为。
+
+## Plan 详情导航
+
+前端 `RouteState` 使用可选 itemId/planId 描述 Backlog 详情和来源 Plan，`router.ts` 解析/生成同项目 hash 地址。
+`AppState.selectedPlanId` 保留当前导航上下文；read-pages 用 `plans[].next_tasks` 渲染共享查询结果，
+通过真实链接进入现有 Backlog controller，返回链接仍指向同项目 Plan。
+`loadBacklogRoute` 在列表加载后按当前地址选择详情，导航计数及 controller generation 丢弃过期响应；
+项目/页面切换清理旧详情。返回 Plan 的 `loadReadPages` 先清除旧 projection，成功后展开、滚动定位并聚焦原 Plan。
+状态更新仍调用现有 Backlog API，不在 Plan 新建状态修改路径。隔离浏览器测试覆盖完整返回流程、
+revision 请求、失效任务链接、跨项目切换和读取期间 authority 不变；共享查询测试核对 Web/CLI 数据等价。
+
+## Plan 交付报告 projection
+
+`getWorkbenchReadPages` 先读取有效 Report 与 diagnostics，再为每份 Plan 添加 `delivery_reports` 摘要数组。
+匹配条件是 Report.project 等于当前项目，且 Report.plan 等于该 Plan 的 logical reference；
+按解析后的 created_at 时间降序、ID 升序返回全部匹配项，不新增持久化字段或跨 artifact 索引。
+`WorkbenchPlan` 的 execution、next_tasks、delivery_reports 都是每次请求重建的 projection。
+Plan 页同时展示 Report 读取诊断；无法归属到某份 Plan 的损坏报告使用页面级诊断，不猜测关联。
+`RouteState.reportId` 与 `AppState.selectedReportId` 支持 Report 详情定位，复用来源 planId 和读取页的
+焦点/滚动恢复。返回原 Plan 时重读 projection；报告 outcome 和正文始终来自其持久化快照。
+领域读取测试覆盖跨项目过滤、多个报告的时间/ID 排序、损坏隔离与快照不变；浏览器测试覆盖
+Plan 创建、批准、物化、任务变化、下一步查询、partial/completed 报告展示及往返导航的闭环。
+
+## 文档读取与阅读导航
+
+`application/docsApi.ts` 通过 Catalog 解析登记项目，调用 `docs/documentReader.ts` 返回 typed list/show，HTTP 仅处理方法和 query。
+`listProjectDocuments` 保留四个标准入口、复用一级标题检查，并在 `docs/` 内枚举 Markdown；扩展文档不参与标准健康检查。
+`readProjectDocument` 校验相对路径和范围，再逐级检查目录/文件为普通目标且 realpath 仍在 Repo 内；不跟随 symlink。
+此读取是受信任本地 workspace 下的静态边界，不抵抗恶意并发替换祖先；使用现有 Node.js 能力，无 native helper。
+文档正文不加入 read-pages 聚合 payload，`GET /api/projects/<id>/docs?path=...` 仅返回选中文档的 path/body。
+
+`docsView.ts` 复用 `renderReadingBody`，通过 headingId 回调生成章节目录，通过 resolveLink 回调解析相对 Markdown 和章节锚点。
+共享渲染器只接受 HTTP(S) 或解析器产生的内部 `#/projects/` 链接；原始 HTML 和未支持目标不执行。
+`RouteState` 扩展 documentPath/section、retrospectiveId/retrospectiveFilters 和受限 returnTo。
+回顾筛选在已有 projection 上立即执行，详情直达时可单独展示筛选外记录；跨页返回重读数据。
+`app.ts` 用单独 documentRequestId 丢弃晚到的文档响应；路由记录选中目标、章节和过滤，内存 Map 保留 details 与滚动位置。
+整页重载通过 URL 恢复目标/过滤/章节，内存中的源码模式和像素位置不持久化，不新增业务 schema 或派生索引。
+Docs HTTP 测试覆盖正常阅读、缺失、非 Markdown、路径越界和 symlink 逃逸；Chromium 测试覆盖源码/目录、
+关联返回、浏览器前进后退、读取失败重试、快速切换项目和窄屏，并用文件快照验证只读。

@@ -30,9 +30,9 @@ Markdown/JSON artifact 为权威数据，通过统一 `pops` CLI 和 Local Web W
 | Backlog | Store bootstrap、CRUD、dependency、queue | 部分实现（init/add/list/show/update 与 depends_on 存储；queue 未实现） |
 | Plan | authoring、查询、validation、review、approval、materialization | authoring/query/validation/approval/materialization 已实现 |
 | Report | delivery evidence 生成和关联 | 部分实现（Report@1 schema/storage、单 Plan 生成资格校验与 `pops report create/list/show`；已覆盖 completed/partial/no-clobber CLI smoke） |
-| Project Docs | roles、templates、scaffold、check | scaffold/check 已实现 |
+| Project Docs | roles、templates、scaffold、check | scaffold/check 与 Workbench 文档阅读已实现 |
 | Retrospective | workspace 级 Markdown 记录、inbox/active/archive store 与派生索引 | 已实现（Retrospective@1、Store@1、manifest 路由、`pops init` bootstrap、`pops retrospective capture/list/show/triage/archive` 与 revision 保护；Workbench 只读列表、过滤与详情已实现） |
-| Workbench | 统一浏览和受控写入 | Backlog 可写切片已实现（完整列表、详情、revision-protected 状态更新与冲突重试）；Plan、Report、Docs、Retrospective 完整只读视图已实现；Chromium 浏览器 E2E 已覆盖启动、导航、读写和失败路径 |
+| Workbench | 统一浏览和受控写入 | Backlog 可写切片已实现（完整列表、详情、revision-protected 状态更新与冲突重试）；Plan、Report、Retrospective 阅读视图及 Docs 文档阅读与导航已实现；Chromium 浏览器 E2E 已覆盖启动、导航、读写和失败路径 |
 | CLI bootstrap | `pops --help`、`pops --version` | 已实现 |
 
 ## 数据契约原则
@@ -54,20 +54,37 @@ Markdown/JSON artifact 为权威数据，通过统一 `pops` CLI 和 Local Web W
 - Workbench 的 `GET /api/projects/<id>/read-pages` 返回独立 typed projection：完整 Plan、Report、固定文档检查结果和
   workspace Retrospective 记录；不接受 query 参数、文件路径或 mutation。Plan 可展开 goal、status、approval、
   materialization mapping 和带 parent/dependencies 的 item；Report 可展开 outcome、Plan/Backlog references、
-  verification、deviations、workarounds、repo docs 与 Markdown 正文。正文按转义的源文显示。
-- Docs 页面始终列出共享 Docs domain 的四个固定路径及各自检查结果，不 scaffold、不修改文件。
+  verification、deviations、workarounds、repo docs 与 Markdown 正文。Report 正文默认渲染，支持源码切换；技术记录折叠，关联 Plan、Backlog 与 Repo 文档支持跳转和返回。
+- Plan 阅读页突出标题、审批状态与目标，长目标默认显示三行并可展开全文，提供带序号、标题和依赖的任务目录；点击目录定位并展开对应任务。
+  任务正文独立展开，审批和 mapping 收入次级记录区；不展示不存在的审批字段。刷新保留展开状态。
+- Plan 的执行进度来自同项目 materialization mapping 对应的实时 Backlog；显示 task 总数、todo、in_progress、done 与无法读取数量。
+  epic 不计入完成率；缺失/损坏任务保留在分母，逐项显示 ID、计划标题回退与诊断，有效条目显示实时标题及状态。
+  已有 blocked/cancelled 状态按原值显示和计数，均不算完成。未物化显示未开始执行；零 task 显示无可执行任务，二者完成百分比均为 null。
+  完成百分比向下取整，只有全部 task done 才显示 100%。刷新重新读取 Backlog，审批状态与执行进度分开呈现，不新增持久化字段或 Plan 生命周期。
+- Docs 页面提供四份标准文档入口及检查结果，同时列出 Repo `docs/` 下其他 Markdown。正文经独立 API 按需读取，不 scaffold、不修改文件。
   Retrospective 页面读取完整 workspace 列表，默认过滤当前 project；status/project/task 支持组合精确过滤，
   project/task 留空表示全部，`null` 表示未记录的 provenance。结果按 inbox/active/archive 分组，详情包含完整
   metadata、revision 和正文；malformed diagnostics 不因过滤而隐藏。四个领域均显示空状态或读取诊断，顶部
   Refresh 重读 authority；读取失败可重试，项目切换丢弃旧请求响应。
 - Workspace 是聚合父目录，project 必须是其子路径；workspace 根自身不可登记。
 - Workbench Backlog 按状态分组、组内按 ID 稳定排序，显示全部 item；详情包含 title、priority、status、
-  dependencies、revision 和转义后的 Markdown 源文。界面只提供 `todo|in_progress|done` 状态操作，
+  dependencies、revision 和 Markdown 阅读视图；列表突出标题与选中态，详情顶部提供状态操作与刷新，
+  revision 收入可展开技术信息。界面只提供 `todo|in_progress|done` 状态操作，
   每次提交均携带已加载的 revision；成功后重读列表、详情和项目摘要。冲突不自动重试，保留当前 item
   并要求用户刷新后重新提交。读取失败、未知 item、非法输入均显示错误反馈。
+- Backlog、Plan、Report、Retrospective、Docs 共用轻量阅读渲染：标题、段落、嵌套有序/无序列表、强调、
+  行内/围栏代码、表格、引用块、只读任务列表、分隔线和 HTTP(S) 外链；不承诺完整 CommonMark。
+  原始 HTML 始终转义，图片不加载，Mermaid 按代码显示。可切换精确 Markdown 源码，长代码/表格局部横向滚动。
+  Docs 相对 Markdown 链接在文档范围内解析；Report 支持 Plan/Backlog logical references 与 Repo 文档引用。
+  未支持目标保留可读文本及提示，不执行任意 URL。其他页面的本地路径和非 HTTP(S) 链接仍显示文本。
+  阅读视图不写 authority；桌面分栏，窄屏纵向排列。
 - 未完成或缺失的依赖依据同一 Backlog 列表显示提示；当前 CLI 不强制按依赖阻止状态更新，Web 保持一致，
   不持久化派生依赖状态。共享 Backlog parser 拒绝非字符串列表元素、非法标量类型和非法状态等 malformed 数据。
 - Workspace 可在非空目录初始化，但不得覆盖已有 manifest 或其他用户内容。
+- `pops init [dir] --json` 支持省略目录或将选项放在目录前后；省略目录使用 cwd。成功仅向 stdout
+  返回 `{ "ok": true, "workspace": { "name": "...", "manifest": ".pops/workspace.json" } }` 并退出 0，
+  manifest 路径相对目标 workspace；失败仅向 stdout 返回 `{ "ok": false, "error": "..." }` 并退出 1。
+  不带 `--json` 时成功使用 stdout 文本，失败使用 stderr 文本；此输出契约不改变持久化 schema。
 - 登记不强求 git repo，任意目录均可登记；重复登记报错。
 - Project Docs scaffold 为每个已登记 project 提供固定的 README.md、AGENTS.md、docs/PRODUCT_SPEC.md 和 docs/ARCHITECTURE.md 模板；模板包含角色标题和待填写提示，不支持外部模板源或自定义变量。
 - scaffold 预检固定写入目标，已有普通文件保持字节不变并记入 `skipped`；新建文件记入 `created`，JSON receipt 不包含绝对路径。
@@ -76,6 +93,7 @@ Markdown/JSON artifact 为权威数据，通过统一 `pops` CLI 和 Local Web W
 - docs check 不检查链接完整性、内容新鲜度、措辞质量或跨文档语义一致性。
 - Report 使用独立的 `report/Report@1` Markdown artifact，记录稳定 ID、标题、project、生成时间、`completed|partial` outcome、Plan logical reference、Backlog 状态结果、验证证据、偏离、workaround 和 Repo 文档 repo-relative logical references（例如 `README.md` 或 `docs/ARCHITECTURE.md`）；Report 文件只在已登记 project 的 reports root 内创建，并拒绝覆盖既有文件。
 - Report 生成只接受已持久化、已批准且已 materialize 的单份 Plan，并从同一 project 的 Backlog mapping 读取实际状态；只有所有 task 为 `done` 时生成 `completed`，未完成 task 必须经过显式且带非空说明的 partial 接受。
+- Report 文本允许 Unicode 文字中的斜杠分隔（如“文本/JSON”“编辑/审批”）；独立或有文本分隔符的机器绝对路径仍被拒绝。写入时移除正文末尾空白，保留内部空白；create 收据保留输入正文，show 不返回文件末尾换行。
 - Retrospective 使用独立的 `retrospective/Retrospective@1` Markdown 记录和 `retrospective/Store@1` store；记录至少包含 `id`、`created_at`、`project`、`task`、`trigger`、`status`、`harness`、`model` 与 Markdown 正文，其中 `project`、`task` 在 provenance 不可用时可显式为 `null`，但缺失字段仍无效。分类后可附带 `disposition`、`owner_scope`、`categories`、`next_action` 和 `related_info`；结案后可附带 `action_disposition`、`actioned_at`、`backlog` 和 `resolution_note`。每个 workspace 的 `.pops/workspace.json` 以顶层 `retrospectives` descriptor（`type: workflow/retrospectives@1`、相对 `root`）表达唯一 workspace-level root；`pops init` 创建该 store。权威记录分别位于 `inbox/`、`active/`、`archive/`，`index.json` 与 `INDEX.md` 可从 Markdown 重建。
 - `pops retrospective capture` 接受调用方提供的 trigger、harness、model（不可得时为 `null`）、可选 project/task 和 Markdown body，只在 `inbox/` 创建新记录；body 必须包含三个非空 Markdown section：`Hidden friction encountered`、`Workarounds used` 和 `Improvement candidates`。输出包含相对 path 与文件内容 sha256 revision。显式 ID 与自动 ID 在共享锁内跨三个状态目录保持唯一，自动 ID 的 suffix 覆盖 active/archive 和此前重试；`list` 支持 status/project/task 过滤并以稳定 path 顺序返回，`show` 返回完整 metadata、revision 和正文。malformed Markdown 在 list 的 diagnostics 中暴露；capture 失败不保留新文件或派生索引漂移。capture 不推断 provenance、不自动分类或执行生命周期流转。
 - `pops retrospective triage <id>` 只允许 `inbox → active|archive`，显式要求 `--to`、当前文件的 `--expected-revision` 和非空 `--next-action`，并持久化 disposition、owner scope、categories、next action 和 related info；`pops retrospective archive <id>` 只允许 `active → archive`，要求当前 revision，并持久化 action disposition、actioned_at、backlog links 和 resolution note，同时保留记录已有的 next action；`--backlog` links 必须是 `project-ops:backlog/items/<PREFIX>-NNN.md`，prefix 依据各 project store 的通用 ID 规则。目标已存在、状态非法或 revision 过期时失败且保持源文件不变；成功流转后 source/target 只保留一份 authority，并重建 `index.json` 与 `INDEX.md`。共享锁位于 `.pops/runtime/retrospectives/`，不污染版本化 artifact root。
@@ -101,5 +119,57 @@ Markdown/JSON artifact 为权威数据，通过统一 `pops` CLI 和 Local Web W
 1. ~~Workspace/Catalog 与 Backlog 纵向闭环。~~（基础版已交付：init、显式 project 登记、doctor、backlog store 与 CRUD、状态流转）
 2. Plan、Project Docs 和 materialization。（Plan 到 Backlog materialization 已实现。）
 3. ~~Report 与 Retrospective 闭环。~~（Report 与 Retrospective 的 CLI 纵向闭环已实现；Workbench 只读视图已实现。）
-4. ~~Local Web Workbench。~~（Backlog 首个可写切片已完成；Plan、Report、Docs、Retrospective 完整只读视图已完成；Chromium 浏览器 E2E 已覆盖启动、导航、读写和失败路径。）
+4. ~~Local Web Workbench。~~（Backlog 首个可写切片已完成；Plan、Report、Retrospective 阅读视图及 Docs 文档阅读与导航已完成；Chromium 浏览器 E2E 已覆盖启动、导航、读写和失败路径。）
 5. 安装发行、升级和按真实需求补充 hardening。
+
+## Plan 下一步任务查询
+
+`pops plan next <project> <plan-id> [--json]` 仅查询该 Plan mapping 中的 task。ready 要求任务为 todo，
+且每个直接依赖能从同项目 Backlog 读取并为 done；无依赖的 todo 可开始。Plan 外的同项目依赖可参与判断，
+不递归检查依赖的依赖，不查询跨项目队列。in_progress 单独列出，done 排除，epic 不参与推荐；
+已有 blocked/cancelled 状态不推荐并给出状态诊断。
+
+成功 JSON 为 `{ok:true,plan_id,ready,in_progress,blocked,next,diagnostics}`。任务摘要包含
+id、title、priority、status，blocked 额外包含 reasons（依赖 id、code、message）。ready 按 P0、P1、P2、P3，
+再按 ID 字符串排序；next 为首项或 null。进行中、受阻列表采用相同排序。缺失、损坏、项目不匹配的依赖
+保留 ID 和原因；映射任务本身不可读则进入 diagnostics。未物化返回空列表、next:null 与 PLAN_NOT_MATERIALIZED
+诊断，没有可开始任务仍成功。未知/损坏 Plan、无效 workspace/project 与参数错误返回 `{ok:false,error}`
+并退出 1；文本输出表达相同分类与原因。此查询不新增持久化 schema、状态或调度行为。
+
+## Plan 与 Backlog 页面联动
+
+Plan 详情中的“下一步任务”展示共享查询返回的进行中、可开始、受阻列表及依赖原因，排序与 `pops plan next` 一致。
+进度和推荐列表中的任务链接进入同项目 Backlog 详情，继续使用现有携带 revision 的状态更新；Plan 页面不新增 mutation。
+`#/projects/<project>/plans/<plan-id>` 定位并展开 Plan；
+`#/projects/<project>/backlog/<item-id>?plan=<plan-id>` 定位任务并保留同项目来源 Plan。
+“返回原 Plan”重读进度与推荐，清除旧 projection，展开并定位原计划；手动 Refresh 仍可用，无实时推送。
+任务或 Plan 不存在、读取失败时显示错误，任务页保留返回入口；切换项目或详情时丢弃旧请求响应。
+导航只改变 URL 与内存视图，不写入 artifact 或持久化导航状态。
+
+## Plan 交付报告关联
+
+Plan 通过同项目 Report 的 `plan` 精确等于 `project-ops:plans/<plan-id>.json` 关联报告，
+展示全部匹配记录的 ID、title、outcome、created_at，按生成时间降序、相同时间按 ID 升序排列。
+任务完成情况与报告状态独立：全部 task done 且没有报告时显示“任务已完成，尚无交付报告”；
+未完成且已有 partial 报告仍保留实际进度。报告仅代表创建时快照，后续 Backlog 变化不改写其内容或 outcome。
+损坏 Report 在 Plan 页与 Reports 页保留读取诊断，不阻断有效报告。
+报告链接使用 `#/projects/<project>/reports/<report-id>?plan=<plan-id>`，支持直接定位、刷新、返回原 Plan；
+失效目标显示错误并保留返回入口。页面没有报告创建按钮或写接口，报告仍通过 CLI 根据真实状态与验证证据创建。
+
+## Docs 阅读与跨页导航
+
+`GET /api/projects/<id>/docs` 返回 `{ok:true,data:{documents,diagnostics}}`：documents 为 path、standard、issue，
+四份标准文档固定在前，扩展 Markdown 按目录排序。`GET /api/projects/<id>/docs?path=<repo-relative-path>`
+返回 `{ok:true,data:{path,body}}`，正文保留文件字节对应的 UTF-8 文本。只接受一个 path 参数，无写操作。
+缺失目标返回 404，非法路径 400，不可读目标 422；错误使用 `{ok:false,error:{code,message}}`。
+允许范围为登记 Repo 内 `README.md`、`AGENTS.md` 和 `docs/` 下 Markdown，禁止绝对路径、越界、符号链接目标或祖先。
+边界是受信任本地 workspace，不承诺恶意 ancestor swap；无 native helper 或平台特定原子操作。
+标准检查失败不阻止可读正文；非标准文档显示“未参与标准检查”。单篇失败仍显示文档导航和重试入口。
+
+Docs 地址为 `#/projects/<id>/docs?path=<encoded-path>&section=<encoded-heading>`，省略 path 默认 README.md。
+章节由 Markdown ATX 标题生成 Unicode slug，重复标题增加数字后缀；无章节时显示空目录。
+回顾地址为 `#/projects/<id>/retrospectives/<id>`，filter_project/status/task query 保存精确筛选条件；
+直达记录不符合筛选条件时仍单独显示并提示，失效目标显示错误。摘要由正文派生，不新增持久化字段。
+Report 和回顾关联跳转使用受限内部 `from` 地址提供“返回来源页面”，Report 的原 Plan 返回继续可用。
+地址保存选择、筛选和章节；滚动位置与展开状态仅在当前页面会话内存中保存，整页重载不保证恢复像素位置或源码模式。
+读取时隔离过期响应，Refresh 重读文件，无实时推送；状态操作仍仅限已有 Backlog 更新。

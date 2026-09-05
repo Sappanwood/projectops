@@ -7,9 +7,14 @@ import type {
   WorkbenchWorkspaceOverview,
 } from "./types.js";
 import { emptyBacklogState } from "./backlogController.js";
+import { emptyDocsState } from "./docsView.js";
 
 export function createInitialState(route?: RouteState): AppState {
   return {
+    route: route ?? {projectId:null, view:"overview"},
+    docs: emptyDocsState(),
+    selectedPlanId: route?.planId ?? null,
+    selectedReportId: route?.reportId ?? null,
     backlog: emptyBacklogState(),
     readPages: null,
     readPagesLoading: false,
@@ -64,6 +69,9 @@ export function setWorkspaceSuccess(
     refreshing: false,
     selectedProjectId,
     currentView: route.view,
+    route,
+    selectedPlanId: route.planId ?? null,
+    selectedReportId: route.reportId ?? null,
     projectError,
     // if project is not found or changed, clear stale overview
     projectOverview:

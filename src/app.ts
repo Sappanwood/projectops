@@ -9,6 +9,7 @@ import { backlogShow } from "./useCases/backlogShow.js";
 import { backlogUpdate } from "./useCases/backlogUpdate.js";
 import { planCreate } from "./useCases/planCreate.js";
 import { planList } from "./useCases/planList.js";
+import { planNext } from "./useCases/planNext.js";
 import { planShow } from "./useCases/planShow.js";
 import { planValidate } from "./useCases/planValidate.js";
 import { planApprove } from "./useCases/planApprove.js";
@@ -37,7 +38,7 @@ Options:
   -v, --version  Show version
 
 Commands:
-  init [dir]              Initialize a workspace shell in dir (default: current directory)
+  init [dir] [--json]     Initialize a workspace shell in dir (default: current directory)
   project add <path>      Register a directory as a project in the workspace
   project list [--json]   List registered projects
   project doctor [--json] Validate workspace topology
@@ -49,6 +50,7 @@ Commands:
   plan create <project> --input <draft.json>  Create a Plan from a JSON draft
   plan list <project>     List Plans for a project
   plan show <project> <plan>  Show a complete Plan
+  plan next <project> <plan> [--json]  Recommend ready tasks and explain blocked dependencies
   plan validate <project> <plan>  Validate a Plan
   plan approve <project> <plan> --review-note <note>  Approve a validated Plan
   plan materialize <project> <plan>  Materialize an approved Plan into Backlog
@@ -79,7 +81,7 @@ export function runCli(args: readonly string[], io: CliIO, cwd = process.cwd()):
   const [command, ...rest] = args;
   switch (command) {
     case "init":
-      return initWorkspace(rest[0], io, cwd);
+      return initWorkspace(rest.find((arg) => arg !== "--json"), rest.includes("--json"), io, cwd);
     case "project": {
       const [sub, ...projectArgs] = rest;
       const json = projectArgs.includes("--json");
@@ -123,6 +125,7 @@ export function runCli(args: readonly string[], io: CliIO, cwd = process.cwd()):
       return 1;
     }
     case "plan": {
+      if (rest[0] === "next") return planNext(rest.slice(1), io, cwd);
       const [sub, first, ...subArgs] = rest;
       const json = [first, ...subArgs].includes("--json");
       const forwarded = subArgs.filter((arg) => arg !== "--json");

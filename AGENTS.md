@@ -78,18 +78,8 @@ Workspace Control resolver 继续负责 Repo 定位与开发服务。本节是�
 新产生的自身过程 artifact 使用 ProjectOps manifest 路由，不使用 resolver 返回的 Workspace Control artifact roots。
 
 自身数据 workspace 为 `/home/ling/workspace`，authority 为其 `.pops/workspace.json`。
-操作前从该 workspace 运行 `pops project list --json` 和 `pops project doctor`，确认 `projectops` 登记与 typed roots。
-若尚未登记，使用 `pops project add projectops`，按需执行 `pops backlog init projectops`；不自动登记其他项目。
-使用当前 Repo 构建的 CLI；未安装 `pops` 时可使用 `node /home/ling/workspace/projectops/dist/cli.js`。
-所有命令从上述数据 workspace 执行，artifact 路径由 ProjectOps manifest 解析，不自行拼接：
-
-```bash
-pops backlog list projectops --json
-pops plan list projectops --json
-pops report list projectops --json
-```
-
-自身条目通过对应 `pops` 命令管理；Backlog 更新携带读取到的 revision。
+操作前必须阅读 [Agent 操作契约](docs/AGENT_CONTRACT.md)，按其中的 list/doctor、初始化、CLI 与 revision 流程执行。
+artifact 路径由 ProjectOps manifest 解析，不自行拼接。
 全局 skill 若假定 Workspace Control store/schema，不得直接套用于自身数据；使用 ProjectOps 当前 CLI 契约。
 ADR、Research 使用 ProjectOps 登记的对应 typed roots；自身 dogfooding 回顾使用其 workspace-level Retrospective store。
 跨项目或全局工作流事项仍遵循 Workspace 路由。
@@ -104,6 +94,7 @@ backlog --store <resolved-artifacts.backlog.root> <command> --json
 
 | 文档或 artifact | 何时读 | 何时更新 |
 |---|---|---|
+| [docs/AGENT_CONTRACT.md](docs/AGENT_CONTRACT.md) | Agent 操作自身过程数据前 | CLI 参数、输出、生命周期或操作流程变化时 |
 | [README.md](README.md) | 了解安装方式和当前可运行能力时 | CLI、安装步骤或用户入口变化时 |
 | [docs/PRODUCT_SPEC.md](docs/PRODUCT_SPEC.md) | 修改产品范围、用户工作流或数据契约前 | 功能、用户流程、schema 或版本路线变化时 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 修改模块、依赖方向、存储或运行形态前 | 组件关系、核心数据流或技术选型变化时 |
@@ -145,7 +136,7 @@ node dist/cli.js --version
 - TypeScript 源码变更运行 `npm run typecheck`。
 - CLI 或构建入口变化运行 `npm run build` 和一次对应 smoke。
 - 文档、文案和简单配置修改不要求运行完整测试。
-- 根据路由表检查 `README.md`、`docs/PRODUCT_SPEC.md` 和 `docs/ARCHITECTURE.md` 是否需要同步。
+- 根据路由表检查 `README.md`、`docs/AGENT_CONTRACT.md`、`docs/PRODUCT_SPEC.md` 和 `docs/ARCHITECTURE.md` 是否需要同步。
 - 不以 coverage、理论 edge case、未声明平台或 production hardening 阻塞 Alpha 交付。
 
 

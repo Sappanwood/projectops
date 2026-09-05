@@ -175,7 +175,7 @@ test("read page requests discard stale responses and expose retry after a read f
   run(["project", "add", "beta"]);
   type Result = import("../src/web/apiClient.js").ApiResult<WorkbenchReadPages>;
   const pending: Array<(result: Result) => void> = [];
-  const pages = (title: string): WorkbenchReadPages => ({ plans: [{ schema: "plan/Plan@1", id: "plan-test", title, goal: title, status: "draft", items: [] }], reports: [], documents: [], retrospectives: [], diagnostics: [] });
+  const pages = (title: string): WorkbenchReadPages => ({ plans: [{ schema: "plan/Plan@1", id: "plan-test", title, goal: title, status: "draft", items: [], execution: { materialized: false, counts: { total: 0, todo: 0, in_progress: 0, done: 0, blocked: 0, cancelled: 0, unreadable: 0 }, completion_percent: null, items: [] }, next_tasks: { plan_id: "plan-test", ready: [], in_progress: [], blocked: [], next: null, diagnostics: [] }, delivery_reports: [] }], reports: [], documents: [], retrospectives: [], diagnostics: [] });
   const handlers: Record<string, (event: any) => void> = {};
   const container = { innerHTML: "", addEventListener: (name: string, handler: any) => { handlers[name] = handler; }, removeEventListener() {} };
   let route: import("../src/web/types.js").RouteState = { projectId: "alpha", view: "plans" };
@@ -214,4 +214,124 @@ test("read page requests discard stale responses and expose retry after a read f
     assert.match(container.innerHTML, /Recovered/);
     assert.doesNotMatch(container.innerHTML, /Read unavailable/);
   } finally { app.destroy(); rmSync(root, { recursive: true, force: true }); }
+});
+
+
+test("Plan execution counts current mapped tasks, isolates unreadable targets and never writes", async () => {
+  const { root, ops, run } = setup();
+  let server;
+  try {
+    run(["backlog", "init", "alpha"]);
+    for (const title of ["Actual todo", "Actual running", "Actual done", "Broken", "Epic"]) {
+      run(["backlog", "add", "alpha", "-T", title, "-c", "feature", "--priority", "P1", ...(title === "Epic" ? ["--item-type", "epic"] : [])]);
+    }
+    run(["backlog", "update", "alpha", "ALP-002", "--status", "in_progress"]);
+    run(["backlog", "update", "alpha", "ALP-003", "--status", "done"]);
+    run(["backlog", "update", "alpha", "ALP-005", "--status", "done"]);
+    writeFileSync(path.join(ops, "backlog/items/ALP-004.md"), "broken");
+    const keys = ["todo", "running", "done", "broken", "epic", "missing"];
+    writeFileSync(path.join(ops, "plans/plan-progress.json"), JSON.stringify({
+      schema: "plan/Plan@1", id: "plan-progress", title: "Progress", goal: "Current execution", status: "approved",
+      approval: { approved_at: "2026-09-05", review_note: "Fixture" },
+      materialization: { materialized_at: "2026-09-05", mapping: Object.fromEntries(keys.map((key, i) => [key, `ALP-00${i + 1}`])) },
+      items: keys.map((key) => ({ key, title: `Planned ${key}`, item_type: key === "epic" ? "epic" : "task", priority: "P1", body: "Scope", depends_on: [] })),
+    }));
+    server = await startWorkbenchServer({ workspaceDir: root, port: 0 });
+    const read = async () => {
+      const response = await fetch(`${server!.origin}/api/projects/alpha/read-pages`);
+      assert.equal(response.status, 200);
+      return (await response.json() as { data: WorkbenchReadPages }).data;
+    };
+    const before = snapshot(root);
+    const data = await read();
+    const execution = data.plans[0]!.execution;
+    assert.deepEqual(execution.counts, { total: 5, todo: 1, in_progress: 1, done: 1, blocked: 0, cancelled: 0, unreadable: 2 });
+    assert.equal(execution.completion_percent, 20);
+    assert.deepEqual(execution.items.map((item) => item.status), ["todo", "in_progress", "done", "unreadable", "done", "unreadable"]);
+    assert.equal(execution.items[0]!.title, "Actual todo");
+    assert.equal(execution.items[3]!.diagnostic?.code, "ITEM_INVALID");
+    assert.equal(execution.items[5]!.diagnostic?.code, "ITEM_NOT_FOUND");
+    const html = renderReadPages("plans", data, { project: "alpha", status: "", task: "" });
+    for (const text of ["1/5", "20%", "Actual running", "ALP-006", "无法读取", "已批准"]) assert.ok(html.includes(text), text);
+    assert.equal(JSON.stringify(data).includes(root), false);
+    assert.deepEqual(snapshot(root), before);
+    writeFileSync(path.join(ops, "backlog/items/ALP-001.md"), readFileSync(path.join(ops, "backlog/items/ALP-001.md"), "utf8").replace("status: todo", "status: done"));
+    const updated = snapshot(root);
+    const refreshed = await read();
+    assert.equal(refreshed.plans[0]!.execution.counts.done, 2);
+    assert.equal(refreshed.plans[0]!.execution.completion_percent, 40);
+    assert.deepEqual(snapshot(root), updated);
+  } finally { await server?.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
+test("unmaterialized and zero-task Plans have no misleading completion percentage", async () => {
+  const { getWorkbenchReadPages } = await import("../src/application/workbenchReadModel.js");
+  const { root, ops } = setup();
+  try {
+    const base = { schema: "plan/Plan@1", title: "Empty", goal: "No execution", items: [] };
+    writeFileSync(path.join(ops, "plans/plan-draft.json"), JSON.stringify({ ...base, id: "plan-draft", status: "draft" }));
+    writeFileSync(path.join(ops, "plans/plan-empty.json"), JSON.stringify({ ...base, id: "plan-empty", status: "approved",
+      approval: { approved_at: "2026-09-05", review_note: "Fixture" }, materialization: { materialized_at: "2026-09-05", mapping: {} } }));
+    const result = getWorkbenchReadPages({ workspaceDir: root, projectId: "alpha" });
+    assert.ok(result.ok);
+    for (const plan of result.data.plans) {
+      assert.equal(plan.execution.completion_percent, null);
+      assert.equal(plan.execution.counts.total, 0);
+    }
+    assert.equal(result.data.plans[0]!.execution.materialized, false);
+    assert.equal(result.data.plans[1]!.execution.materialized, true);
+    const html = renderReadPages("plans", result.data, { project: "alpha", status: "", task: "" });
+    assert.match(html, /未开始执行/);
+    assert.match(html, /无可执行任务/);
+    assert.doesNotMatch(html, /100%|<progress/);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("Plan delivery links retain every matching report, timestamp order and independent snapshots", async () => {
+  const { getWorkbenchReadPages } = await import("../src/application/workbenchReadModel.js");
+  const { root, ops, run } = setup();
+  try {
+    run(["backlog", "init", "alpha"]);
+    const input = path.join(root, "delivery.json");
+    writeFileSync(input, JSON.stringify({ title: "Delivery links", goal: "Evidence", items: [{ key: "task", title: "Task", item_type: "task", priority: "P1", body: "Scope" }] }));
+    run(["plan", "create", "alpha", "--input", input]);
+    run(["plan", "approve", "alpha", "plan-delivery-links", "--review-note", "Fixture"]);
+    run(["plan", "materialize", "alpha", "plan-delivery-links"]);
+    run(["backlog", "update", "alpha", "ALP-001", "--status", "done"]);
+    const read = () => {
+      const result = getWorkbenchReadPages({ workspaceDir: root, projectId: "alpha" });
+      assert.ok(result.ok);
+      return result.data;
+    };
+    let data = read();
+    assert.equal(data.plans[0]!.delivery_reports.length, 0);
+    assert.match(renderReadPages("plans", data, { project: "alpha", status: "", task: "" }), /任务已完成，尚无交付报告/);
+    const base: Report = {
+      schema: "report/Report@1", id: "report-a", title: "Evidence", project: "alpha", created_at: "2026-09-05T12:00:00+09:00",
+      outcome: "partial", plan: "project-ops:plans/plan-delivery-links.json", backlog: [{ id: "ALP-001", status: "todo" }],
+      verification: ["Fixture"], deviations: [], workarounds: [], repo_docs: [], body: "Snapshot",
+    };
+    for (const report of [base,
+      { ...base, id: "report-b", created_at: "2026-09-05T03:00:00Z" },
+      { ...base, id: "report-c", outcome: "completed" as const, created_at: "2026-09-05T04:00:00Z" },
+      { ...base, id: "report-foreign", project: "beta" },
+      { ...base, id: "report-other", plan: "project-ops:plans/plan-other.json" },
+    ]) writeFileSync(path.join(ops, `reports/${report.id}.md`), serializeReport(report));
+    writeFileSync(path.join(ops, "reports/report-broken.md"), "broken");
+    const before = snapshot(root);
+    data = read();
+    assert.deepEqual(data.plans[0]!.delivery_reports.map(report => report.id), ["report-c", "report-a", "report-b"]);
+    const html = renderReadPages("plans", data, { project: "alpha", status: "", task: "" });
+    for (const text of ["report-c", "partial", "completed", "2026-09-05", "report-broken", "ARTIFACT_INVALID"]) assert.ok(html.includes(text), text);
+    assert.deepEqual(snapshot(root), before);
+    run(["backlog", "update", "alpha", "ALP-001", "--status", "todo"]);
+    const changed = snapshot(root);
+    data = read();
+    assert.equal(data.plans[0]!.execution.counts.done, 0);
+    assert.equal(data.plans[0]!.delivery_reports[0]!.outcome, "completed");
+    assert.equal(data.plans[0]!.delivery_reports[1]!.outcome, "partial");
+    assert.equal(changed["ops/alpha/reports/report-a.md"], before["ops/alpha/reports/report-a.md"]);
+    assert.equal(changed["ops/alpha/reports/report-c.md"], before["ops/alpha/reports/report-c.md"]);
+    assert.deepEqual(snapshot(root), changed);
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });

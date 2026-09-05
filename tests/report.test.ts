@@ -186,6 +186,22 @@ test("Report preserves legal URL, Markdown, HTML, and slash text", () => {
   }
 });
 
+test("Report accepts Unicode word separators and still rejects embedded absolute paths", () => {
+  for (const body of ["文本/JSON", "编辑/审批", "café/JSON", "说明：文本/JSON 与编辑/审批"]) {
+    const report = { ...validReport(), body, verification: [body] };
+    assert.deepEqual(parseReport(serializeReport(report)), report, body);
+  }
+  for (const body of ["文件：/tmp/report.md", "文件 /home/user/report.md", "路径 `/tmp/report.md`", "路径 C:\\Users\\user\\report.md"]) {
+    assert.throws(() => serializeReport({ ...validReport(), body }), /absolute path/i, body);
+  }
+});
+
+test("Report round trip removes trailing body whitespace but preserves internal whitespace", () => {
+  const body = "## Summary\n\n文本中间  保留空白\n\n完成。";
+  const report = { ...validReport(), body: `${body}  \n\n` };
+  assert.deepEqual(parseReport(serializeReport(report)), { ...report, body });
+});
+
 test("Report root resolver requires the registered reports descriptor", () => {
   const workspace = freshDir();
   assert.equal(run(["init"], workspace).code, 0);

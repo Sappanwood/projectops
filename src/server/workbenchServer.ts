@@ -18,6 +18,7 @@ import {
   getWorkbenchWorkspaceOverview,
 } from "../application/workbenchReadModel.js";
 import { getWorkspaceSummary } from "../application/workspaceApi.js";
+import { listDocuments, showDocument } from "../application/docsApi.js";
 
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 7331;
@@ -247,6 +248,15 @@ async function handleRequest(
       return;
     }
 
+    if (segments.length === 4 && segments[0] === "api" && segments[1] === "projects" && segments[3] === "docs") {
+      requireMethod(request, "GET");
+      const documentPath = singleQueryValue(url, "path");
+      const input = {workspaceDir: context.workspaceDir, projectId: segments[2]!};
+      if (documentPath === undefined) sendApplicationResult(response, listDocuments(input));
+      else sendApplicationResult(response, showDocument({...input, path: documentPath}));
+      return;
+    }
+
     if (segments[0] === "api") {
       throw new HttpError(404, "ROUTE_NOT_FOUND", "Route not found.");
     }
@@ -387,6 +397,8 @@ function statusForApplicationError(error: ApplicationError): number {
     case "PROJECT_NOT_FOUND":
     case "BACKLOG_STORE_NOT_FOUND":
     case "ITEM_NOT_FOUND":
+    case "PLAN_NOT_FOUND":
+    case "DOCUMENT_NOT_FOUND":
       return 404;
     case "REVISION_MISMATCH":
       return 409;
@@ -394,9 +406,12 @@ function statusForApplicationError(error: ApplicationError): number {
     case "BACKLOG_STORE_INVALID":
     case "ITEM_ID_MISMATCH":
     case "ITEM_INVALID":
+    case "PLAN_INVALID":
+    case "DOCUMENT_UNAVAILABLE":
       return 422;
     case "INVALID_STATUS":
     case "INVALID_ITEM_ID":
+    case "INVALID_DOCUMENT_PATH":
       return 400;
   }
 }

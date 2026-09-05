@@ -100,3 +100,48 @@ test("init without arguments uses the current directory", () => {
   assert.equal(code, 0);
   assert.ok(existsSync(manifestPath(dir)));
 });
+
+for (const placement of ["implicit", "before", "after"] as const) {
+  test(`init JSON receipt uses the intended directory (${placement})`, () => {
+    const parent = freshDir();
+    const dir = placement === "implicit" ? parent : path.join(parent, "target");
+    const args = placement === "implicit" ? ["init", "--json"]
+      : placement === "before" ? ["init", "--json", dir] : ["init", dir, "--json"];
+    const result = run(args, parent);
+    assert.equal(result.code, 0);
+    assert.deepEqual(result.stderr, []);
+    assert.equal(result.stdout.length, 1);
+    assert.deepEqual(JSON.parse(result.stdout[0]!), {
+      ok: true, workspace: { name: path.basename(dir), manifest: ".pops/workspace.json" },
+    });
+    assert.ok(existsSync(manifestPath(dir)));
+    assert.equal(existsSync(path.join(parent, "--json")), false);
+  });
+}
+
+test("init JSON duplicate failure preserves the manifest", () => {
+  const dir = freshDir();
+  run(["init"], dir);
+  const before = readFileSync(manifestPath(dir), "utf8");
+  const result = run(["init", dir, "--json"], dir);
+  assert.equal(result.code, 1);
+  assert.deepEqual(result.stderr, []);
+  const failure = JSON.parse(result.stdout.join("\n"));
+  assert.equal(failure.ok, false);
+  assert.match(failure.error, /already/i);
+  assert.equal(readFileSync(manifestPath(dir), "utf8"), before);
+});
+
+test("init JSON filesystem failure is a structured error", () => {
+  const dir = freshDir();
+  const target = path.join(dir, "file");
+  writeFileSync(target, "keep");
+  const result = run(["init", target, "--json"], dir);
+  assert.equal(result.code, 1);
+  assert.deepEqual(result.stderr, []);
+  const failure = JSON.parse(result.stdout.join("\n"));
+  assert.equal(failure.ok, false);
+  assert.equal(typeof failure.error, "string");
+  assert.ok(failure.error.length > 0);
+  assert.equal(readFileSync(target, "utf8"), "keep");
+});

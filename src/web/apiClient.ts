@@ -6,12 +6,15 @@ import type {
 } from "./types.js";
 import type { BacklogItem } from "../backlog/item.js";
 import type { BacklogItemSummary, BacklogMutationReceipt } from "../application/backlogApi.js";
+import type { DocumentList, ProjectDocument } from "../docs/documentReader.js";
 
 export type ApiResult<T> =
   | { ok: true; data: T }
   | { ok: false; error: AppError };
 
 export type ApiClient = {
+  listDocuments(projectId: string): Promise<ApiResult<DocumentList>>;
+  showDocument(projectId: string, path: string): Promise<ApiResult<ProjectDocument>>;
   getReadPages(projectId: string): Promise<ApiResult<WorkbenchReadPages>>;
   getWorkspaceOverview(): Promise<ApiResult<WorkbenchWorkspaceOverview>>;
   getProjectOverview(projectId: string): Promise<ApiResult<WorkbenchProjectOverview>>;
@@ -79,6 +82,8 @@ export function createApiClient(
   }
 
   return {
+    listDocuments(projectId) { return request(`/api/projects/${encodeURIComponent(projectId)}/docs`); },
+    showDocument(projectId, path) { return request(`/api/projects/${encodeURIComponent(projectId)}/docs?path=${encodeURIComponent(path)}`); },
     getReadPages(projectId) {
       return request(`/api/projects/${encodeURIComponent(projectId)}/read-pages`);
     },

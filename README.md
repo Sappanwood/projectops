@@ -11,6 +11,9 @@ Workflow Retrospective。
 迁移脚本，不保留运行时兼容分支。已完成或归档数据不要求持续迁移；旧版本不可读时应明确提示版本不支持。
 这是 Alpha 演进规则，具体操作与路由见 [AGENTS.md](AGENTS.md)。
 
+Agent 使用前请阅读 [Agent 操作契约](docs/AGENT_CONTRACT.md)，其中集中说明 workspace 定位、CLI 返回值、
+revision 冲突处理，以及 Plan 审批、交付和回顾的执行边界。
+
 ## 快速开始
 
 ```bash
@@ -34,15 +37,29 @@ npm run workbench -- --workspace "$HOME/my-workspace"
 ```
 
 构建后 server 自动托管内置生产前端 Web 界面，浏览器访问 `http://127.0.0.1:7331` 即可体验。
-选择 project 后进入 Backlog，可按状态浏览全部条目，选择条目查看 Markdown 正文、依赖和 revision，
+选择 project 后进入 Backlog，可按状态浏览全部条目；列表突出标题和选中态，详情顶部提供状态操作与刷新。
+正文默认使用阅读排版，可切换 Markdown 源码；支持标题、段落、嵌套列表、表格、引用块、只读任务列表、分隔线、强调、代码和 HTTP(S) 链接，
+其他语法保留为文本。原始 HTML 不执行，本地路径和非 HTTP(S) 链接只显示文本；revision 收入技术信息。
+选择条目后可查看依赖，
 并更新为 `todo`、`in_progress` 或 `done`。更新会刷新条目和项目摘要；revision 冲突时保留当前选择，
 先点击 `Refresh item` 读取最新内容，再重新提交。未完成或缺失的依赖会显示提示；与 CLI 一样，
 状态更新由用户显式决定，不自动推进依赖或强制改变状态。
-Plans 和 Reports 页面可展开完整详情，分别查看审批、materialization mapping、item dependencies，以及
-交付 outcome、Plan/Backlog references、验证、偏离、workaround 和正文。Docs 展示固定四份文档及
-`docs check` 结果。Retrospectives 展示 workspace 完整列表，默认过滤当前项目；支持 status、project、task
+Plans 提供标题、状态、目标和任务目录；长目标默认摘要，可展开全文。点击目录定位并展开对应任务，正文按项阅读；刷新保留展开状态，
+审批与 materialization mapping 收入计划记录。执行进度单独显示 task 的完成比例、状态计数及映射条目的实时标题/状态；
+epic 不计入完成率，缺失或损坏任务仍计入总数并显示诊断。未物化显示未开始执行，零 task 显示无可执行任务。
+CLI 更新 Backlog 后点击 Refresh 可查看新进度。Plan 同时展示进行中、可开始和受阻任务，
+排序与 `pops plan next` 一致，受阻项显示依赖 ID 和原因。点击任务进入 Backlog 详情，更新后点击“返回原 Plan”
+会重新加载进度与推荐，并展开原计划；详情地址支持刷新和直接打开。
+Plan 的交付报告区列出同项目关联报告，按生成时间降序排列，显示 outcome 与时间；点击报告可查看详情并返回原 Plan。
+全部任务完成但没有报告时会单独提示；报告是创建时快照，当前进度变化不会改写已有报告。Reports 页面可展开完整详情，查看
+交付 outcome、正文、验证、偏离与 workaround；技术记录折叠。关联 Plan、Backlog 和 Repo 文档可点击，并提供返回来源页面入口。
+Docs 提供四份标准文档入口，并列出 `docs/` 下其他 Markdown。点击文档按需读取正文，支持章节目录、
+相对 Markdown 链接与章节锚点；检查结果不阻止正文阅读。非标准文档标为未参与标准检查，缺失或不可读目标可重试。
+Retrospectives 展示 workspace 完整列表，默认过滤当前项目；支持 status、project、task
 精确过滤，project/task 留空表示全部，填写 `null` 表示 provenance 未记录。回顾按 inbox/active/archive 分组，
-可展开 metadata 与正文；malformed artifact 单独显示诊断。这四个页面均只读，点击顶部 Refresh 重读文件。
+列表从正文派生摘要，详情优先展示渲染正文、下一步和结案说明，技术信息折叠；关联任务可点击。
+Docs 与回顾详情支持直达地址；回顾筛选条件写入地址，刷新或任务往返后恢复。阅读位置与展开状态在当前页面会话内保留。
+malformed artifact 单独显示诊断。这四个页面均只读，点击顶部 Refresh 重读文件。Mermaid 暂按代码显示，图片不加载。
 
 开发者也可以增加 `--static-dir <path>` 覆盖静态资源目录。可选 `--host` 只接受
 loopback 地址，`--port 0` 仅适合测试或一次性隔离运行。使用 `Ctrl-C` 或发送 `SIGTERM` 会关闭 listener。
@@ -130,6 +147,7 @@ pops plan show my-app plan-release-workflow --json
 pops plan validate my-app plan-release-workflow --json
 pops plan approve my-app plan-release-workflow --review-note "Reviewed for release." --json
 pops plan materialize my-app plan-release-workflow --json
+pops plan next my-app plan-release-workflow --json
 pops backlog list my-app --json
 
 # 8. 完成 materialized task 并生成 Delivery Report
@@ -163,11 +181,15 @@ capture 的显式和自动 ID 在三个状态目录中保持唯一；运行时�
 `project-ops:backlog/items/<PREFIX>-NNN.md`。
 
 - `pops --help`、`pops --version`
-- `pops init`：workspace 壳初始化（不登记 repo）
+- `pops init [dir] [--json]`：workspace 壳初始化（不登记 repo）；JSON 成功返回 `ok: true` 与
+  `workspace: { name, manifest: ".pops/workspace.json" }`，失败返回 `ok: false` 与 `error` 并退出 1；
+  JSON 模式仅写 stdout，省略选项时提供文本输出
 - `pops project add/list/doctor`：显式登记、查询、拓扑校验
 - `pops docs scaffold <project> [--json]`：为已登记 project 创建缺失的 README、AGENTS、产品规格和架构文档模板；已有普通文件只跳过，不覆盖
 - `pops docs check <project> [--json]`：只读检查固定四份文档是否为普通文件并各自包含 Markdown 一级标题；失败时按固定顺序返回全部诊断
 - `pops backlog init/add/list/show/update`：store bootstrap、CRUD、状态流转与 revision 保护
+- `pops plan next <project> <plan-id> [--json]`：只读查询该 Plan 的可开始、进行中和受阻 task，解释依赖原因；
+  可开始任务按 P0 → P3、ID 排序，next 为首项或 null。依赖可以位于同项目 Plan 外，查询不自动改状态或启动任务
 - `pops plan create/list/show/validate/approve/materialize`：从 JSON 草案创建、列出、查看、校验、批准并将已批准的 `plan/Plan@1` artifact 写入 Backlog；Plan ID 由 title 稳定生成，
   无 ASCII slug 的标题使用每个 Unicode code point 的 `u<hex>` token
 - `pops report create/list/show`：从已批准且 materialized 的 Plan 生成 completed 或显式 partial Delivery Report，并查询已生成的 Report；create 需要至少一条 `--verification`

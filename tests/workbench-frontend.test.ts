@@ -402,16 +402,18 @@ test("Workbench HTML Rendering covers loading, error, empty, header, and domain 
   };
   const backlogHtml = renderApp(backlogState);
   assert.match(backlogHtml, /No backlog items found/);
-  assert.match(backlogHtml, /Select an item/);
+  assert.match(backlogHtml, /选择一个任务/);
 
   // 8. Selected Project Docs view
   const docsState: AppState = {
     ...readyState,
     currentView: "docs",
-    readPages: { plans: [], reports: [], retrospectives: [], diagnostics: [], documents: mockProjectOverview.docs.problems },
+    route: {projectId:"alpha",view:"docs",documentPath:"docs/PRODUCT_SPEC.md"},
+    docs: {loading:false,error:null,listError:null,list:{documents:mockProjectOverview.docs.problems.map(d => ({...d,standard:true})),diagnostics:[]},document:{path:"docs/PRODUCT_SPEC.md",body:"Readable even without a heading"}},
   };
   const docsHtml = renderApp(docsState);
-  assert.match(docsHtml, /Read-only docs check/);
+  assert.match(docsHtml, /Readable even without a heading/);
+  assert.match(docsHtml, /aria-label="章节目录"/);
   assert.match(docsHtml, /docs\/PRODUCT_SPEC\.md/);
   assert.match(docsHtml, /document is missing a level-one Markdown heading/);
 

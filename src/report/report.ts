@@ -194,7 +194,7 @@ function containsMachineAbsolutePath(value: string): boolean {
   }
   // Embedded paths are detected only at a text boundary. URL schemes, Markdown
   // root-relative links, closing HTML tags, and an isolated slash are text.
-  const posixPathToken = /(?:^|[^A-Za-z0-9<(:/])\/(?:[^\s"'`),;]+(?:\/[^\s"'`),;]+)*)/.test(value);
+  const posixPathToken = /(?:^|[^\p{L}\p{N}\p{M}<(:/])\/(?:[^\s"'`),;]+(?:\/[^\s"'`),;]+)*)/u.test(value);
   const windowsPathToken = /(?:^|[^A-Za-z0-9])(?:[A-Za-z]:[\\/]|\\\\)/.test(value);
   return posixPathToken || windowsPathToken;
 }

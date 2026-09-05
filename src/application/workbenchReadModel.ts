@@ -1,3 +1,5 @@
+import { readPlanNext } from "./planNext.js";
+import { readPlanExecution, type WorkbenchPlan } from "./planExecution.js";
 import type { Plan } from "../plan/plan.js";
 import type { Report } from "../report/report.js";
 import { PROJECT_DOC_TEMPLATES } from "../docs/projectDocs.js";
@@ -360,7 +362,7 @@ function readRetrospectiveRecords(
 }
 
 export type WorkbenchReadPages = {
-  plans: Plan[];
+  plans: WorkbenchPlan[];
   reports: Report[];
   documents: Array<{ path: string; issue: string | null }>;
   retrospectives: RetrospectiveRecord[];
@@ -379,8 +381,14 @@ export function getWorkbenchReadPages(
   const workspace = loadWorkspace(request.workspaceDir);
   const roots = projectArtifactRoots(workspace.root, request.projectId, workspace.manifest.artifact_layout);
   const diagnostics: WorkbenchDiagnostic[] = [];
-  const plans = readPlans(roots.plans, diagnostics);
   const reports = readReports(workspace.root, roots.reports, diagnostics);
+  const plans = readPlans(roots.plans, diagnostics).map((plan) => ({
+    ...plan, execution: readPlanExecution(request, plan), next_tasks: readPlanNext(request, plan),
+    delivery_reports: reports
+      .filter(report => report.project === request.projectId && report.plan === `project-ops:plans/${plan.id}.json`)
+      .sort((a, b) => ((Date.parse(b.created_at) || 0) - (Date.parse(a.created_at) || 0)) || a.id.localeCompare(b.id))
+      .map(({ id, title, outcome, created_at }) => ({ id, title, outcome, created_at })),
+  }));
   const docs = readDocs(workspace.root, resolveProjectPath(workspace.root, project.path), diagnostics);
   const documents = PROJECT_DOC_TEMPLATES.map(({ path }) => ({
     path,

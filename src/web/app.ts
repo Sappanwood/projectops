@@ -2,7 +2,7 @@ import { isReadPage } from "./readPagesView.js";
 import { createApiClient, type ApiClient } from "./apiClient.js";
 import { createBacklogController } from "./backlogController.js";
 import { renderApp } from "./render.js";
-import { setupRouter, type Router } from "./router.js";
+import { formatRoute, parseRoute, setupRouter, type Router } from "./router.js";
 import {
   createInitialState,
   selectView,
@@ -15,6 +15,7 @@ import {
   setWorkspaceSuccess,
 } from "./state.js";
 import type { AppState, RouteState } from "./types.js";
+import { emptyDocsState } from "./docsView.js";
 
 export type WorkbenchAppOptions = {
   container: HTMLElement;
@@ -36,6 +37,8 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
   let destroyed = false;
   let currentRequestId = 0;
   let readRequestId = 0;
+  let backlogNavigation = 0;
+  let documentRequestId = 0;
   const backlog = createBacklogController(apiClient, (next) => {
     state = { ...state, backlog: next };
     render();
@@ -48,9 +51,30 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
     render();
   });
 
+  const readingDetails = new Map<string, boolean>();
+  const readingPositions = new Map<string, number>();
+  function saveReadingPosition(): void {
+    if (typeof window === "undefined" || state.projectLoading || state.readPagesLoading || state.docs.loading || state.status !== "ready") return;
+    readingPositions.set(formatRoute(state.route), window.scrollY);
+  }
+  function restoreReadingPosition(): boolean {
+    const position = readingPositions.get(formatRoute(state.route));
+    if (typeof window === "undefined" || position === undefined) return false;
+    window.scrollTo({top:position,behavior:"instant"});
+    return true;
+  }
+  let renderedProject: string | null = null;
   function render(): void {
     if (destroyed) return;
+    for (const detail of container.querySelectorAll?.<HTMLDetailsElement>("details[data-reading-key]") ?? []) {
+      readingDetails.set(`${renderedProject}:${detail.dataset.readingKey}`, detail.open);
+    }
     container.innerHTML = renderApp(state);
+    renderedProject = state.selectedProjectId;
+    for (const detail of container.querySelectorAll?.<HTMLDetailsElement>("details[data-reading-key]") ?? []) {
+      const open = readingDetails.get(`${renderedProject}:${detail.dataset.readingKey}`);
+      if (open !== undefined) detail.open = open;
+    }
   }
 
   async function loadWorkspaceAndCurrentProject(route: RouteState): Promise<void> {
@@ -72,7 +96,7 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
 
     const currentRoute = router.getCurrentRoute();
     state = setWorkspaceSuccess(state, workspaceResult.data, currentRoute);
-    state = { ...state, retrospectiveFilters: { project: state.selectedProjectId ?? "", task: "", status: "" } };
+    state = { ...state, retrospectiveFilters: currentRoute.retrospectiveFilters ?? { project: state.selectedProjectId ?? "", task: "", status: "" } };
     render();
 
     // If a valid project is selected, load its overview
@@ -103,14 +127,36 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
 
     state = setProjectSuccess(state, projectResult.data);
     render();
-    if (state.currentView === "backlog") await backlog.load(projectId);
+    if (state.currentView === "backlog") await loadBacklogRoute(projectId);
     if (isReadPage(state.currentView)) await loadReadPages(projectId);
   }
 
+  async function loadBacklogRoute(projectId: string): Promise<void> {
+    const navigation = ++backlogNavigation;
+    await backlog.load(projectId);
+    const route = router.getCurrentRoute();
+    if (navigation !== backlogNavigation || route.projectId !== projectId || route.view !== "backlog") return;
+    if (route.itemId && !state.backlog.saving) await backlog.select(route.itemId);
+  }
+
+  function focusReadArtifact(): void {
+    const route = router.getCurrentRoute();
+    const id = state.currentView === "plans" ? route.planId : state.currentView === "reports" ? route.reportId : state.currentView === "retrospectives" ? route.retrospectiveId : undefined;
+    if (!id) return;
+    const attribute = state.currentView === "plans" ? "planId" : state.currentView === "reports" ? "reportId" : "retrospectiveId";
+    for (const detail of container.querySelectorAll?.<HTMLDetailsElement>("details[data-plan-id], details[data-report-id], details[data-retrospective-id]") ?? []) {
+      if (detail.dataset[attribute] !== id) continue;
+      detail.open = true;
+      detail.scrollIntoView({ block: "start" });
+      detail.querySelector<HTMLElement>("summary")?.focus({ preventScroll: true });
+    }
+  }
+
   async function loadReadPages(projectId: string): Promise<void> {
+    if (state.currentView === "docs") { await loadDocs(projectId); return; }
     const requestId = currentRequestId;
     const readId = ++readRequestId;
-    state = { ...state, readPagesLoading: true, readPagesError: null };
+    state = { ...state, readPages: null, readPagesLoading: true, readPagesError: null };
     render();
     const result = await apiClient.getReadPages(projectId);
     if (destroyed || requestId !== currentRequestId || readId !== readRequestId || state.selectedProjectId !== projectId) return;
@@ -118,10 +164,31 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
       readPages: result.ok ? result.data : null,
       readPagesError: result.ok ? null : result.error };
     render();
+    if (result.ok) { focusReadArtifact(); restoreReadingPosition(); }
+  }
+
+  function focusDocumentSection(): void {
+    const section = router.getCurrentRoute().section;
+    if (!section) return;
+    const target = container.ownerDocument?.getElementById(`doc-heading-${section}`);
+    if (target && container.contains(target)) { target.scrollIntoView({block:"start"}); target.focus({preventScroll:true}); }
+  }
+
+  async function loadDocs(projectId: string): Promise<void> {
+    const request = ++documentRequestId;
+    const documentPath = router.getCurrentRoute().documentPath ?? "README.md";
+    state = {...state, docs:{...emptyDocsState(), loading:true}};
+    render();
+    const [list, document] = await Promise.all([apiClient.listDocuments(projectId), apiClient.showDocument(projectId, documentPath)]);
+    if (destroyed || request !== documentRequestId || state.selectedProjectId !== projectId || state.currentView !== "docs") return;
+    state = {...state, docs:{list:list.ok ? list.data : null, document:document.ok ? document.data : null, loading:false, error:document.ok ? null : document.error, listError:list.ok ? null : list.error}};
+    render();
+    if (document.ok && !restoreReadingPosition()) focusDocumentSection();
   }
 
   async function refresh(): Promise<void> {
     if (state.refreshing) return;
+    saveReadingPosition();
     const requestId = ++currentRequestId;
     state = setRefreshing(state, true);
     render();
@@ -163,13 +230,18 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
 
     render();
     if (state.currentView === "backlog" && state.selectedProjectId !== null && state.projectError === null) {
-      await backlog.load(state.selectedProjectId);
+      await loadBacklogRoute(state.selectedProjectId);
     }
     if (isReadPage(state.currentView) && state.selectedProjectId !== null && state.projectError === null) await loadReadPages(state.selectedProjectId);
   }
 
   function handleRouteChange(route: RouteState): void {
     if (destroyed) return;
+    if (route.view === "retrospectives" && state.currentView === "retrospectives" && state.readPages && !state.projectLoading && formatRoute(route) === formatRoute(state.route)) return;
+    saveReadingPosition();
+    const previousRoute = state.route;
+    state = {...state, route};
+    state = { ...state, selectedPlanId: route.planId ?? null, selectedReportId: route.reportId ?? null };
 
     if (state.workspace === null || state.status === "loading") {
       if (state.status === "loading") {
@@ -187,10 +259,14 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
 
     const projectChanged = route.projectId !== state.selectedProjectId;
     const viewChanged = route.view !== state.currentView;
+    if (route.view === "retrospectives") state = {...state,retrospectiveFilters:route.retrospectiveFilters ?? (projectChanged ? {project:route.projectId ?? "",status:"",task:""} : state.retrospectiveFilters)};
+    if (projectChanged || viewChanged) { documentRequestId++; state = {...state, docs:emptyDocsState()}; }
+    backlogNavigation++;
+    if (viewChanged) { backlog.reset(); readRequestId++; }
 
     if (projectChanged) {
       backlog.reset();
-      state = { ...state, readPages: null, readPagesLoading: false, readPagesError: null, retrospectiveFilters: { project: route.projectId ?? "", status: "", task: "" } };
+      state = { ...state, readPages: null, readPagesLoading: false, readPagesError: null, retrospectiveFilters: route.retrospectiveFilters ?? { project: route.projectId ?? "", status: "", task: "" } };
       if (route.projectId === null) {
         currentRequestId++;
         state = {
@@ -213,8 +289,23 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
     } else if (viewChanged) {
       state = selectView(state, route.view);
       render();
-      if (route.view === "backlog" && route.projectId !== null) void backlog.load(route.projectId);
+      if (route.view === "backlog" && route.projectId !== null) void loadBacklogRoute(route.projectId);
       if (isReadPage(route.view) && route.projectId !== null) void loadReadPages(route.projectId);
+    } else {
+      render();
+      if (route.view === "backlog" && route.projectId !== null) {
+        backlog.reset();
+        void loadBacklogRoute(route.projectId);
+      }
+      if ((route.view === "plans" || route.view === "reports") && route.projectId !== null) void loadReadPages(route.projectId);
+      if (route.view === "retrospectives" && route.projectId !== null) {
+        if (state.readPages) { focusReadArtifact(); restoreReadingPosition(); }
+        else void loadReadPages(route.projectId);
+      }
+      if (route.view === "docs" && route.projectId !== null) {
+        if (previousRoute.documentPath === route.documentPath && state.docs.document) focusDocumentSection();
+        else void loadDocs(route.projectId);
+      }
     }
   }
 
@@ -226,6 +317,28 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
   function handleClick(event: MouseEvent): void {
     const target = event.target as HTMLElement | null;
     if (target === null) return;
+
+    const link = target.closest<HTMLAnchorElement>('a[href]');
+    if (link && typeof window !== "undefined" && link.hash.startsWith("#/projects/")) {
+      const destination = parseRoute(link.hash);
+      if (destination.returnTo) {
+        const origin = parseRoute(destination.returnTo);
+        if (origin.projectId === state.route.projectId && origin.view === state.currentView) readingPositions.set(destination.returnTo,window.scrollY);
+      }
+    }
+
+    if (target.closest("#docs-retry") !== null && state.selectedProjectId !== null) { void loadDocs(state.selectedProjectId); return; }
+
+    const taskLink = target.closest<HTMLButtonElement>("[data-plan-target]");
+    if (taskLink !== null) {
+      const detail = container.ownerDocument.getElementById(taskLink.dataset.planTarget!) as HTMLDetailsElement | null;
+      if (detail && container.contains(detail)) {
+        detail.open = true;
+        detail.scrollIntoView({ block: "start" });
+        detail.querySelector("summary")?.focus({ preventScroll: true });
+      }
+      return;
+    }
 
     const refreshBtn = target.closest<HTMLButtonElement>("#btn-refresh");
     if (refreshBtn !== null) {
@@ -246,7 +359,10 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
     }
     const itemButton = target.closest<HTMLButtonElement>("[data-backlog-item]");
     if (itemButton !== null) {
-      void backlog.select(itemButton.dataset.backlogItem!);
+      router.navigate({ projectId: state.selectedProjectId, view: "backlog", itemId: itemButton.dataset.backlogItem!,
+        ...(state.selectedPlanId ? { planId: state.selectedPlanId } : {}),
+        ...(state.route.returnTo ? {returnTo:state.route.returnTo} : {}),
+      });
       return;
     }
     const statusButton = target.closest<HTMLButtonElement>("[data-backlog-status]");
@@ -287,9 +403,13 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
       task: value("task").trim(),
       status: value("status"),
     } };
+    const nextRoute = {...state.route, retrospectiveId:undefined, retrospectiveFilters:state.retrospectiveFilters};
+    state = {...state,route:nextRoute};
     render();
+    router.navigate(nextRoute);
   }
 
+  if (typeof window !== "undefined") window.addEventListener("scroll", saveReadingPosition, {passive:true});
   container.addEventListener("submit", handleSubmit);
   container.addEventListener("click", handleClick);
   container.addEventListener("change", handleChange);
@@ -310,6 +430,7 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
       container.removeEventListener("click", handleClick);
       container.removeEventListener("change", handleChange);
       router.cleanup();
+      if (typeof window !== "undefined") window.removeEventListener("scroll", saveReadingPosition);
     },
   };
 }
