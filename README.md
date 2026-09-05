@@ -59,7 +59,7 @@ Retrospectives 展示 workspace 完整列表，默认过滤当前项目；支持
 精确过滤，project/task 留空表示全部，填写 `null` 表示 provenance 未记录。回顾按 inbox/active/archive 分组，
 列表从正文派生摘要，详情优先展示渲染正文、下一步和结案说明，技术信息折叠；关联任务可点击。
 Docs 与回顾详情支持直达地址；回顾筛选条件写入地址，刷新或任务往返后恢复。阅读位置与展开状态在当前页面会话内保留。
-malformed artifact 单独显示诊断。这四个页面均只读，点击顶部 Refresh 重读文件。Mermaid 暂按代码显示，图片不加载。
+malformed artifact 单独显示诊断。Reports、Docs、Retrospectives 保持只读；Plans 可预览并确认修订。点击顶部 Refresh 重读文件。Mermaid 暂按代码显示，图片不加载。
 
 开发者也可以增加 `--static-dir <path>` 覆盖静态资源目录。可选 `--host` 只接受
 loopback 地址，`--port 0` 仅适合测试或一次性隔离运行。使用 `Ctrl-C` 或发送 `SIGTERM` 会关闭 listener。
@@ -86,14 +86,14 @@ npm run test:e2e
 ```
 
 `npm run test:e2e` 先生成生产 build，再用 headless Chromium 运行浏览器 smoke：选择项目、浏览详情、
-更新 Backlog、revision 冲突后刷新重试，以及四个只读领域的正常、空和 diagnostic 页面。
+更新 Backlog、revision 冲突后刷新重试，以及领域阅读页的正常、空和 diagnostic 页面；还覆盖内容修订、执行控制及验收。
 它也验证未知项目和 server 断连不会修改 authority 文件。每个测试自动创建并清理临时 workspace，
 server 使用隔离端口，不需要运行真实开发服务。整套 E2E 上限 120 秒，单项 30 秒；失败 trace 保留在
 已被 Git 忽略的 `test-results/`。浏览器版本由 Playwright 锁定，升级依赖后重新运行浏览器安装命令。
 Linux 若提示系统库缺失，可按 [Playwright 浏览器安装说明](https://playwright.dev/docs/browsers) 安装所需依赖。
 
 Workbench 仅供受信任本地用户和 workspace 使用，监听 loopback；workspace 只能由启动参数指定。
-Web mutation 仅限 Backlog 状态，要求 JSON 和同源 browser Origin，并携带已加载 revision；其余领域只读。
+Web 支持 Backlog 状态/内容、Plan 修订及执行控制/验收；mutation 要求 JSON、同源 browser Origin 和相应 revision。
 它不提供用户账户、远程访问或对抗恶意本地并发的安全保证。
 
 ## 当前能力
@@ -190,7 +190,7 @@ capture 的显式和自动 ID 在三个状态目录中保持唯一；运行时�
 - `pops backlog init/add/list/show/update`：store bootstrap、CRUD、状态流转与 revision 保护
 - `pops plan next <project> <plan-id> [--json]`：只读查询该 Plan 的可开始、进行中和受阻 task，解释依赖原因；
   可开始任务按 P0 → P3、ID 排序，next 为首项或 null。依赖可以位于同项目 Plan 外，查询不自动改状态或启动任务
-- `pops plan create/list/show/validate/approve/materialize`：从 JSON 草案创建、列出、查看、校验、批准并将已批准的 `plan/Plan@1` artifact 写入 Backlog；Plan ID 由 title 稳定生成，
+- `pops plan create/list/show/validate/approve/materialize/revise`：从 JSON 草案创建、列出、查看、校验、批准并将已批准的 `plan/Plan@1` artifact 写入 Backlog；Plan ID 由 title 稳定生成，
   无 ASCII slug 的标题使用每个 Unicode code point 的 `u<hex>` token
 - `pops report create/list/show`：从已批准且 materialized 的 Plan 生成 completed 或显式 partial Delivery Report，并查询已生成的 Report；create 需要至少一条 `--verification`
 - `pops retrospective capture/list/show`：将调用方提供的 trigger、harness、model、project/task provenance 和 Markdown 证据捕获到 workspace 级 inbox，并按 status/project/task 查询；capture 不自动分类或流转
@@ -215,3 +215,23 @@ capture 的显式和自动 ID 在三个状态目录中保持唯一；运行时�
 - 只有 approved Plan 才能 materialize；Plan 会保存每个局部 key 到 Backlog ID 的 `materialization.mapping`，重复执行完整 materialize 返回 `no_op`
 - backlog update 支持 `--expected-revision` 防止覆盖并发修改
 - Report create 从 materialized Plan 和同一 project 的 Backlog 读取实际状态；未完成 task 必须提供非空 `--partial-acceptance`，Report 文件不会覆盖既有文件
+
+
+## 工作基础能力
+
+Backlog 详情提供“编辑任务内容”，修改标题和 Markdown 验收要求。冲突时保留草稿，显式重读最新版本后再提交。
+Plan 修订采用草案 JSON 输入，先查看变更与受影响任务，再确认该次预览。已物化计划保留 keys 和 mapping；
+只同步未开始且未独立编辑的任务。已开始、已完成或已有执行历史的任务受保护；物化后增删 key、改变类型或父级
+需另建后续计划，界面和 CLI 会说明原因。
+
+任务详情可查看执行尝试、冻结输入、改动快照、验证和验收结论。失败后重试保留原尝试。
+验收要求执行成功、当前代码上的检查通过、证据完整且任务输入未变化；有执行历史的任务不能绕过验收直接标记 done。
+没有执行记录的手工任务仍可按原工作流更新状态。
+
+本版提供运行控制基础和可注入 runner，尚未接入 Pi。默认 Workbench 不配置 runner，启动/重试入口不可用；
+可以通过 CLI 记录外部执行，在网页核对并验收。CLI 的 finish/verify 记录调用方提交的事实，不执行命令或替调用方验证真实性。
+服务管理的工作独立于浏览器连接，页面重新进入后重读记录；服务重启后未确认的工作显示待核对，不自动重放。
+外部 CLI 记录不归服务进程管理，不会因 Workbench 重启而被判定中断。
+
+执行操作的完整参数和返回值见 [Agent 操作契约](docs/AGENT_CONTRACT.md#执行记录与验收)。
+执行记录需要已登记的 Git Repo；普通项目登记、Backlog 和文档能力仍不要求 Git。

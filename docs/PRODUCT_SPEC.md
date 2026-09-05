@@ -27,12 +27,13 @@ Markdown/JSON artifact 为权威数据，通过统一 `pops` CLI 和 Local Web W
 | 模块 | 目标能力 | 当前状态 |
 |---|---|---|
 | Workspace/Catalog | 初始化、项目注册、typed roots、doctor | 已实现（init、project add/list/doctor） |
-| Backlog | Store bootstrap、CRUD、dependency、queue | 部分实现（init/add/list/show/update 与 depends_on 存储；queue 未实现） |
-| Plan | authoring、查询、validation、review、approval、materialization | authoring/query/validation/approval/materialization 已实现 |
+| Backlog | Store bootstrap、CRUD、dependency、queue | 已有状态与内容编辑、revision 保护、depends_on；全局 queue 未实现 |
+| Plan | authoring、查询、validation、review、approval、materialization、修订 | 已实现创建、校验、批准、物化、下一步查询及 preview/confirm 修订 |
 | Report | delivery evidence 生成和关联 | 部分实现（Report@1 schema/storage、单 Plan 生成资格校验与 `pops report create/list/show`；已覆盖 completed/partial/no-clobber CLI smoke） |
 | Project Docs | roles、templates、scaffold、check | scaffold/check 与 Workbench 文档阅读已实现 |
 | Retrospective | workspace 级 Markdown 记录、inbox/active/archive store 与派生索引 | 已实现（Retrospective@1、Store@1、manifest 路由、`pops init` bootstrap、`pops retrospective capture/list/show/triage/archive` 与 revision 保护；Workbench 只读列表、过滤与详情已实现） |
 | Workbench | 统一浏览和受控写入 | Backlog 可写切片已实现（完整列表、详情、revision-protected 状态更新与冲突重试）；Plan、Report、Retrospective 阅读视图及 Docs 文档阅读与导航已实现；Chromium 浏览器 E2E 已覆盖启动、导航、读写和失败路径 |
+| Execution | 尝试记录、运行控制、验证与验收 | 已实现外部工作 CLI 记录、可注入 runner、Web 查看/控制/验收；尚未接入 Pi |
 | CLI bootstrap | `pops --help`、`pops --version` | 已实现 |
 
 ## 数据契约原则
@@ -49,7 +50,7 @@ Markdown/JSON artifact 为权威数据，通过统一 `pops` CLI 和 Local Web W
   呈现，不改变 Markdown/JSON authority，也不在输出中增加机器绝对路径。
 - Local Workbench HTTP server 由启动参数固定一个 workspace，默认只绑定 `127.0.0.1:7331`，并以稳定 JSON
   envelope 暴露 workspace/project overview 与 Backlog list/show/update。HTTP 请求不得携带 workspace path；
-  Backlog update 只接受 JSON `status` 和可选 `expected_revision`，stale revision 返回 conflict，不写入旧状态。
+  Backlog update 接受状态更新，或携带 `expected_revision` 的 `title`/`body` 内容更新；两者不可混合，stale revision 返回 conflict，不写入旧状态。
   mutation 拒绝非 JSON content type 和非同源 browser Origin；错误不暴露 stack trace 或机器绝对路径。
 - Workbench 的 `GET /api/projects/<id>/read-pages` 返回独立 typed projection：完整 Plan、Report、固定文档检查结果和
   workspace Retrospective 记录；不接受 query 参数、文件路径或 mutation。Plan 可展开 goal、status、approval、
@@ -154,7 +155,7 @@ Plan 通过同项目 Report 的 `plan` 精确等于 `project-ops:plans/<plan-id>
 未完成且已有 partial 报告仍保留实际进度。报告仅代表创建时快照，后续 Backlog 变化不改写其内容或 outcome。
 损坏 Report 在 Plan 页与 Reports 页保留读取诊断，不阻断有效报告。
 报告链接使用 `#/projects/<project>/reports/<report-id>?plan=<plan-id>`，支持直接定位、刷新、返回原 Plan；
-失效目标显示错误并保留返回入口。页面没有报告创建按钮或写接口，报告仍通过 CLI 根据真实状态与验证证据创建。
+失效目标显示错误并保留返回入口。页面没有报告创建按钮或 Report 写接口，报告仍通过 CLI 根据真实状态与验证证据创建。
 
 ## Docs 阅读与跨页导航
 
@@ -173,3 +174,33 @@ Docs 地址为 `#/projects/<id>/docs?path=<encoded-path>&section=<encoded-headin
 Report 和回顾关联跳转使用受限内部 `from` 地址提供“返回来源页面”，Report 的原 Plan 返回继续可用。
 地址保存选择、筛选和章节；滚动位置与展开状态仅在当前页面会话内存中保存，整页重载不保证恢复像素位置或源码模式。
 读取时隔离过期响应，Refresh 重读文件，无实时推送；状态操作仍仅限已有 Backlog 更新。
+
+
+## 工作修订、执行与验收
+
+任务内容编辑通过共享 application API 提供 CLI/Web 入口，title/body 修改必带当前 revision，冲突不清除编辑草稿。
+Plan show 额外返回内容计算得到的 revision；revision 不是新的持久化 Plan 生命周期。
+`plan revise` 和 Web 的修订入口先返回 preview、confirmation token、变更字段及受影响任务 revision，确认后重查相同输入再写入。
+已批准计划的确认记录成为本次修订的 approval note。物化后保留 Plan ID、任务 key 与 mapping；未开始任务的内容、优先级、
+依赖可同步，独立编辑或已有执行历史的任务拒绝隐式覆盖。结构增删、key 改名、item_type/parent 改变明确拒绝并建议后续计划。
+普通 I/O 失败尝试恢复本次受影响文件，失败给出诊断；不承诺跨进程事务或 crash consistency。
+
+`execution/Attempt@1` 是独立 JSON authority。manifest 的 `artifact_layout.roots.executions` 声明该 type，
+由同一项目 layout 解析 executions root。记录有稳定 attempt/execution ID、retry_of、项目与任务逻辑引用、输入任务快照和 revision、
+关联 Plan 快照（存在物化来源时）、补充指示、起止时间、执行状态、结果、Git 快照、验证证据和验收结论。
+状态为 running、stop_requested、unknown、succeeded、failed、stopped；执行结束与验收是不同事实，重试创建新尝试而不改写旧输入。
+
+CLI 可记录外部工作；server 可接收受控 runner，默认无 runner 且不提供 Pi 或任意 shell 执行入口。
+同任务的重复启动返回已有活动尝试，unknown 阻止新工作；页面通过查询重读当前状态，断线不结束工作。
+停止请求先记录 stop_requested，runner 确认结束后才成为 stopped；无法确认的结果为 unknown。
+服务重启核对其管理的运行，缺少 handle 的活动记录为 unknown；外部工作记录不由服务恢复。
+用户核实旧工作已停止并填写说明后可确认中断，再显式重试。runtime handles 仅在后端内存，不作为业务 authority。
+
+验证记录包含命令、通过/失败、代码快照和保存在 executions root 的长期证据。验收时核对当前代码与验证快照，
+并要求当前快照下各命令最新结果都通过、证据仍完整、任务输入未变且没有后继尝试；旧尝试不能越过正在进行的重试完成任务。
+用户选择接受或继续修改，结论绑定具体尝试；接受才推进任务 done，普通状态更新不能绕过已有执行记录的验收。
+验收不执行 merge/push，也不意味着后续 DAG 的 landed。Report 可用稳定逻辑引用记录证据，仍遵守原有交付资格。
+
+当前仅支持本机单人、受信任 workspace 和 Node.js；执行快照需要 Git，可记录未提交和未跟踪改动。
+静态写入 containment 和创建 no-clobber 适用于本轮新增执行文件；不抵抗恶意 ancestor swap，不依赖 native helper，
+不承诺远端访问、多服务争抢、跨平台进程语义等价或自动恢复执行。凭据不得作为执行证据提交；Pi session 持久化留待实际接入。

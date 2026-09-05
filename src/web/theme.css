@@ -1,0 +1,81 @@
+:root {
+  color-scheme: dark;
+  --bg-primary: #0f172a;
+  --bg-secondary: #1e293b;
+  --bg-tertiary: #334155;
+  --bg-reading: #152035;
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --text-reading: #e2e8f0;
+  --text-on-accent: #0f172a;
+  --text-on-accent-hover: #ffffff;
+  --border-color: #334155;
+  --border-subtle: #1e293b;
+  --accent: #38bdf8;
+  --accent-hover: #0284c7;
+  --accent-bg: rgba(56, 189, 248, 0.1);
+
+  --link: #7dd3fc;
+  --link-hover: #bae6fd;
+  --focus-ring: var(--accent);
+  --reading-measure: 76ch;
+  --reading-line-height: 1.85;
+
+  --status-ready: #4ade80;
+  --status-ready-bg: rgba(74, 222, 128, 0.15);
+  --status-loading: #fbbf24;
+  --status-loading-bg: rgba(251, 191, 36, 0.15);
+  --status-error: #f87171;
+  --status-error-bg: rgba(248, 113, 113, 0.15);
+
+  --badge-todo: #94a3b8;
+  --badge-todo-bg: #334155;
+  --badge-inprogress: #38bdf8;
+  --badge-inprogress-bg: rgba(56, 189, 248, 0.2);
+  --badge-done: #4ade80;
+  --badge-done-bg: rgba(74, 222, 128, 0.2);
+  --badge-blocked: #f87171;
+  --badge-blocked-bg: rgba(248, 113, 113, 0.2);
+  --badge-deferred: #ca8a04;
+  --badge-deferred-bg: rgba(202, 138, 4, 0.2);
+  --badge-cancelled: #64748b;
+  --badge-cancelled-bg: rgba(100, 116, 139, 0.2);
+
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  line-height: 1.5;
+  min-height: 100vh;
+}
+
+/* Low specificity keeps navigation and button treatments component-owned. */
+:where(a:any-link) {
+  color: var(--link);
+  text-decoration: underline;
+  text-underline-offset: .2em;
+  text-decoration-thickness: 1px;
+}
+
+:where(a:any-link:hover, a:any-link:focus-visible) {
+  color: var(--link-hover);
+  text-decoration-thickness: 2px;
+}
+
+/* Accessibility: Visible Focus Outline */
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+

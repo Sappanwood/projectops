@@ -9,7 +9,7 @@ export const OPS_ROOT = "ops";
 export const RETROSPECTIVE_ARTIFACT_TYPE = "workflow/retrospectives@1";
 export const RETROSPECTIVE_ROOT = "retrospectives";
 
-export type ArtifactKey = "backlog" | "plans" | "reports" | "adr" | "research";
+export type ArtifactKey = "backlog" | "plans" | "reports" | "adr" | "research" | "executions";
 
 export const ARTIFACT_TYPES: Record<ArtifactKey, string> = {
   backlog: "backlog/store@1",
@@ -17,6 +17,7 @@ export const ARTIFACT_TYPES: Record<ArtifactKey, string> = {
   reports: "markdown/report@1",
   adr: "markdown/adr@1",
   research: "markdown/research@1",
+  executions: "execution/Attempt@1",
 };
 
 export const ARTIFACT_KEYS = Object.keys(ARTIFACT_TYPES) as ArtifactKey[];

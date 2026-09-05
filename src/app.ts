@@ -14,6 +14,8 @@ import { planShow } from "./useCases/planShow.js";
 import { planValidate } from "./useCases/planValidate.js";
 import { planApprove } from "./useCases/planApprove.js";
 import { planMaterialize } from "./useCases/planMaterialize.js";
+import { planRevise } from "./useCases/planRevise.js";
+import { executionCommand } from "./useCases/executionCommand.js";
 import { docsScaffold } from "./useCases/docsScaffold.js";
 import { docsCheck } from "./useCases/docsCheck.js";
 import { reportCreate } from "./useCases/reportCreate.js";
@@ -46,7 +48,7 @@ Commands:
   backlog add <project>   Add a backlog item (requires -T, -c, --priority)
   backlog list <project>  List backlog items (optional --status filter)
   backlog show <project> <item>  Show a full backlog item
-  backlog update <project> <item>  Update item status (--status, --expected-revision)
+  backlog update <project> <item>  Update status or content (--title, --body-file, --expected-revision)
   plan create <project> --input <draft.json>  Create a Plan from a JSON draft
   plan list <project>     List Plans for a project
   plan show <project> <plan>  Show a complete Plan
@@ -54,6 +56,7 @@ Commands:
   plan validate <project> <plan>  Validate a Plan
   plan approve <project> <plan> --review-note <note>  Approve a validated Plan
   plan materialize <project> <plan>  Materialize an approved Plan into Backlog
+  plan revise <project> <plan> --input <draft.json> --expected-revision <revision> [--confirm <token>]  Preview or confirm a revision
   docs scaffold <project>       Create the fixed Project Docs files
   docs check <project>          Check the fixed Project Docs files
   report create <project> <plan> --verification <evidence>  Create a Delivery Report
@@ -64,6 +67,14 @@ Commands:
   retrospective show <id>     Show a complete workflow retrospective
   retrospective triage <id>   Classify an inbox retrospective into active or archive
   retrospective archive <id>  Close an active retrospective into archive
+  execution create <project> <item> [--instructions <text>] [--retry-of <attempt>] [--expected-revision <task-revision>]
+  execution list <project> [--item <item>]  List recorded attempts
+  execution show <project> <attempt>  Show input, results and evidence diagnostics
+  execution finish <project> <attempt> --outcome succeeded|failed|stopped --summary <text> --expected-revision <revision>
+  execution verify <project> <attempt> --command <text> --outcome passed|failed --evidence-file <file> --expected-revision <revision>
+  execution accept|rework <project> <attempt> --note <text> --expected-revision <revision>
+  execution recover <project>  Mark abandoned runtime work as awaiting confirmation
+  execution confirm-interrupted <project> <attempt> --note <text> --expected-revision <revision>
 
 Project workflows will be added as vertical slices during the alpha phase.`;
 
@@ -80,6 +91,8 @@ export function runCli(args: readonly string[], io: CliIO, cwd = process.cwd()):
 
   const [command, ...rest] = args;
   switch (command) {
+    case "execution":
+      return executionCommand(rest, io, cwd);
     case "init":
       return initWorkspace(rest.find((arg) => arg !== "--json"), rest.includes("--json"), io, cwd);
     case "project": {
@@ -147,6 +160,10 @@ export function runCli(args: readonly string[], io: CliIO, cwd = process.cwd()):
       }
       if (sub === "materialize") {
         return planMaterialize(first, forwarded.find((arg) => !arg.startsWith("--")), json, io, cwd);
+      }
+      if (sub === "revise") {
+        const [planId, ...revisionArgs] = forwarded;
+        return planRevise(first, planId, revisionArgs, json, io, cwd);
       }
       io.stderr(`Unknown plan command: ${sub ?? ""}`);
       return 1;

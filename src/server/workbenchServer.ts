@@ -6,6 +6,7 @@ import {
   listBacklogItems,
   showBacklogItem,
   updateBacklogItemStatus,
+  updateBacklogItemContent,
 } from "../application/backlogApi.js";
 import type {
   ApplicationError,
@@ -19,6 +20,9 @@ import {
 } from "../application/workbenchReadModel.js";
 import { getWorkspaceSummary } from "../application/workspaceApi.js";
 import { listDocuments, showDocument } from "../application/docsApi.js";
+import { showPlanRevision, revisePlan } from "../application/planRevision.js";
+import { decideExecution, listExecutions, showExecution } from "../application/executionApi.js";
+import { ExecutionRuntime, type Runner } from "../execution/runtime.js";
 
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 7331;
@@ -47,6 +51,7 @@ export type StartWorkbenchServerOptions = {
   host?: string;
   port?: number;
   staticDir?: string;
+  runner?: Runner;
 };
 
 export type WorkbenchServer = {
@@ -61,6 +66,7 @@ type RequestContext = {
   workspaceDir: string;
   origin: string;
   staticRoot?: string;
+  runtime: ExecutionRuntime;
 };
 
 type HttpErrorCode =
@@ -125,9 +131,14 @@ export async function startWorkbenchServer(
   }
   const originHost = host === "::1" ? "[::1]" : host;
   const origin = `http://${originHost}:${address.port}`;
+  const runtime = new ExecutionRuntime(options.runner);
+  for (const project of workspace.data.projects) {
+    runtime.recover({ workspaceDir: options.workspaceDir, projectId: project.id });
+  }
   context = {
     workspaceDir: options.workspaceDir,
     origin,
+    runtime,
     ...(staticRoot === undefined ? {} : { staticRoot }),
   };
 
@@ -219,6 +230,15 @@ async function handleRequest(
         requireAllowedOrigin(request, context.origin);
         requireJsonContentType(request);
         const body = await readUpdateBody(request);
+        if (body.status === undefined) {
+          sendApplicationResult(response, updateBacklogItemContent({
+            workspaceDir: context.workspaceDir, projectId, itemId,
+            ...(body.title === undefined ? {} : { title: body.title }),
+            ...(body.body === undefined ? {} : { body: body.body }),
+            expectedRevision: body.expected_revision!,
+          }));
+          return;
+        }
         sendApplicationResult(
           response,
           updateBacklogItemStatus({
@@ -255,6 +275,89 @@ async function handleRequest(
       if (documentPath === undefined) sendApplicationResult(response, listDocuments(input));
       else sendApplicationResult(response, showDocument({...input, path: documentPath}));
       return;
+    }
+
+    if (segments[0] === "api" && segments[1] === "projects" && segments[3] === "executions") {
+      const input = { workspaceDir: context.workspaceDir, projectId: segments[2]! };
+      if (segments.length === 4) {
+        requireMethod(request, "GET");
+        const itemId = singleQueryValue(url, "item_id");
+        const result = listExecutions({ ...input, ...(itemId === undefined ? {} : { itemId }) });
+        sendApplicationResult(response, result.ok
+          ? { ok: true, data: { ...result.data, runner_available: context.runtime.available } } : result);
+        return;
+      }
+      requireNoQuery(url);
+      if (segments.length === 5 && segments[4] === "start") {
+        requireMethod(request, "POST");
+        requireAllowedOrigin(request, context.origin);
+        requireJsonContentType(request);
+        const body = await readJsonRecord(request, ["item_id", "instructions", "retry_of", "expected_revision"]);
+        if (typeof body.item_id !== "string" || typeof body.expected_revision !== "string"
+          || Object.values(body).some(value => typeof value !== "string")) {
+          throw new HttpError(400, "INVALID_REQUEST", "Execution input is invalid.");
+        }
+        const task = showBacklogItem({ ...input, itemId: body.item_id });
+        if (!task.ok) { sendApplicationResult(response, task); return; }
+        if (task.data.item.revision !== body.expected_revision) {
+          sendApplicationResult(response, { ok: false, error: { code: "REVISION_MISMATCH", message: "Task changed; reload before starting work." } });
+          return;
+        }
+        sendApplicationResult(response, context.runtime.start({ ...input, itemId: body.item_id,
+          ...(typeof body.instructions === "string" ? { instructions: body.instructions } : {}),
+          ...(typeof body.retry_of === "string" ? { retryOf: body.retry_of } : {}),
+        }));
+        return;
+      }
+      if (segments.length === 5) {
+        requireMethod(request, "GET");
+        sendApplicationResult(response, showExecution({ ...input, attemptId: segments[4]! }));
+        return;
+      }
+      if (segments.length === 6 && ["stop", "confirm-interrupted", "decide"].includes(segments[5]!)) {
+        requireMethod(request, "POST");
+        requireAllowedOrigin(request, context.origin);
+        requireJsonContentType(request);
+        const action = segments[5];
+        const body = await readJsonRecord(request, action === "stop" ? ["expected_revision"]
+          : action === "decide" ? ["expected_revision", "decision", "note"] : ["expected_revision", "note"]);
+        if (typeof body.expected_revision !== "string" || Object.values(body).some(value => typeof value !== "string")) {
+          throw new HttpError(400, "INVALID_REQUEST", "Execution mutation is invalid.");
+        }
+        const mutation = { ...input, attemptId: segments[4]!, expectedRevision: body.expected_revision };
+        if (action === "stop") sendApplicationResult(response, context.runtime.stop(mutation));
+        else if (action === "confirm-interrupted") sendApplicationResult(response, context.runtime.confirmInterrupted({ ...mutation, note: String(body.note ?? "") }));
+        else {
+          if (body.decision !== "accepted" && body.decision !== "rework") throw new HttpError(400, "INVALID_REQUEST", "Acceptance decision is invalid.");
+          sendApplicationResult(response, decideExecution({ ...mutation, decision: body.decision, note: String(body.note ?? "") }));
+        }
+        return;
+      }
+    }
+
+    if (segments[0] === "api" && segments[1] === "projects" && segments[3] === "plans") {
+      requireNoQuery(url);
+      const input = { workspaceDir: context.workspaceDir, projectId: segments[2]!, planId: segments[4] ?? "" };
+      if (segments.length === 5) {
+        requireMethod(request, "GET");
+        sendApplicationResult(response, showPlanRevision(input));
+        return;
+      }
+      if (segments.length === 6 && segments[5] === "revision") {
+        requireMethod(request, "POST");
+        requireAllowedOrigin(request, context.origin);
+        requireJsonContentType(request);
+        const body = await readJsonRecord(request, ["draft", "expected_revision", "confirm"]);
+        if (typeof body.expected_revision !== "string" || !Object.hasOwn(body, "draft")
+          || (body.confirm !== undefined && typeof body.confirm !== "string")) {
+          throw new HttpError(400, "INVALID_REQUEST", "Revision input is invalid.");
+        }
+        sendApplicationResult(response, revisePlan({ ...input, draft: body.draft,
+          expectedRevision: body.expected_revision,
+          ...(body.confirm === undefined ? {} : { confirm: body.confirm }),
+        }));
+        return;
+      }
     }
 
     if (segments[0] === "api") {
@@ -329,7 +432,18 @@ function requireJsonContentType(request: IncomingMessage): void {
 
 async function readUpdateBody(
   request: IncomingMessage,
-): Promise<{ status: string; expected_revision?: string }> {
+): Promise<{ status?: string; title?: string; body?: string; expected_revision?: string }> {
+  const record = await readJsonRecord(request, ["status", "title", "body", "expected_revision"]);
+  const content = Object.hasOwn(record, "title") || Object.hasOwn(record, "body");
+  if ((content && Object.hasOwn(record, "status")) || (!content && typeof record.status !== "string")
+    || Object.values(record).some(value => typeof value !== "string")
+    || (content && (typeof record.expected_revision !== "string" || !record.expected_revision))) {
+    throw new HttpError(400, "INVALID_REQUEST", "Request body is invalid.");
+  }
+  return record as { status?: string; title?: string; body?: string; expected_revision?: string };
+}
+
+async function readJsonRecord(request: IncomingMessage, allowedKeys: string[]): Promise<Record<string, unknown>> {
   const raw = await readBody(request);
   let value: unknown;
   try {
@@ -341,23 +455,10 @@ async function readUpdateBody(
     throw new HttpError(400, "INVALID_REQUEST", "Request body is invalid.");
   }
   const record = value as Record<string, unknown>;
-  const allowed = new Set(["status", "expected_revision"]);
-  if (
-    Object.keys(record).some((key) => !allowed.has(key))
-    || typeof record.status !== "string"
-    || (
-      record.expected_revision !== undefined
-      && typeof record.expected_revision !== "string"
-    )
-  ) {
+  if (Object.keys(record).some((key) => !allowedKeys.includes(key))) {
     throw new HttpError(400, "INVALID_REQUEST", "Request body is invalid.");
   }
-  return {
-    status: record.status,
-    ...(record.expected_revision === undefined
-      ? {}
-      : { expected_revision: record.expected_revision as string }),
-  };
+  return record;
 }
 
 async function readBody(request: IncomingMessage): Promise<string> {
@@ -399,8 +500,10 @@ function statusForApplicationError(error: ApplicationError): number {
     case "ITEM_NOT_FOUND":
     case "PLAN_NOT_FOUND":
     case "DOCUMENT_NOT_FOUND":
+    case "EXECUTION_NOT_FOUND":
       return 404;
     case "REVISION_MISMATCH":
+    case "EXECUTION_CONFLICT":
       return 409;
     case "WORKSPACE_INVALID":
     case "BACKLOG_STORE_INVALID":
@@ -412,7 +515,10 @@ function statusForApplicationError(error: ApplicationError): number {
     case "INVALID_STATUS":
     case "INVALID_ITEM_ID":
     case "INVALID_DOCUMENT_PATH":
+    case "EXECUTION_INVALID":
       return 400;
+    case "RUNNER_UNAVAILABLE":
+      return 503;
   }
 }
 

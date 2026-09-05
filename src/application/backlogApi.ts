@@ -1,7 +1,7 @@
-import { existsSync, statSync } from "node:fs";
+import { existsSync, statSync, realpathSync } from "node:fs";
 import path from "node:path";
 
-import { projectArtifactRoots } from "../catalog/workspace.js";
+import { projectArtifactRoots, isWithinWorkspace } from "../catalog/workspace.js";
 import {
   ManifestParseError,
   WorkspaceNotFoundError,
@@ -29,6 +29,8 @@ import {
 } from "../backlog/storeFs.js";
 import { ITEMS_DIR, type BacklogStoreManifest } from "../backlog/store.js";
 import { applicationFailure, applicationSuccess, type ApplicationResult } from "./result.js";
+
+import { listExecutions } from "./executionApi.js";
 
 export type BacklogItemSummary = Omit<BacklogItem, "body">;
 
@@ -132,6 +134,11 @@ export function updateBacklogItemStatus(
   }
 
   const status = request.status as ItemStatus;
+  if (status === "done") {
+    const executions = listExecutions(request);
+    if (!executions.ok) return executions;
+    if (executions.data.attempts.length) return applicationFailure("ITEM_INVALID", "Managed execution must be accepted through its execution decision before marking the task done.");
+  }
   if (status === before.status) return applicationSuccess(buildReceipt(before, before, []));
 
   const today = new Date().toISOString().slice(0, 10);
@@ -149,6 +156,39 @@ export function updateBacklogItemStatus(
   updateItemFile(context.data.root, result);
   rebuildIndex(context.data.root);
   return applicationSuccess(buildReceipt(before, result, changedFields));
+}
+
+export type UpdateBacklogItemContentRequest = ShowBacklogItemRequest & {
+  title?: string;
+  body?: string;
+  expectedRevision: string;
+};
+
+export function updateBacklogItemContent(request: UpdateBacklogItemContentRequest): ApplicationResult<BacklogMutationReceipt> {
+  if (typeof request.expectedRevision !== "string" || !request.expectedRevision) return applicationFailure("REVISION_MISMATCH", "Content edits require expectedRevision.");
+  if ((request.title !== undefined && (typeof request.title !== "string" || !request.title.trim())) ||
+      (request.body !== undefined && typeof request.body !== "string") ||
+      (request.title === undefined && request.body === undefined)) return applicationFailure("ITEM_INVALID", "Provide a non-empty title or a body string.");
+  const context = resolveBacklogContext(request.workspaceDir, request.projectId);
+  if (!context.ok) return context;
+  const loaded = showBacklogItem(request);
+  if (!loaded.ok) return loaded;
+  const before = loaded.data.item;
+  if (before.revision !== request.expectedRevision) return applicationFailure("REVISION_MISMATCH", `Revision mismatch for ${before.id}: current ${before.revision}. Reload and reapply your edit.`);
+  const result = { ...before, ...(request.title === undefined ? {} : {title: request.title}), ...(request.body === undefined ? {} : {body: request.body}) };
+  if (result.title === before.title && result.body === before.body) return applicationSuccess(buildReceipt(before, before, []));
+  result.updated = new Date().toISOString().slice(0, 10);
+  result.revision = computeRevision(result);
+  try {
+    const workspace = loadWorkspace(request.workspaceDir);
+    const root = realpathSync(context.data.root);
+    if (!isWithinWorkspace(realpathSync(workspace.root), root) ||
+        !isWithinWorkspace(root, realpathSync(path.join(root, ITEMS_DIR, `${result.id}.md`))) ||
+        !isWithinWorkspace(root, realpathSync(path.join(root, "INDEX.md")))) return applicationFailure("ITEM_INVALID", "Backlog targets resolve outside their declared workspace.");
+  } catch { return applicationFailure("ITEM_INVALID", "Backlog targets cannot be resolved."); }
+  updateItemFile(context.data.root, result);
+  rebuildIndex(context.data.root);
+  return applicationSuccess(buildReceipt(before, result, diffFields(before, result)));
 }
 
 function resolveBacklogContext(

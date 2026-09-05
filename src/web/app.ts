@@ -1,3 +1,5 @@
+import { createExecutionUi } from "./executionUi.js";
+import { createFoundationUi } from "./foundationUi.js";
 import { isReadPage } from "./readPagesView.js";
 import { createApiClient, type ApiClient } from "./apiClient.js";
 import { createBacklogController } from "./backlogController.js";
@@ -51,6 +53,9 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
     render();
   });
 
+  const executions = createExecutionUi(container, apiClient, () => state, refresh);
+  const foundation = createFoundationUi(container, apiClient, () => state, refresh);
+
   const readingDetails = new Map<string, boolean>();
   const readingPositions = new Map<string, number>();
   function saveReadingPosition(): void {
@@ -70,6 +75,8 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
       readingDetails.set(`${renderedProject}:${detail.dataset.readingKey}`, detail.open);
     }
     container.innerHTML = renderApp(state);
+    foundation.render();
+    executions.render();
     renderedProject = state.selectedProjectId;
     for (const detail of container.querySelectorAll?.<HTMLDetailsElement>("details[data-reading-key]") ?? []) {
       const open = readingDetails.get(`${renderedProject}:${detail.dataset.readingKey}`);
@@ -426,6 +433,8 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
     destroy() {
       destroyed = true;
       backlog.destroy();
+      foundation.destroy();
+      executions.destroy();
       container.removeEventListener("submit", handleSubmit);
       container.removeEventListener("click", handleClick);
       container.removeEventListener("change", handleChange);

@@ -13,6 +13,7 @@ export type ApiResult<T> =
   | { ok: false; error: AppError };
 
 export type ApiClient = {
+  request?<T>(path: string, body?: unknown, method?: string): Promise<ApiResult<T>>;
   listDocuments(projectId: string): Promise<ApiResult<DocumentList>>;
   showDocument(projectId: string, path: string): Promise<ApiResult<ProjectDocument>>;
   getReadPages(projectId: string): Promise<ApiResult<WorkbenchReadPages>>;
@@ -31,11 +32,11 @@ export function createApiClient(
   const fetchFn = options.fetchFn ?? globalThis.fetch;
   const baseUrl = (options.baseUrl ?? "").replace(/\/+$/, "");
 
-  async function request<T>(path: string, body?: unknown): Promise<ApiResult<T>> {
+  async function request<T>(path: string, body?: unknown, method?: string): Promise<ApiResult<T>> {
     const url = `${baseUrl}${path}`;
     try {
       const response = await fetchFn(url, {
-        method: body === undefined ? "GET" : "PATCH",
+        method: method ?? (body === undefined ? "GET" : "PATCH"),
         headers: { accept: "application/json", ...(body === undefined ? {} : { "content-type": "application/json" }) },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       });
@@ -82,6 +83,7 @@ export function createApiClient(
   }
 
   return {
+    request,
     listDocuments(projectId) { return request(`/api/projects/${encodeURIComponent(projectId)}/docs`); },
     showDocument(projectId, path) { return request(`/api/projects/${encodeURIComponent(projectId)}/docs?path=${encodeURIComponent(path)}`); },
     getReadPages(projectId) {

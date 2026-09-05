@@ -81,7 +81,7 @@ pops backlog update projectops "$item_id" --status in_progress --expected-revisi
 
 `show` 的顶层 `revision` 用于下一次写入。完成实际工作并验证后，重新 show，使用最新 revision 将状态更新
 为 `done`。发生冲突时读取最新内容、判断原意是否仍成立，再决定是否提交；不得去掉 revision 强制重试。
-CLI 的 revision 参数可选，Agent 写入必须携带。状态支持 `todo|in_progress|done`；当前 update 仅修改状态。
+CLI 的 revision 参数可选，Agent 写入必须携带。状态支持 `todo|in_progress|done`；update 也支持单独的标题/正文编辑，不能与状态混合提交。已有执行记录的任务必须通过 execution accept 完成，不能直接 update done。
 更新后的状态从 `result.status` 读取，更新前状态从 `before.status` 读取；成功收据没有 `after` 字段。
 创建可用 `--item-type task|epic`、`--parent-id <ID>`、`--depends-on <ID1,ID2>`。
 依赖不会自动执行，也不会强制阻止状态变更；Agent 根据验收与依赖实际情况推进，不能仅为生成 Report 标记完成。
@@ -112,8 +112,7 @@ pops plan validate projectops "$plan_id" --json
 ```
 
 `plan_id` 取创建结果的 `plan.id`；示例标题生成 `plan-agent-workflow`。草案里的 `parent`、`depends_on`
-引用同份草案的局部 key，不是既有 Backlog ID。create 拒绝同 ID 覆盖，当前没有 plan update/revise 命令。
-需要改动已持久化计划时先明确修订方案，不静默改写已批准内容或重新 materialize 制造重复任务。
+引用同份草案的局部 key，不是既有 Backlog ID。create 拒绝同 ID 覆盖。修订使用下文 plan revise 的 preview/confirm 流程，不重新 materialize 制造重复任务。
 
 approve 是记录审批的写操作。Agent 先完成草案和校验，再依据用户对该具体范围的批准或既有明确授权执行；
 已有授权不重复询问。校验成功不等于用户批准，review note 如实记录依据，不伪造审批或审查结果。
@@ -207,8 +206,7 @@ Workbench 可浏览 Backlog 并在详情顶部修改状态；revision 位于技�
 可切换 Markdown 源码；Plan 通过任务目录定位正文，审批与 mapping 位于计划记录中。Plan 另有实时执行进度，按 task 计数，epic 不计入完成率；
 缺失或损坏任务仍占总数并显示诊断，未物化/零 task 不显示虚假的完成率。CLI 更新任务后点击 Refresh 查看最新进度，
 不通过修改 Plan 记录推进执行状态。点击 Plan 映射任务进入 Backlog，完成状态更新后点击“返回原 Plan”
-会重新加载进度与推荐并定位原计划。链接可直接打开/刷新；失效任务显示错误并保留返回入口。Plan、Report、Docs、
-Retrospective 页面只读；创建及其他流转使用 CLI。
+会重新加载进度与推荐并定位原计划。链接可直接打开/刷新；失效任务显示错误并保留返回入口。Plan 可预览并确认修订；Report、Docs、Retrospective 页面只读。任务详情也提供执行记录、控制和验收入口；创建及其他未提供的流转使用 CLI。
 Docs 可阅读四份标准文档和 `docs/` 下其他 Markdown，标准检查错误不阻止可读正文，扩展文档不参与标准检查。
 支持章节目录、相对 Markdown 链接和源码切换；路径范围受限，符号链接目标/祖先被拒绝。HTTP list/show
 为 `GET /api/projects/<id>/docs` 与 `GET /api/projects/<id>/docs?path=<repo-relative-path>`；未新增 CLI 子命令。
@@ -226,3 +224,91 @@ Docs 目标与章节写入地址；滚动和展开状态在当前页面会话内
 既往 sandbox 外运行和独立浏览器验证曾通过，可作为定位线索；需要升级执行权限时遵循当前审批规则，
 不自动提权、盲目重试或把浏览器通过视为全部 HTTP 测试通过。浏览器 profile 被占用时可使用独立测试 context，
 不关闭用户浏览器。
+
+
+## 内容编辑与计划修订
+
+Backlog 内容修改要求当前 revision；标题/正文可分别提供，但不能与 `--status` 混合。
+正文中的验收要求与其他 Markdown 内容作为同一 body 保存，不增加第二份 acceptance 文本 authority。
+
+```bash
+pops backlog show projectops "$item_id" --json
+pops backlog update projectops "$item_id" --title "更新后的任务" --body-file task.md \
+  --expected-revision "$item_revision" --json
+pops plan show projectops "$plan_id" --json
+pops plan revise projectops "$plan_id" --input revised-draft.json \
+  --expected-revision "$plan_revision" --json
+```
+
+`plan show` 返回顶层 Plan 和计算得到的 `revision`，输入草案仍为 title/goal/items。
+`plan revise` 返回 `{ok:true,data:{plan,revision,applied,confirmation_token,changes,affected_items}}`；
+首次调用仅预览，不写文件。核对候选与受影响条目后，用完全相同输入、旧 revision 和返回 token 确认：
+
+```bash
+pops plan revise projectops "$plan_id" --input revised-draft.json \
+  --expected-revision "$plan_revision" --confirm "$confirmation_token" --json
+```
+
+确认不是自动重试；冲突必须重新读取和预览。用户在当前会话已经明确授权的修订可以直接确认该具体预览。
+已物化计划只修改未开始、无执行历史且未独立编辑的任务；keys/mapping 保持不变。
+物化后新增/移除/改名 key、修改 item_type/parent 返回明确错误，另建后续计划，不手工改 mapping 或复制原任务。
+已批准 Plan 的修订确认更新 approval note；执行记录中的旧输入快照保持不变。
+Web 提供对应内容编辑和修订预览，revision 冲突保留草稿，用户显式重读版本后再决定提交。
+
+## 执行记录与验收
+
+新的 workspace/project 自动声明并创建 `executions: execution/Attempt@1` root。
+执行 API 只使用 manifest 解析的 root；descriptor/root 缺失或损坏时失败，不猜测或回退其他 store。
+执行快照要求登记 Repo 为 Git 仓库，支持尚无 commit 的仓库；其他 ProjectOps 功能仍不要求 Git。
+
+以下 CLI 记录外部完成的工作，不启动 Agent，也不会执行 `--command` 字符串。
+调用方负责提交真实结果；证据复制到 executions/evidence，不能只引用临时日志。
+
+```bash
+pops execution create projectops "$item_id" --instructions "本次具体指示" \
+  --expected-revision "$item_revision" --json
+pops execution list projectops --item "$item_id" --json
+pops execution show projectops "$attempt_id" --json
+pops execution finish projectops "$attempt_id" --outcome succeeded --summary "实际工作结果" \
+  --expected-revision "$attempt_revision" --json
+pops execution verify projectops "$attempt_id" --command "实际运行的命令" --outcome passed \
+  --evidence-file verification.txt --expected-revision "$attempt_revision" --json
+pops execution accept projectops "$attempt_id" --note "验收依据" \
+  --expected-revision "$attempt_revision" --json
+```
+
+每一步先从最新 receipt 或 show 取得新的 attempt revision；不能连续使用旧 revision。
+execution 成功统一 `{ok:true,data:...}`，失败 `{ok:false,error:{code,message}}` 且退出 1。
+list 的 `data.attempts` 为尝试列表；create/show/finish/verify/accept/rework 的 `data.attempt` 为完整记录，
+`data.diagnostics` 表示证据不可读或变化等问题。task revision 与 attempt revision 是不同值。
+
+执行状态、验证结果与验收结论分别记录。accept 要求执行 succeeded、当前代码快照下每个已记录命令的最新结果通过、
+证据 SHA256 未变、任务输入 revision 未变、没有后继尝试；否则拒绝。accepted 才将任务设为 done。
+没有执行记录的普通手工任务仍按原 status update 工作流推进。
+失败、中止或要求继续保留历史；新尝试明确引用前次尝试并读取当前输入，禁止覆盖历史：
+
+```bash
+pops execution rework projectops "$attempt_id" --note "需修改的问题" \
+  --expected-revision "$attempt_revision" --json
+pops execution create projectops "$item_id" --retry-of "$attempt_id" \
+  --expected-revision "$item_revision" --instructions "本次继续的范围" --json
+```
+
+重复 rework/accept 不产生相反结论，先 show 核对已持久化决定。
+Web 任务详情可刷新查看输入、代码 diff、检查与证据诊断，并执行验收或要求继续。
+HTTP endpoint 为 `/api/projects/<project>/executions`（GET 可用 `item_id`），详情为 `/<attempt>`；
+`POST /start` 使用 item_id、任务 expected_revision、instructions 和可选 retry_of；
+`POST /<attempt>/stop|confirm-interrupted|decide` 使用尝试 expected_revision，后两项还含 note，decide 另含 accepted/rework decision。
+默认服务没有 runner，列表的 runner_available 为 false，网页禁用启动/重试；不能把本轮基础能力当作已接入 Pi。
+
+运行控制的 stop_requested 不等于停止成功。服务重启后只把其管理且无法确认的活动记录标为 unknown，
+不改变 external CLI 记录。unknown 必须人工检查旧工作确已停止后填写说明，确认后才能重试：
+
+```bash
+pops execution recover projectops --json
+pops execution confirm-interrupted projectops "$attempt_id" --note "已检查并确认旧工作停止" \
+  --expected-revision "$attempt_revision" --json
+```
+
+recover 只在原服务 owner 已退出且需要核对时使用，不对正在运行的服务执行。
+本版不自动恢复进程或重放工作；不记录凭据到输入、diff 附件或验证证据中。执行记录不是 Pi session 的副本。

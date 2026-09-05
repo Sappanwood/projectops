@@ -81,7 +81,8 @@ src/
     workbenchServer.ts    HTTP routes、request boundary、static assets 与 server lifecycle
   web/
     index.html            Workbench HTML 骨架与挂载点
-    style.css             无外部依赖的现代 CSS、可见 focus 与语义化样式
+    theme.css             深色主题变量、基础元素、全局内容链接及焦点样式
+    style.css             导入 theme.css，承载组件样式、页面布局与响应式规则
     types.ts              前端 AppState、ViewType 与只读模型契约
     router.ts             URL Hash 路由解析、格式化与状态恢复
     apiClient.ts          HTTP API 客户端与网络/格式错误收敛
@@ -147,8 +148,7 @@ Docs check、project-scoped Retrospective 计数和最近记录。projection 不
 `127.0.0.1:7331`；host 只接受 loopback，测试可使用 port `0` 获取隔离端口。路由提供 workspace/project
 overview、Backlog list/show/update、Docs list/show 和 `GET /api/projects/<id>/read-pages`，统一返回 `{ ok, data }` 或 `{ ok, error }` JSON envelope，并把 stale
 revision 映射为 HTTP 409。请求不能提供 workspace path；除 Backlog list 的 `status` 和 Docs show 的 `path` 外拒绝 query 参数。
-PATCH 只接受 `application/json`、无 Origin 或与 server origin 完全相同的 Origin，以及仅含 `status` 和可选
-`expected_revision` 的有界 body。server 可从显式 static root 提供前端资源，realpath containment 防止 URL
+PATCH 接受 `application/json`、无 Origin 或与 server origin 完全相同的 Origin，以及有界 body；状态更新与内容编辑分开校验，内容编辑要求 revision。server 可从显式 static root 提供前端资源，realpath containment 防止 URL
 访问 root 外文件；未提供 static root 时自动查找内置 `dist/web` 生产资源，只有资源尚未构建时才返回占位页。
 关闭先停止接收连接，随后有界清理残留连接。
 
@@ -162,7 +162,7 @@ CLI JSON 或前端 schema parser 读取数据。此 projection 按需从 read-pa
 Retrospective 在完整 typed 列表上按 status/project/task 精确过滤，默认 project 为当前项目，留空表示全部，
 `null` 表示 provenance 未记录；按 inbox/active/archive 分组并保留不受过滤影响的 malformed diagnostics。
 Docs 页面独立调用 docs endpoint 获取列表和单篇正文，`read-pages.documents` 仍仅保留固定路径检查摘要。`app.ts` 管理按需加载、重试、刷新和过滤状态，使用请求序号隔离过期响应；
-项目切换清除旧 projection 并重置过滤。四个领域没有 Web mutation；Docs 仅提供限定文档范围的读取接口。
+项目切换清除旧 projection 并重置过滤。Report、Retrospective、Docs 保持只读；Plan 修订由独立 application API 提供，Docs 仅提供限定文档范围的读取接口。
 
 Workbench Backlog 页面通过 HTTP list/show/update 获取完整数据，独立于 overview 的最近五条摘要。
 `backlogController.ts` 管理列表、当前详情和提交状态：提交携带已加载 revision，成功后重读列表和详情并刷新
@@ -320,3 +320,37 @@ Plan 创建、批准、物化、任务变化、下一步查询、partial/complet
 整页重载通过 URL 恢复目标/过滤/章节，内存中的源码模式和像素位置不持久化，不新增业务 schema 或派生索引。
 Docs HTTP 测试覆盖正常阅读、缺失、非 Markdown、路径越界和 symlink 逃逸；Chromium 测试覆盖源码/目录、
 关联返回、浏览器前进后退、读取失败重试、快速切换项目和窄屏，并用文件快照验证只读。
+
+## Alpha 样式约定
+
+`web/theme.css` 集中定义颜色、字体与阅读排版变量，以及 reset、body、普通链接和键盘焦点的基础样式；
+`web/style.css` 导入主题层，保留现有组件与页面布局。原生控件声明 dark color-scheme。
+普通内容链接使用统一的 link/link-hover 变量，已访问链接保持同一可读颜色；hover/focus 同时加强下划线，
+不依赖浏览器默认蓝紫色。基础链接选择器保持低优先级，品牌、导航、按钮等组件保留自己的语义样式。
+新页面的内容链接默认复用基础层，避免逐页补充颜色。新增主题颜色集中到 theme.css，以语义变量引用；
+阅读区域复用 bg-reading、text-reading、reading-measure、reading-line-height。Alpha 阶段不重排既有布局，
+不引入 CSS framework 或完整设计系统。
+
+
+## 修订与执行基础
+
+`application/planRevision.ts` 组合 Plan parser、Backlog 读取和受控文件更新；preview token 锚定 Plan revision、
+草案与受影响任务 revision，confirm 时重新计算。保持已物化 mapping，只更新可安全同步的 todo 内容；
+历史执行、已开始/完成或独立改写的任务禁止 Plan 隐式覆盖。普通写入错误恢复本次 Plan/item/index 快照，
+不引入通用事务层。`backlogApi.ts` 的内容编辑与 Plan 修订使用不同显式入口，共用 revision 和领域 parser。
+
+`execution/attempt.ts` 定义 Attempt；`execution/store.ts` 经 manifest 定位 executions root，执行文件采用 no-clobber 创建，
+后续变更检查 revision；证据文件存于该 root 的 evidence 子目录。`execution/snapshot.ts` 调用 Git 参数数组，
+捕获 HEAD、diff 和工作文件摘要，不通过 shell 执行；证据和快照作为工作事实保存，不把临时日志作为唯一长期证据。
+`application/executionApi.ts` 提供 create/list/show/finish/verify/decide，共用 CLI 与 HTTP，无内部 CLI subprocess。
+
+`execution/runtime.ts` 持有注入 Runner 返回的 completion/stop handle，管理重复启动、停止确认和启动后核对。
+后端负责生命周期，浏览器轮询只读记录；runtime/external 来源分开，重启仅核对 runtime 所属活动工作。
+未知工作要求人工确认而不重新执行；默认服务没有 runner，仍可查看和验收外部记录。
+单本地服务 owner 是当前运行边界，不提供分布式 lease、多服务协调或自动 crash recovery。
+
+`server/workbenchServer.ts` 固定 workspace，新增 Plan revision 与 executions 路由，共用 JSON/Origin/body 限制和错误 envelope；
+请求不能改 workspace，运行输入由项目和任务解析。`useCases/executionCommand.ts` 解析 CLI 参数，
+`executionCli.ts` 调用同一 application API；finish/verify 是外部事实记录，不运行声明的验证命令。
+验收检查输入版本、当前 Git 快照与有效验证，持久化决定并推进 Backlog；失败尝试恢复相关文件，诊断无法恢复的情形。
+业务状态不写数据库，也不把 Plan 意图变成执行状态机。

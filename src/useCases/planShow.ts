@@ -4,6 +4,7 @@ import type { CliIO } from "../io.js";
 import { isPlanId } from "../plan/plan.js";
 import { PlanNotFoundError, readPlan } from "../plan/planFs.js";
 import { resolvePlansRoot } from "./planContext.js";
+import { computePlanRevision } from "../application/planRevision.js";
 
 export function planShow(
   projectId: string | undefined,
@@ -37,7 +38,7 @@ export function planShow(
     return 1;
   }
   if (json) {
-    io.stdout(JSON.stringify(plan));
+    io.stdout(JSON.stringify({ ...plan, revision: computePlanRevision(plan) }));
   } else {
     io.stdout([`${plan.id}  ${plan.title}`, "", plan.goal].join("\n"));
   }
