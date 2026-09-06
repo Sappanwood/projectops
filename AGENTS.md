@@ -81,6 +81,9 @@ Workspace Control resolver 继续负责 Repo 定位与开发服务。本节是�
 操作前从 [ProjectOps 工作流 skill](skills/projectops-workflow/SKILL.md) 进入，再按其路由读取
 [Agent 操作契约](docs/AGENT_CONTRACT.md) 的 list/doctor、初始化、CLI 与 revision 流程。
 artifact 路径由 ProjectOps manifest 解析，不自行拼接。
+workspace skill 由 `pops init` 默认安装，已有 workspace 用 `pops skill install`；更新与恢复先读
+Agent 操作契约的“Workspace skill 安装与恢复”。开发维护 Repo 内唯一来源，build 自动生成分发资料；
+不修改安装副本或全局目录来代替源码变更。受管 Pi 显式发现已验证，其他外部 Agent 自动发现未验证。
 全局 skill 若假定 Workspace Control store/schema，不得直接套用于自身数据；使用 ProjectOps 当前 CLI 契约。
 ADR、Research 使用 ProjectOps 登记的对应 typed roots；自身 dogfooding 回顾使用其 workspace-level Retrospective store。
 跨项目或全局工作流事项仍遵循 Workspace 路由。
@@ -144,9 +147,12 @@ node dist/cli.js --version
 
 - 日常源码、测试、脚本和质量配置变更运行 `npm run quality`（lint、format check、typecheck）。
 - 跨模块重构、质量工具或构建/测试脚本变更，以及多阶段最终验收运行 `npm run quality:full`；该入口只构建一次。
+- `quality` 已覆盖 lint、format check 和 typecheck；`quality:full` 还覆盖 `quality`、build 与测试。已成功覆盖且后续改动未使证据失效的子检查无需另跑。
 - 风险分级：文案/样式/简单配置可实现后验证；Bug、数据模型和状态逻辑先验证失败用例；
   CLI/API、权限、路径和并发契约采用 Red-Green-Refactor，保持 Alpha 已接受的安全边界。
 - 测试失败必须区分基线失败、环境限制和新增回归，记录具体命令及诊断；不能以静态检查通过代替完整门禁。
+  文件级失败、空子进程输出、loopback 代理与 Pi 配置读取的定位步骤见
+  [README 测试环境诊断](README.md#测试环境诊断)。
 
 - 前端任务按 [前端交付验收](docs/FRONTEND_GUIDELINES.md#前端交付验收) 复用控件和布局，并完成实际受影响状态的真实浏览器检查；后台和纯文档任务不承担无关视觉门禁。
 - 功能变更至少运行与当前 happy path 直接相关的测试。
@@ -155,6 +161,11 @@ node dist/cli.js --version
 - 文档、文案和简单配置修改不要求运行完整测试。
 - 根据路由表检查 `README.md`、`docs/AGENT_CONTRACT.md`、`docs/PRODUCT_SPEC.md` 和 `docs/ARCHITECTURE.md` 是否需要同步。
 - 不以 coverage、理论 edge case、未声明平台或 production hardening 阻塞 Alpha 交付。
+- 自身 schema 或 HTTP 契约变更并更新真实数据后，核对 Catalog 长期服务的监听进程、Repo cwd、
+  启动命令及是否已加载本次构建。旧进程需重启时先核对活动/unknown 执行和 run，按既有控制流程处理，
+  不直接中断仍在运行的工作；仅停止已确认可停止的目标服务，再按 Catalog 启动。
+  在实际分配端口检查首页、`/api/workspace` diagnostics 及受影响 API，记录结果。
+  若服务暂不能重启或核验，交付中明确说明；build 和隔离 fixture 通过不能替代真实服务验收。
 
 
 ## 本工作区开发服务

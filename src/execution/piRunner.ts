@@ -1,5 +1,7 @@
 import { lstatSync, mkdirSync, realpathSync } from "node:fs";
 import path from "node:path";
+import type { SettingsManager as PiSettingsManager } from "@earendil-works/pi-coding-agent";
+import { skillStatus, SKILL_TARGET } from "../skills/skillInstall.js";
 import type { ExecutionAttempt } from "./attempt.js";
 import type { Runner, RunnerResult } from "./runtime.js";
 import { createPiModelRuntime, listPiModels, resolvePiModel } from "./piModels.js";
@@ -112,13 +114,9 @@ export function createPiRunner(factory: SessionFactory = openPiSession): Runner 
 }
 
 async function openPiSession(attempt: ExecutionAttempt, context: StartContext): Promise<PiSession> {
-  const {
-    createAgentSession,
-    DefaultResourceLoader,
-    getAgentDir,
-    SessionManager,
-    SettingsManager,
-  } = await import("@earendil-works/pi-coding-agent");
+  const { createAgentSession, getAgentDir, SessionManager, SettingsManager } = await import(
+    "@earendil-works/pi-coding-agent"
+  );
   let sessionDir = realpathSync(context.workspaceDir);
   for (const segment of [".pops", "runtime", "pi", attempt.id]) {
     sessionDir = path.join(sessionDir, segment);
@@ -143,15 +141,12 @@ async function openPiSession(attempt: ExecutionAttempt, context: StartContext): 
   const settingsManager = SettingsManager.create(context.repo, agentDir);
   if (settingsManager.drainErrors().length)
     throw new PiConfigurationError("Pi 配置读取失败，请检查服务端配置文件与临时锁权限。");
-  const loader = new DefaultResourceLoader({
-    cwd: context.repo,
+  const loader = await createPiResourceLoader(
+    context.workspaceDir,
+    context.repo,
     agentDir,
     settingsManager,
-    noExtensions: true,
-    noPromptTemplates: true,
-    noThemes: true,
-  });
-  await loader.reload();
+  );
   context.emit({
     type: "status",
     text: `已加载 instructions: ${loader
@@ -159,7 +154,7 @@ async function openPiSession(attempt: ExecutionAttempt, context: StartContext): 
       .agentsFiles.map((f) => f.path)
       .join(", ")}；skills: ${loader
       .getSkills()
-      .skills.map((s) => s.name)
+      .skills.map((s) => `${s.name} (${s.filePath})`)
       .join(", ")}；tools: read, bash, edit, write；extensions 已禁用。`,
   });
   const { session } = await createAgentSession({
@@ -173,4 +168,60 @@ async function openPiSession(attempt: ExecutionAttempt, context: StartContext): 
     sessionManager: SessionManager.create(context.repo, sessionDir),
   });
   return session;
+}
+
+export async function createPiResourceLoader(
+  workspaceDir: string,
+  cwd: string,
+  agentDir: string,
+  settingsManager: PiSettingsManager,
+) {
+  const { DefaultResourceLoader, loadSkills } = await import("@earendil-works/pi-coding-agent");
+  let status: ReturnType<typeof skillStatus>;
+  try {
+    status = skillStatus(workspaceDir);
+  } catch {
+    throw new PiConfigurationError(
+      "Workspace skill 检查失败；运行 pops skill status --json 检查安装路径和分发文件。",
+    );
+  }
+  if (status.status !== "missing" && !status.matches_cli)
+    throw new PiConfigurationError(
+      "Workspace ProjectOps skill 与当前 CLI 不匹配或已修改；先运行 pops skill status --json 并按诊断恢复。",
+    );
+  const installed = status.matches_cli
+    ? loadSkills({
+        cwd,
+        agentDir,
+        includeDefaults: false,
+        skillPaths: [path.join(workspaceDir, SKILL_TARGET, "SKILL.md")],
+      })
+    : null;
+  if (installed && (installed.skills.length !== 1 || installed.diagnostics.length))
+    throw new PiConfigurationError(
+      "Workspace ProjectOps skill 无法加载；运行 pops skill status --json 检查安装。",
+    );
+  const loader = new DefaultResourceLoader({
+    cwd,
+    agentDir,
+    settingsManager,
+    noExtensions: true,
+    noPromptTemplates: true,
+    noThemes: true,
+    ...(installed
+      ? {
+          skillsOverride: (base: ReturnType<typeof loadSkills>) => ({
+            skills: [
+              ...base.skills.filter((skill) => skill.name !== "projectops-workflow"),
+              ...installed.skills,
+            ],
+            diagnostics: base.diagnostics.filter(
+              (diagnostic) => diagnostic.collision?.name !== "projectops-workflow",
+            ),
+          }),
+        }
+      : {}),
+  });
+  await loader.reload();
+  return loader;
 }

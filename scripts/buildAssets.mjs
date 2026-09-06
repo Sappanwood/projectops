@@ -22,3 +22,5 @@ await build({
   platform: "browser",
   target: "es2022",
 });
+
+await import("./buildSkill.mjs");

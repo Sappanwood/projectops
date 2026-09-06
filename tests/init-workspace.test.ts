@@ -112,9 +112,13 @@ for (const placement of ["implicit", "before", "after"] as const) {
     assert.equal(result.code, 0);
     assert.deepEqual(result.stderr, []);
     assert.equal(result.stdout.length, 1);
-    assert.deepEqual(JSON.parse(result.stdout[0]!), {
-      ok: true,
-      workspace: { name: path.basename(dir), manifest: ".pops/workspace.json" },
+    const receipt = JSON.parse(result.stdout[0]!);
+    assert.equal(receipt.ok, true);
+    assert.equal(receipt.skill.status, "installed");
+    assert.deepEqual(receipt.workspace, {
+      name: path.basename(dir),
+      manifest: ".pops/workspace.json",
+      initialized: true,
     });
     assert.ok(existsSync(manifestPath(dir)));
     assert.equal(existsSync(path.join(parent, "--json")), false);

@@ -14,10 +14,18 @@ Workflow Retrospective。
 Agent 使用前从 [ProjectOps 工作流 skill](skills/projectops-workflow/SKILL.md) 进入，按需读取
 [Agent 操作契约](docs/AGENT_CONTRACT.md) 中的命令与数据说明。skill 负责步骤选择、证据判断和恢复路径。
 
-该 skill 随 Repo 分发，当前通过本入口直接读取，无需安装全局配置。若以后接入全局 skill 发现机制，
-采用单独审阅的安装变更：在 `~/.agents/skills/projectops-workflow` 建立指向本 Repo skill 目录的 symlink，
-各 Agent 的 skill 目录再通过 symlink 引用 `~/.agents/skills`，保留唯一活动入口与 Repo 内相对引用。
-安装前检查已有入口及其指向，冲突时不覆盖；移动 Repo 时同步调整链接。不要单独复制 SKILL.md 或其引用资料。
+`pops init <workspace>` 默认将自包含 skill 安装到该 workspace 的 `.agents/skills/projectops-workflow/`。
+已有 workspace 在任一子目录执行 `pops skill install` 补装，`pops skill status --json` 查看内容标识和匹配情况，
+`pops skill update` 更新未修改的受管文件。`init --skip-skill` 只初始化数据。
+安装冲突或失败退出 1；若数据初始化已经完成，收据保留 `workspace.initialized: true`，用独立 skill 命令恢复。
+
+本地修改、损坏记录与同名非受管内容默认保留。确认替换后，使用 status 返回的 `content_id` 执行
+`pops skill update --replace --expected-content <content_id>`；只替换当前分发文件及安装记录，保留旧文件备份与无关文件。
+完整命令、部分失败恢复和锁处理见 [Agent 操作契约](docs/AGENT_CONTRACT.md#workspace-skill-安装与恢复)。
+
+受管 Pi 0.85.0 runner 显式加载当前 workspace 的安装 skill，覆盖同名全局/Repo 来源并去重；支持登记子 Repo 和更深目录。
+其他外部 Agent 的自动发现未验证。workspace 安装不操作全局配置；全局安装仍需独立授权，
+遵循 `~/.agents` 唯一活动源及各 Agent 配置目录的 symlink 约定。Repo 内 skill 和契约是唯一可编辑来源。
 
 ## 快速开始
 
@@ -34,6 +42,7 @@ pops --version
 这里的 `npm link` 会把当前仓库刚构建的 `dist/cli.js` 注册为本机的 `pops` 命令；开发时也可以直接使用
 `npm run dev -- --help`。初始 npm package 保持 `private`，因为 npm registry 已存在同名的
 `projectops` 和 `pops` package；公开发行名将在发布阶段另行决定。
+`npm pack` 先构建并将 `dist/`（含 skill bundle）打入本地安装包；安装包不需要源码 checkout。
 
 Local Workbench server 通过显式 workspace 启动，默认只监听 `127.0.0.1:7331`：
 
@@ -129,6 +138,28 @@ Linux 若提示系统库缺失，可按 [Playwright 浏览器安装说明](https
 Workbench 仅供受信任本地用户和 workspace 使用，监听 loopback；workspace 只能由启动参数指定。
 Web 支持 Backlog 状态/内容、Plan 修订、完成及执行控制/验收；mutation 要求 JSON、同源 browser Origin 和相应 revision。
 它不提供用户账户、远程访问或对抗恶意本地并发的安全保证。
+
+### 测试环境诊断
+
+纯 domain/文件测试与需要 Git 子进程、HTTP listener、Chromium 或本地 Pi 配置的测试有不同环境需求。
+环境启动失败不能作为业务断言的 TDD Red；先保留原命令、完整错误和 fixture 范围，再按以下顺序定位。
+
+- Node runner 只报告文件级 `test failed` 时，可用 `node --import tsx tests/<实际文件>.test.ts`
+  直接执行已定位的测试文件获取断言；built CLI 用例仍须先构建当前源码。
+- 子进程同时检查 `error`（含 `code/syscall`）、`status`、`signal`、`stdout` 和 `stderr`。
+  即使 status 为 0，空 JSON 收据也不能当作成功或有效业务 Red；先确认命令实际运行并产生预期输出。
+- `START_FAILED`、`fetch failed` 或 `UND_ERR_SOCKET` 先核对 server 输出、监听是否成功及是否提前退出。
+  `listen/spawn EPERM` 须保留底层错误；不能仅凭连接错误推断 sandbox 限制。
+- 检查 `NODE_USE_ENV_PROXY` 及 `NO_PROXY/no_proxy` 是否包含 loopback。确认本地请求被代理后，
+  可在单次测试命令中保留已有例外并追加 `127.0.0.1,localhost`；不要输出包含凭据的代理 URL。
+  若两者原为空，命令示例为 `NO_PROXY=127.0.0.1,localhost no_proxy=127.0.0.1,localhost npm run test:unit`。
+- 真实 Pi 设置读取可能需要配置锁；读取失败不能直接解释为未认证，也不能把缺省配置当作真实设置验证成功。
+  本地只读 smoke 只输出必要的模型摘要，执行状态诊断只投影活动尝试等必要字段，不打印完整 diff 或凭据。
+
+确认权限限制后，通过当前审批机制运行精确测试命令，沿用仍适用的已有授权；fixture 保持临时 workspace、
+隔离 Repo 和 ephemeral ports。Playwright 优先直接运行，避免增加无必要的 subprocess 包装。
+execution fixture 保持同一 workspace 一个服务 owner，涉及 finish/retry 时初始化 Git。
+诊断后回到该变更要求的标准门禁；仅在新改动、失败或未解决疑点存在时重跑。
 
 ## 当前能力
 

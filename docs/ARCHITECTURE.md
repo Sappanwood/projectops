@@ -234,8 +234,8 @@ SIGTERM，2 秒未退出则 SIGKILL，4 秒仍未退出则报错；随后清理�
 `project doctor` 校验 Manifest@1 的 typed artifact 声明以及 project/artifact root 的目录类型。结构损坏的
 manifest 在进入 use case 前作为明确错误拒绝；doctor 只报告问题，不自动修复。
 
-`init` 路由单独提取 `--json` 并将输出模式传给 initialization use case，避免把该选项当作目录。
-use case 在既有初始化与回滚边界内将成功和失败格式化为 JSON 或文本，不增加兼容分支或数据迁移。
+`init` 路由校验 `--json`、`--skip-skill` 和至多一个目录参数。数据初始化保留既有回滚边界；数据完成后调用 skill adapter，
+后者失败不回滚已可用的 manifest/Retrospective store，以 `ok:false,workspace.initialized:true,skill` 分阶段报告。
 
 ## 数据与运行时边界
 
@@ -427,3 +427,32 @@ Plan artifact revision 包含 status，完成操作会使旧编辑 revision 失�
 保持原快照与 digest 不变，其他输入变化仍阻止完成验证。done 仍可读取、生成 Report 和幂等 materialize，
 不能修订、重新批准或创建新 run。完成资格不接受 partial；Report 独立保留其 partial 工作流。
 read-pages 提供计算得到的 Plan revision；Web 以已加载 revision 提交，冲突要求刷新再操作，成功后重读计划和项目摘要。
+
+
+## Workspace skill 分发与 Pi 发现
+
+`src/skills/skillInstall.ts` 持有安装、状态查询和有限写入，`useCases/skillCommand.ts` 负责 CLI 参数与收据；init 复用同一 adapter。
+`scripts/buildSkill.mjs` 在 build 时从唯一可编辑来源 `skills/projectops-workflow/` 和 `docs/AGENT_CONTRACT.md` 操作章节
+生成 `dist/skills/bundle.json`，只改写分发相对引用，不手工维护命令/schema 副本。安装不读取源码 checkout。
+`npm pack` 的 prepack 构建并仅分发 dist。bundle source 为 `projectops/skills/projectops-workflow`，
+排序文件映射的 SHA256 为 distribution_id；`.projectops-install.json` 保存同一 ID 和逐文件摘要。
+
+安装预检静态目录和普通文件，拒绝 symlink；排他空锁目录限定在 `.agents/skills/.projectops-workflow.lock`。
+更新只覆盖完整受管内容；本地修改或损坏安装要求显式 replace 与现场 content_id。逐文件移入唯一备份目录并核验移走的内容，
+再以 `wx` 发布，避免普通编辑器或其他安装器竞争时静默覆盖。新文件竞争失败保留对方目标；移走后发现漂移则尝试
+hard-link no-clobber 恢复，失败仍保留备份与对方目标。记录最后写入；部分完成不是事务，收据公开 changed/backups 与恢复步骤。
+旧版多余文件、无关内容和备份不自动删除；中断遗留锁需确认无活动安装器后人工移除空目录。
+安全边界分别为静态 containment、正常并发 no-clobber；不要求同用户恶意 ancestor-swap resistance。
+维持受信任本地 Linux、Node.js 22+、无 native helper，不扩展其他平台或自动 crash recovery。
+
+Pi 集成以安装的 0.85.0 类型声明及源码为准，并核对
+[官方 skills 发现说明](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/skills.md) 与
+[官方 SDK](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/sdk.md)（2026-09-06）。
+默认祖先发现不能保证越过子 Repo 的 Git root；`createPiResourceLoader` 用 SDK `loadSkills` 读取安装文件，
+通过 `DefaultResourceLoader.skillsOverride` 合并并按名称保留 workspace 来源，避免与全局/Repo 同名入口重复。
+生产 openPiSession 直接使用该 loader，进展记录实际 filePath。已存在安装必须与当前 bundle 匹配，否则给出恢复诊断；
+缺失安装仍可按原有 Pi 配置工作。测试使用真实 SDK ResourceLoader/read/bash，从登记 Git 子 Repo、深层 cwd 和 workspace root
+读取安装入口与相对契约并完成 project list，明确没有调用模型；不据此声称其他 Agent 自动发现受支持。
+
+`tests/skill-install.test.ts`、`skill-package.test.ts`、`skill-write-safety.test.ts` 与 `pi-skill-discovery.test.ts`
+覆盖 built CLI 默认/跳过/补装/no-op/内容更新/冲突、隔离 npm 包引用闭合、部分 I/O 失败重试、正常并发编辑与 Pi 真实发现。

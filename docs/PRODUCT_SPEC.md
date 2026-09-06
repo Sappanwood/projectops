@@ -104,10 +104,15 @@ Project Docs 提供四份标准文档直达入口，逐项显示可读性与检�
 - 未完成或缺失的依赖依据同一 Backlog 列表显示提示；当前 CLI 不强制按依赖阻止状态更新，Web 保持一致，
   不持久化派生依赖状态。共享 Backlog parser 拒绝非字符串列表元素、非法标量类型和非法状态等 malformed 数据。
 - Workspace 可在非空目录初始化，但不得覆盖已有 manifest 或其他用户内容。
-- `pops init [dir] --json` 支持省略目录或将选项放在目录前后；省略目录使用 cwd。成功仅向 stdout
-  返回 `{ "ok": true, "workspace": { "name": "...", "manifest": ".pops/workspace.json" } }` 并退出 0，
-  manifest 路径相对目标 workspace；失败仅向 stdout 返回 `{ "ok": false, "error": "..." }` 并退出 1。
-  不带 `--json` 时成功使用 stdout 文本，失败使用 stderr 文本；此输出契约不改变持久化 schema。
+- `pops init [dir] [--skip-skill] --json` 默认安装 workspace 专用 skill，数据初始化后返回
+  `workspace:{name,manifest,initialized:true}` 与 `skill` 状态。安装成功或跳过时 `ok:true`/退出 0；
+  skill 冲突或失败时 `ok:false`/退出 1，保留已经可用的数据 workspace 与恢复说明。数据初始化本身失败仍返回 `ok:false,error`。
+- 已有 workspace 通过 `skill install/update/status` 补装、更新和只读查询。分发内容 SHA256 独立于 package version；
+  完整重复安装可核验 no-op。同名非受管内容、本地修改、缺失文件和损坏记录默认保护，替换必须显式提供
+  `update --replace --expected-content <当前快照>`。只处理当前分发文件与记录，保留备份和无关文件。
+- 安装位于 `.agents/skills/projectops-workflow/`，包内引用自包含，不安装全局配置。受管 Pi 0.85.0 runner 从登记子 Repo
+  和深层目录显式加载 workspace 来源并去重；过期/修改的安装须先恢复。外部 Agent 自动发现尚未验证。
+  不承诺跨文件事务或自动崩溃恢复；冲突、部分失败和锁恢复以 Agent 操作契约为准。
 - 登记不强求 git repo，任意目录均可登记；重复登记报错。
 - Project Docs scaffold 为每个已登记 project 提供固定的 README.md、AGENTS.md、docs/PRODUCT_SPEC.md 和 docs/ARCHITECTURE.md 模板；模板包含角色标题和待填写提示，不支持外部模板源或自定义变量。
 - scaffold 预检固定写入目标，已有普通文件保持字节不变并记入 `skipped`；新建文件记入 `created`，JSON receipt 不包含绝对路径。

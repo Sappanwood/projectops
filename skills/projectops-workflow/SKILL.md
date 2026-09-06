@@ -5,14 +5,15 @@ description: 使用 ProjectOps pops CLI 推进项目任务、计划、执行验�
 
 # ProjectOps 工作流
 
-这是 Repo 随附的操作入口。先读取目标 Repo 的 AGENTS.md，确认用户范围、数据 workspace 和项目 ID。
+这是 ProjectOps 操作入口。先读取目标 Repo 的 AGENTS.md，确认用户范围、数据 workspace 和项目 ID。
 命令参数、schema 与 JSON 返回值以当前构建的 CLI help 和 [Agent 操作契约](../../docs/AGENT_CONTRACT.md) 为准；本文负责选择步骤与判断能否继续。
-本 skill 随 ProjectOps Repo 分发，引用相对此目录解析，不单独复制到其他位置。
+本 skill 由 `pops init` 或 `pops skill install` 安装到 workspace；引用相对此目录解析。
+先运行 `pops skill status --json` 核对分发与当前 CLI 是否匹配；安装副本不作为可编辑来源。
 
 ## 路由与准备
 
 - ProjectOps manifest 与 Workspace Control Catalog 是不同 authority。只对 ProjectOps 管理的新条目使用此入口；旧条目留在原系统，不凭短 ID 推断 store。
-- 使用明确版本的 `dist/cli.js`，在明确的数据 workspace 中执行 `project list --json` 和 `project doctor --json`。初始化只补明确缺失且已授权的部分；无效 descriptor 停止相关写入，不拼接 artifact 路径。
+- 使用已安装的 `pops` 或明确构建版本的 `dist/cli.js`，在明确的数据 workspace 中执行 `project list --json` 和 `project doctor --json`。初始化只补明确缺失且已授权的部分；无效 descriptor 停止相关写入，不拼接 artifact 路径。
 - 先读契约的“选择 workspace 与入口”“调用与结果处理”。CLI 输出没有统一 envelope：不能对所有命令读取 `data`，也不能以不存在 `ok` 判断失败。检查退出码及 stdout/stderr，处理 diagnostics。
 
 ## 从任务到交付

@@ -1,3 +1,4 @@
+import { skillCommand } from "./useCases/skillCommand.js";
 import { initWorkspace } from "./useCases/initWorkspace.js";
 import { registerProject } from "./useCases/registerProject.js";
 import { listProjects } from "./useCases/listProjects.js";
@@ -43,7 +44,9 @@ Options:
   -v, --version  Show version
 
 Commands:
-  init [dir] [--json]     Initialize a workspace shell in dir (default: current directory)
+  init [dir] [--skip-skill] [--json]  Initialize workspace and install its ProjectOps skill
+  skill install|status [--json]  Install or inspect the workspace skill
+  skill update [--replace --expected-content <content_id>] [--json]  Update intact managed files; explicit replacement preserves backups
   project add <path>      Register a directory as a project in the workspace
   project list [--json]   List registered projects
   project doctor [--json] Validate workspace topology
@@ -108,12 +111,16 @@ export function runCli(args: readonly string[], io: CliIO, cwd = process.cwd()):
       return planRunCommand(rest, io, cwd);
     case "execution":
       return executionCommand(rest, io, cwd);
+    case "skill":
+      return skillCommand(rest, io, cwd);
     case "init":
       return initWorkspace(
-        rest.find((arg) => arg !== "--json"),
+        rest.find((arg) => !arg.startsWith("--")),
         rest.includes("--json"),
         io,
         cwd,
+        rest.includes("--skip-skill"),
+        rest,
       );
     case "project": {
       const [sub, ...projectArgs] = rest;

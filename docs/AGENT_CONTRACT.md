@@ -7,46 +7,34 @@ CLI 参数、输出或生命周期改变时，同步更新本文并在隔离 wor
 
 ## 选择 workspace 与入口
 
-本地自身 dogfooding 的数据 workspace 是 `/home/ling/workspace`；Repo 和服务定位仍遵循 AGENTS.md
-中的 Workspace Control resolver。只有 ProjectOps 新产生的自身条目使用下述流程，Workspace Control
-既有条目留在原系统，不导入、不迁移、不双写，也不按短 ID 猜测所属 store。
-
-在 Repo 运行 `npm run build` 后，从数据 workspace 使用当前构建。以下 Bash 函数是会话内入口，
-避免误用其他版本的全局 `pops`；后续命令均从同一数据 workspace 执行：
+使用安装后的 `pops` CLI，在目标数据 workspace 或其子目录执行。开发者也可以在 Repo 构建后以
+`node <ProjectOps Repo>/dist/cli.js` 调用同一入口；自身 dogfooding 的位置按 Repo AGENTS.md 选择。
 
 ```bash
-cd /home/ling/workspace
-pops() { node /home/ling/workspace/projectops/dist/cli.js "$@"; }
 pops --help
 pops project list --json
 pops project doctor --json
 ```
 
 `.pops/workspace.json` 是数据路由 authority；project 路径与 typed artifact roots 由 CLI 解析。
-缺失或无效 descriptor 时停止相关操作并报告诊断，不回退 Workspace Control roots，不自行拼接输出目录。
-仅当明确缺失时执行相应初始化：
-
-| 缺失内容 | 命令 | 边界 |
-|---|---|---|
-| workspace manifest | `pops init /home/ling/workspace --json` | 只初始化壳，不自动登记项目；已有 manifest 不重复初始化 |
-| 自身项目登记 | `pops project add projectops --json` | 只登记 workspace 内的自身目录 |
-| 自身 Backlog store | `pops backlog init projectops --json` | 已初始化时不重复执行 |
-
-初始化后重新运行 list/doctor。真实 dogfooding 暂不接入其他项目，隔离临时 fixture 可用于验证。
-schema 演进只对 dogfooding 活动数据做一次性迁移，验证后删除脚本；不增加运行时旧版读取或兼容分支。
-完成/归档数据与活动引用的处理遵循 AGENTS.md；版本诊断属于演进要求，不表示当前已提供专门迁移命令。
+缺失或无效 descriptor 时停止相关操作，不回退 Workspace Control roots，不自行拼接输出目录。
+只在用户授权且确实缺失时运行 `pops init <workspace>`、`pops project add <repo-relative-path>` 或
+`pops backlog init <project>`，然后重新 list/doctor。Workspace Control 既有条目留在原系统，不导入、迁移或双写。
 
 ## 调用与结果处理
 
-Agent 优先传 `--json`，同时检查退出码、stdout 和 stderr。`init --json` 成功返回
-`{ "ok": true, "workspace": { "name": "...", "manifest": ".pops/workspace.json" } }`，manifest 路径相对目标 workspace；
-失败返回 `{ "ok": false, "error": "..." }` 并退出 1，两者仅写 stdout。省略 `--json` 时提供文本输出。
+Agent 优先传 `--json`，同时检查退出码、stdout 和 stderr。`init --json` 在数据初始化完成后返回
+`{ "ok": true, "workspace": { "name": "...", "manifest": ".pops/workspace.json", "initialized": true }, "skill": { "status": "installed", "...": "..." } }`。
+跳过安装时 `skill.status` 为 `skipped`。skill 冲突或失败时 `ok:false`、退出 1，仍保留 workspace 对象与
+`initialized:true`；原有数据可用，应改用 skill 独立入口恢复。数据初始化本身失败返回
+`{ "ok": false, "error": "..." }` 并退出 1。JSON 模式只写 stdout；文本模式说明数据与 skill 各自状态，失败诊断写 stderr。
 当前输出没有统一 envelope，不能一律读取
 `data` 或要求 `ok` 字段。代表性成功结果如下：
 
 | 命令 | 读取位置 |
 |---|---|
-| `init` | `workspace.name`、`workspace.manifest` |
+| `init` | `workspace.name`、`workspace.manifest`、`workspace.initialized`、`skill.status` |
+| `skill install/update/status` | `ok`、`skill`；前置路由/参数/读取失败为 `ok:false,error` |
 | `project list` | `projects` |
 | `backlog add` | `item.id`、`item.revision` |
 | `backlog show` | 顶层 `id`、`status`、`revision`、`body` |
@@ -63,6 +51,38 @@ JSON.parse。Report/Retrospective 的部分失败返回 `{ "ok": false, "error":
 读取结果有 diagnostics 时应查看并报告，不能将损坏数据视为空列表。
 创建操作返回不明确时先 list/show 确认，避免盲重试产生重复条目；已有目标冲突不通过删除文件绕过。
 多行正文优先 `--body-file`，调用工具优先参数数组，不把正文直接插入 shell 代码。
+
+## Workspace skill 安装与恢复
+
+- `pops init [dir] [--skip-skill] [--json]` 默认安装，已有 manifest 仍拒绝重新 init；未知选项与多余目录参数失败且不写入。
+- `pops skill install [--json]` 从当前 cwd 向上解析 manifest，只为该 workspace 补装；完整匹配的重复安装不写入。
+- `pops skill status [--json]` 只读查询：`status` 为 `missing/current/outdated/conflict`，有效查询退出 0；必须继续检查 `matches_cli`。
+- `pops skill update [--json]` 显式授权更新完整且未改动的受管文件，也可补装缺失安装；不会默认覆盖本地改动。
+- `pops skill update --replace --expected-content <content_id> [--json]` 显式授权替换已核对快照中的当前分发文件与安装记录。
+  token 来自最新 status；stale token 拒绝。无关文件、其他 skills 和旧版不再分发的文件均保留。
+
+`skill` 收据包含相对 `target`、当前 CLI 的 `distribution_id`、安装记录的 `installed_id`、现场快照 `content_id`、
+`matches_cli` 与 `problems`。mutation 补充 `no_op`、`changed` 和 `backups`；成功状态为 `installed/updated/current`，
+冲突为 `conflict`，I/O 或并发失败为 `failed`。后两者 `ok:false`、退出 1，并给出 `recovery`。
+安装文件集按 SHA256 标识，不仅比较 package version；同 package version 下契约/skill 的任何分发内容变化都会产生新 ID。
+
+安装目标固定 `.agents/skills/projectops-workflow/`，`.projectops-install.json` 记录来源和逐文件摘要。
+更新先把旧文件移入目标内唯一 `.projectops-backup-*/<原相对路径>`，再以 no-clobber 创建新文件；备份不自动删除。
+若正常并发创建/修改介入，拒绝覆盖并保留新旧内容。部分失败可能已更换部分文件，收据的 changed/backups 是实际动作，
+不是跨文件事务。先 status 并检查文件/备份：未改动旧安装可直接 update；部分写入、缺失或损坏安装需确认后以最新 token replace。
+若最终记录尚未写入，现场会被视为非受管内容并保护，不能靠反复 init 或递归删除恢复。
+
+安装器使用 `.agents/skills/.projectops-workflow.lock` 空目录排他；失败正常释放。进程中断可能留下锁，
+必须先确认没有安装器运行，再只移除该空锁目录并重新 status。所有安装祖先和分发目标拒绝 symlink/非普通对象；
+路径诊断须由用户修正后重试，不沿 `.agents` 或 skills symlink 写入外部位置。支持边界为受信任本地 Linux workspace、
+Node.js 22+、无 native helper；不承诺恶意 ancestor swap、跨文件事务、崩溃自动恢复或 Windows/macOS 等价保证。
+
+构建从 Repo skill、references 和本契约操作章节生成自包含 bundle；安装副本引用自己的 `references/AGENT_CONTRACT.md`，
+不依赖开发机路径或源码。修改应回到 Repo 来源并重新构建/更新；不要在安装副本维护第二份契约。
+受管 Pi 0.85.0 runner 用真实 ResourceLoader 显式接入当前 workspace skill，按名称去重并优先该来源，进展显示实际 filePath。
+已安装但过期/损坏/本地修改时拒绝启动并提示恢复；未安装时沿用 Pi 原有 skill 发现。
+已通过登记 Git 子 Repo、深层目录和 workspace 根目录的实际资源加载与 read/bash 只读操作验证，无付费模型请求。
+其他外部 Agent 自动发现未验证，不保证全平台通用发现；全局安装不属于这些命令的写入范围。
 
 ## Backlog：创建与推进
 
