@@ -44,8 +44,12 @@ export function parseRoute(rawHash: string): RouteState {
             },
           }
         : {}),
-      ...(view === "docs" && params.has("path") ? { documentPath: params.get("path")! } : {}),
-      ...(view === "docs" && params.has("section") ? { section: params.get("section")! } : {}),
+      ...((view === "docs" || view === "research") && params.has("path")
+        ? { documentPath: params.get("path")! }
+        : {}),
+      ...((view === "docs" || view === "research") && params.has("section")
+        ? { section: params.get("section")! }
+        : {}),
       ...(view === "plans" && detail ? { planId: detail } : {}),
       ...(view === "backlog" && detail ? { itemId: detail } : {}),
       ...(view === "reports" && detail ? { reportId: detail } : {}),
@@ -92,7 +96,7 @@ function formatBaseRoute(route: RouteState): string {
       : null;
     return `${base}${route.retrospectiveId ? `/${encodeURIComponent(route.retrospectiveId)}` : ""}${params ? `?${params}` : ""}`;
   }
-  if (route.view === "docs") {
+  if (route.view === "docs" || route.view === "research") {
     const params = new URLSearchParams();
     if (route.documentPath !== undefined) params.set("path", route.documentPath);
     if (route.section !== undefined) params.set("section", route.section);

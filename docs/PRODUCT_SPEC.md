@@ -84,6 +84,7 @@ Project Docs 提供四份标准文档直达入口，逐项显示可读性与检�
   已有 blocked/cancelled 状态按原值显示和计数，均不算完成。未物化显示未开始执行；零 task 显示无可执行任务，二者完成百分比均为 null。
   完成百分比向下取整，只有全部 task done 才显示 100%。刷新重新读取 Backlog，计划状态与执行进度分开呈现，进度查询不自动修改 Plan 生命周期。
 - Docs 页面提供四份标准文档入口及检查结果，同时列出 Repo `docs/` 下其他 Markdown。正文经独立 API 按需读取，不 scaffold、不修改文件。
+  Research 页面从 manifest 的 `markdown/research@1` root 枚举 Markdown 并提供列表、正文、章节目录和返回导航；root 不可读取或 descriptor 不匹配时展示诊断，空 root 展示空状态。
   Retrospective 页面读取完整 workspace 列表，默认过滤当前 project；status/project/task 支持组合精确过滤，
   project/task 留空表示全部，`null` 表示未记录的 provenance。结果按 inbox/active/archive 分组，详情包含完整
   metadata、revision 和正文；malformed diagnostics 不因过滤而隐藏。四个领域均显示空状态或读取诊断，顶部
@@ -94,9 +95,9 @@ Project Docs 提供四份标准文档直达入口，逐项显示可读性与检�
   revision 收入可展开技术信息。界面只提供 `todo|in_progress|done` 状态操作，
   每次提交均携带已加载的 revision；成功后重读列表、详情和项目摘要。冲突不自动重试，保留当前 item
   并要求用户刷新后重新提交。读取失败、未知 item、非法输入均显示错误反馈。
-- Backlog、Plan、Report、Retrospective、Docs 共用轻量阅读渲染：标题、段落、嵌套有序/无序列表、强调、
+- Backlog、Plan、Report、Retrospective、Docs 和 Research 共用轻量阅读渲染：标题、段落、嵌套有序/无序列表、强调、
   行内/围栏代码、表格、引用块、只读任务列表、分隔线和 HTTP(S) 外链；不承诺完整 CommonMark。
-  原始 HTML 始终转义，图片不加载，Mermaid 按代码显示。可切换精确 Markdown 源码，长代码/表格局部横向滚动。
+  原始 HTML 始终转义，图片不加载；Mermaid fenced block 使用本地打包的官方 runtime，以 strict 安全级别渲染，语法错误及图片节点保留源码，浏览器限制外部资源加载。可切换精确 Markdown 源码，长代码/表格局部横向滚动。
   Docs 相对 Markdown 链接在文档范围内解析；Report 支持 Plan/Backlog logical references 与 Repo 文档引用。
   未支持目标保留可读文本及提示，不执行任意 URL。其他页面的本地路径和非 HTTP(S) 链接仍显示文本。
   阅读视图不写 authority；桌面分栏，窄屏纵向排列。

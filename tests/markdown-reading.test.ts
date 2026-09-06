@@ -45,3 +45,20 @@ test("document reading renders tables, quotes, task lists and separators", () =>
   assert.match(html, /type="checkbox" disabled>/);
   assert.match(html, /<hr>/);
 });
+
+test("Mermaid fenced blocks render a safe static diagram", () => {
+  const html = renderMarkdown(
+    "```mermaid\ngraph TD\n  Start[开始] --> End[结束]\n```\n\n```ts\nconst source = '<safe>';\n```",
+  );
+  assert.match(html, /class="mermaid-block" data-mermaid-source/);
+  assert.match(html, /开始/);
+  assert.match(html, /结束/);
+  assert.match(html, /<pre><code>const source = &#039;&lt;safe&gt;&#039;;/);
+});
+
+test("invalid Mermaid stays readable and cannot inject markup", () => {
+  const html = renderMarkdown("```mermaid\ngraph TD\n  A[<script>alert(1)</script>] ??? B\n```");
+  assert.match(html, /class="mermaid-block" data-mermaid-source/);
+  assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+  assert.doesNotMatch(html, /<script>/);
+});

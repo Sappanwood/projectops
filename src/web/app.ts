@@ -92,6 +92,7 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
       state.projectLoading ||
       state.readPagesLoading ||
       state.docs.loading ||
+      state.research?.loading ||
       state.status !== "ready"
     )
       return;
@@ -104,6 +105,7 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
     return true;
   }
   let renderedProject: string | null = null;
+  let renderedDoneTarget: string | null = null;
   function render(): void {
     if (destroyed) return;
     for (const detail of container.querySelectorAll?.<HTMLDetailsElement>(
@@ -111,6 +113,13 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
     ) ?? []) {
       readingDetails.set(`${renderedProject}:${detail.dataset.readingKey}`, detail.open);
     }
+    const selectedDone =
+      state.currentView === "backlog" &&
+      state.backlog.items.some(
+        (item) => item.id === state.backlog.selectedItemId && item.status === "done",
+      )
+        ? `${state.selectedProjectId}:${state.backlog.selectedItemId}`
+        : null;
     container.innerHTML = renderApp(state);
     foundation.render();
     executions.render();
@@ -122,7 +131,20 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
     ) ?? []) {
       const open = readingDetails.get(`${renderedProject}:${detail.dataset.readingKey}`);
       if (open !== undefined) detail.open = open;
+      if (
+        detail.dataset.readingKey === "backlog-group-done" &&
+        selectedDone !== null &&
+        selectedDone !== renderedDoneTarget
+      )
+        detail.open = true;
     }
+    renderedDoneTarget = selectedDone;
+    const mermaidRenderer = (
+      globalThis as typeof globalThis & {
+        projectOpsRenderMermaid?: (root: ParentNode) => Promise<void>;
+      }
+    ).projectOpsRenderMermaid;
+    if (mermaidRenderer) void mermaidRenderer(container);
   }
 
   async function loadWorkspaceAndCurrentProject(route: RouteState): Promise<void> {
@@ -184,7 +206,8 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
     render();
     if (state.currentView === "overview") restoreReadingPosition();
     if (state.currentView === "backlog") await loadBacklogRoute(projectId);
-    if (isReadPage(state.currentView)) await loadReadPages(projectId);
+    if (isReadPage(state.currentView) || state.currentView === "research")
+      await loadReadPages(projectId);
   }
 
   async function loadBacklogRoute(projectId: string): Promise<void> {
@@ -232,6 +255,10 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
       await loadDocs(projectId);
       return;
     }
+    if (state.currentView === "research") {
+      await loadResearch(projectId);
+      return;
+    }
     const requestId = currentRequestId;
     const readId = ++readRequestId;
     state = { ...state, readPages: null, readPagesLoading: true, readPagesError: null };
@@ -260,7 +287,8 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
   function focusDocumentSection(): void {
     const section = router.getCurrentRoute().section;
     if (!section) return;
-    const target = container.ownerDocument?.getElementById(`doc-heading-${section}`);
+    const prefix = state.currentView === "research" ? "research" : "doc";
+    const target = container.ownerDocument?.getElementById(`${prefix}-heading-${section}`);
     if (target && container.contains(target)) {
       target.scrollIntoView({ block: "start" });
       target.focus({ preventScroll: true });
@@ -295,6 +323,36 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
     };
     render();
     if (document.ok && !restoreReadingPosition()) focusDocumentSection();
+  }
+
+  async function loadResearch(projectId: string): Promise<void> {
+    const request = ++documentRequestId;
+    const documentPath = router.getCurrentRoute().documentPath;
+    state = { ...state, research: { ...emptyDocsState(), loading: true } };
+    render();
+    const list = await apiClient.listResearch(projectId);
+    const document = documentPath
+      ? await apiClient.showResearch(projectId, documentPath)
+      : ({ ok: true, data: null } as const);
+    if (
+      destroyed ||
+      request !== documentRequestId ||
+      state.selectedProjectId !== projectId ||
+      state.currentView !== "research"
+    )
+      return;
+    state = {
+      ...state,
+      research: {
+        list: list.ok ? list.data : null,
+        document: document.ok ? document.data : null,
+        loading: false,
+        error: document.ok ? null : document.error,
+        listError: list.ok ? null : list.error,
+      },
+    };
+    render();
+    if (document.ok && document.data && !restoreReadingPosition()) focusDocumentSection();
   }
 
   async function refresh(): Promise<void> {
@@ -350,7 +408,7 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
       await loadBacklogRoute(state.selectedProjectId);
     }
     if (
-      isReadPage(state.currentView) &&
+      (isReadPage(state.currentView) || state.currentView === "research") &&
       state.selectedProjectId !== null &&
       state.projectError === null
     )
@@ -403,7 +461,7 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
       };
     if (projectChanged || viewChanged) {
       documentRequestId++;
-      state = { ...state, docs: emptyDocsState() };
+      state = { ...state, docs: emptyDocsState(), research: emptyDocsState() };
     }
     backlogNavigation++;
     if (viewChanged) {
@@ -449,7 +507,8 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
       if (route.view === "overview" && route.projectId !== null) void loadProject(route.projectId);
       if (route.view === "backlog" && route.projectId !== null)
         void loadBacklogRoute(route.projectId);
-      if (isReadPage(route.view) && route.projectId !== null) void loadReadPages(route.projectId);
+      if ((isReadPage(route.view) || route.view === "research") && route.projectId !== null)
+        void loadReadPages(route.projectId);
     } else {
       render();
       if (route.view === "backlog" && route.projectId !== null) {
@@ -468,6 +527,11 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
         if (previousRoute.documentPath === route.documentPath && state.docs.document)
           focusDocumentSection();
         else void loadDocs(route.projectId);
+      }
+      if (route.view === "research" && route.projectId !== null) {
+        if (previousRoute.documentPath === route.documentPath && state.research?.document)
+          focusDocumentSection();
+        else void loadResearch(route.projectId);
       }
     }
   }
@@ -494,6 +558,10 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
 
     if (target.closest("#docs-retry") !== null && state.selectedProjectId !== null) {
       void loadDocs(state.selectedProjectId);
+      return;
+    }
+    if (target.closest("#research-retry") !== null && state.selectedProjectId !== null) {
+      void loadResearch(state.selectedProjectId);
       return;
     }
 
@@ -602,6 +670,7 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
 
   if (typeof window !== "undefined")
     window.addEventListener("scroll", saveReadingPosition, { passive: true });
+  if (typeof window !== "undefined") window.addEventListener("projectops-mermaid-ready", render);
   container.addEventListener("submit", handleSubmit);
   container.addEventListener("click", handleClick);
   container.addEventListener("change", handleChange);
@@ -627,6 +696,8 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
       container.removeEventListener("click", handleClick);
       container.removeEventListener("change", handleChange);
       router.cleanup();
+      if (typeof window !== "undefined")
+        window.removeEventListener("projectops-mermaid-ready", render);
       if (typeof window !== "undefined") window.removeEventListener("scroll", saveReadingPosition);
     },
   };

@@ -31,11 +31,13 @@
     "@biomejs/biome": "2.5.12",
     "@playwright/test": "^1.63.0",
     "@types/node": "^24.0.0",
+    "esbuild": "^0.28.2",
     "tsx": "^4.20.0",
     "typescript": "^5.9.0"
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "0.85.0",
-    "@earendil-works/pi-server": "0.85.0"
+    "@earendil-works/pi-server": "0.85.0",
+    "mermaid": "^11.17.2"
   }
 }

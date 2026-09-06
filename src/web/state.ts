@@ -15,6 +15,7 @@ export function createInitialState(route?: RouteState): AppState {
     modelSelection: initialModelSelection(),
     route: route ?? { projectId: null, view: "overview" },
     docs: emptyDocsState(),
+    research: emptyDocsState(),
     selectedPlanId: route?.planId ?? null,
     selectedReportId: route?.reportId ?? null,
     backlog: emptyBacklogState(),

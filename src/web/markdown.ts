@@ -78,7 +78,13 @@ export function renderMarkdown(body: string, options: MarkdownOptions = {}): str
       i++;
       while (i < lines.length && !lines[i]!.trim().startsWith(fence[1]!)) code.push(lines[i++]!);
       if (i < lines.length) i++;
-      output.push(`<pre><code>${e(code.join("\n"))}</code></pre>`);
+      const language = line.slice(fence[0].length).trim().toLowerCase();
+      const source = code.join("\n");
+      output.push(
+        language === "mermaid"
+          ? `<pre class="mermaid-block" data-mermaid-source><code>${e(source)}</code></pre>`
+          : `<pre><code>${e(source)}</code></pre>`,
+      );
       continue;
     }
     if (isTable(i)) {

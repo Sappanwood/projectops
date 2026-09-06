@@ -228,7 +228,7 @@ Overview 文档面板提供四份标准文档的直接链接与逐项问题，�
 回顾卡片摘要由正文派生，最多显示 160 个字符，完整内容在详情阅读；预览数和状态计数均限定当前项目，
 读取异常时显示诊断和已读取数量，不能把该数量当作完整 store 总数。
 
-Workbench 可浏览 Backlog 并在详情顶部修改状态；revision 位于技术信息中。五类内容正文默认阅读排版，
+Workbench 可浏览 Backlog 并在详情顶部修改状态；done 分组默认折叠并显示数量，进入已完成目标时展开，用户可再次收起。revision 位于技术信息中。各领域正文默认阅读排版，
 可切换 Markdown 源码；Plan 通过任务目录定位正文，审批与 mapping 位于计划记录中。Plan 另有实时执行进度，按 task 计数，epic 不计入完成率；
 缺失或损坏任务仍占总数并显示诊断，未物化/零 task 不显示虚假的完成率。CLI 更新任务后点击 Refresh 查看最新进度，
 进度查询不自动改写 Plan；全部落地后可显式标为完成。点击 Plan 映射任务进入 Backlog，完成状态更新后点击“返回原 Plan”
@@ -237,7 +237,10 @@ Docs 可阅读四份标准文档和 `docs/` 下其他 Markdown，标准检查错
 支持章节目录、相对 Markdown 链接和源码切换；路径范围受限，符号链接目标/祖先被拒绝。HTTP list/show
 为 `GET /api/projects/<id>/docs` 与 `GET /api/projects/<id>/docs?path=<repo-relative-path>`；未新增 CLI 子命令。
 Report 的 Plan/Backlog/Repo docs 和回顾的关联任务可点击，通过“返回来源页面”往返。回顾详情和筛选条件、
-Docs 目标与章节写入地址；滚动和展开状态在当前页面会话内恢复。Mermaid 暂按代码显示，图片不加载。
+Docs 目标与章节写入地址；滚动和展开状态在当前页面会话内恢复。Mermaid 使用本地官方 runtime 渲染，语法错误及图片节点保留源码；图片不加载。
+Research 使用 manifest 登记的 `markdown/research@1` root，提供只读列表、正文、章节和相对 Markdown 链接，目标与章节写入地址；可用浏览器前进/后退返回来源。
+HTTP `GET /api/projects/<id>/research` 返回列表，`?path=<root-relative-markdown-path>` 返回正文；只接受单个 path 参数，无写入入口。
+空目录显示空状态，root/descriptor 失效与无法读取目标显示诊断；目标及其子目录符号链接被拒绝。
 本地服务入口和固定端口见 AGENTS.md。CLI 更新后在 Web 使用 Refresh 重读数据，不假定实时推送。
 本文不是全局 skill；不能套用假定 Workspace Control schema/store 的 backlog、plan、report skill。
 

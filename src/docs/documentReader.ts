@@ -29,6 +29,15 @@ export function isDocumentPath(value: string): boolean {
   );
 }
 
+export function isResearchDocumentPath(value: string): boolean {
+  const parts = value.split("/");
+  return (
+    !/[\\\x00-\x1f:]/.test(value) &&
+    parts.every((part) => part !== "" && part !== "." && part !== "..") &&
+    /\.md$/i.test(value)
+  );
+}
+
 function within(root: string, target: string): boolean {
   const relative = path.relative(root, target);
   return relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
@@ -121,5 +130,75 @@ export function listProjectDocuments(workspace: string, project: string): Docume
     }
   }
   walk("docs");
+  return { documents, diagnostics };
+}
+
+function researchRoot(workspace: string, root: string): string {
+  try {
+    const workspaceRoot = realpathSync(workspace);
+    const target = realpathSync(root);
+    if (!within(workspaceRoot, target) || !lstatSync(target).isDirectory())
+      throw new Error("Research root is unavailable");
+    return target;
+  } catch {
+    throw new DocumentReadError("DOCUMENT_UNAVAILABLE", "Research root 无法读取。");
+  }
+}
+
+export function readResearchDocument(
+  workspace: string,
+  root: string,
+  documentPath: string,
+): ProjectDocument {
+  if (!isResearchDocumentPath(documentPath))
+    throw new DocumentReadError(
+      "INVALID_DOCUMENT_PATH",
+      "Research 仅支持 root 下的 Markdown 文档。",
+    );
+  try {
+    const canonicalRoot = researchRoot(workspace, root);
+    return {
+      path: documentPath,
+      body: readFileSync(regularTarget(canonicalRoot, documentPath), "utf8"),
+    };
+  } catch (error) {
+    throw readError(error);
+  }
+}
+
+export function listResearchDocuments(workspace: string, root: string): DocumentList {
+  const canonicalRoot = researchRoot(workspace, root);
+  const documents: DocumentSummary[] = [];
+  const diagnostics: DocumentList["diagnostics"] = [];
+  function walk(relative: string): void {
+    try {
+      const absolute = path.join(canonicalRoot, relative);
+      const stat = lstatSync(absolute);
+      if (
+        stat.isSymbolicLink() ||
+        !stat.isDirectory() ||
+        !within(canonicalRoot, realpathSync(absolute))
+      ) {
+        diagnostics.push({
+          path: relative || ".",
+          issue: "目录不可读取（非普通目录或符号链接）。",
+        });
+        return;
+      }
+      for (const entry of readdirSync(absolute, { withFileTypes: true }).sort((a, b) =>
+        a.name.localeCompare(b.name),
+      )) {
+        const name = relative ? `${relative}/${entry.name}` : entry.name;
+        if (entry.isDirectory()) walk(name);
+        else if (/\.md$/i.test(entry.name)) {
+          if (entry.isFile()) documents.push({ path: name, standard: false, issue: null });
+          else diagnostics.push({ path: name, issue: "文档不是普通文件。" });
+        }
+      }
+    } catch (error) {
+      diagnostics.push({ path: relative || ".", issue: readError(error).message });
+    }
+  }
+  walk("");
   return { documents, diagnostics };
 }

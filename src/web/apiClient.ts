@@ -10,6 +10,8 @@ export type ApiClient = {
   request?<T>(path: string, body?: unknown, method?: string): Promise<ApiResult<T>>;
   listDocuments(projectId: string): Promise<ApiResult<DocumentList>>;
   showDocument(projectId: string, path: string): Promise<ApiResult<ProjectDocument>>;
+  listResearch(projectId: string): Promise<ApiResult<DocumentList>>;
+  showResearch(projectId: string, path: string): Promise<ApiResult<ProjectDocument>>;
   getReadPages(projectId: string): Promise<ApiResult<WorkbenchReadPages>>;
   getWorkspaceOverview(): Promise<ApiResult<WorkbenchWorkspaceOverview>>;
   getProjectOverview(projectId: string): Promise<ApiResult<WorkbenchProjectOverview>>;
@@ -88,6 +90,14 @@ export function createApiClient(
     showDocument(projectId, path) {
       return request(
         `/api/projects/${encodeURIComponent(projectId)}/docs?path=${encodeURIComponent(path)}`,
+      );
+    },
+    listResearch(projectId) {
+      return request(`/api/projects/${encodeURIComponent(projectId)}/research`);
+    },
+    showResearch(projectId, path) {
+      return request(
+        `/api/projects/${encodeURIComponent(projectId)}/research?path=${encodeURIComponent(path)}`,
       );
     },
     getReadPages(projectId) {

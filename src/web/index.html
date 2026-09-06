@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
+  <meta http-equiv="Content-Security-Policy" content="img-src 'none'; style-src 'self' 'unsafe-inline'; font-src 'self'; object-src 'none'; frame-src 'none'">
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ProjectOps Workbench</title>
@@ -10,6 +11,7 @@
 </head>
 <body>
   <div id="app"></div>
+  <script type="module" src="./mermaid.js"></script>
   <script type="module" src="./app.js"></script>
 </body>
 </html>

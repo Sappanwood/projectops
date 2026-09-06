@@ -1,7 +1,7 @@
 import { renderModelSelector } from "./modelSelector.js";
 import { formatRoute } from "./router.js";
 import { isReadPage, renderReadPages } from "./readPagesView.js";
-import { renderDocs } from "./docsView.js";
+import { renderDocs, renderResearch } from "./docsView.js";
 import type {
   AppState,
   ViewType,
@@ -171,6 +171,7 @@ export function renderDomainTabs(
       label: "Docs",
       badge: overview ? (overview.docs.healthy ? "OK" : "Issues") : undefined,
     },
+    { id: "research", label: "Research" },
     {
       id: "retrospectives",
       label: "Retrospectives",
@@ -277,9 +278,14 @@ export function renderContent(state: AppState): string {
     `;
   }
 
-  if (state.projectOverview !== null && isReadPage(state.currentView)) {
+  if (
+    state.projectOverview !== null &&
+    (isReadPage(state.currentView) || state.currentView === "research")
+  ) {
     if (state.currentView === "docs")
       return `<div id="panel-docs" role="tabpanel" aria-labelledby="tab-docs">${renderDocs(state.docs, state.route)}</div>`;
+    if (state.currentView === "research")
+      return `<div id="panel-research" role="tabpanel" aria-labelledby="tab-research">${renderResearch(state.research ?? { ...state.docs, list: null, document: null }, state.route)}</div>`;
     let content = '<p role="status">Loading read-only view…</p>';
     if (state.readPagesError !== null)
       content = `<p role="alert">${escapeHtml(state.readPagesError.message)}</p><button id="read-pages-retry" class="btn btn-secondary">Retry</button>`;
@@ -360,6 +366,7 @@ export function renderProjectView(
     case "plans":
     case "reports":
     case "docs":
+    case "research":
     case "retrospectives":
       viewContent = '<p role="status">Loading read-only view…</p>';
       break;

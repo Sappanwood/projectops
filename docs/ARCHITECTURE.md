@@ -90,7 +90,7 @@ src/
     apiClient.ts          HTTP API 客户端与网络/格式错误收敛
     backlogController.ts Backlog 列表、详情、revision mutation 与异步响应隔离
     backlogView.ts        Backlog 分组列表、详情、依赖提示和更新控件
-    markdown.ts           五类内容共用阅读子集与源码切换，HTML 转义、受限链接和标题回调
+    markdown.ts           各领域共用阅读子集与源码切换，HTML 转义、受限链接和标题回调
     docsView.ts           文档导航、正文、章节目录及相对链接解析
     state.ts              前端状态机核心与不可变状态转移
     readPagesView.ts       Plan/Report/Docs/Retrospective 只读详情与回顾过滤
@@ -149,7 +149,7 @@ Docs check、project-scoped Retrospective 计数和最近记录。projection 不
 `workbenchServer.ts` 是 application API 外的薄 HTTP adapter。启动参数固定唯一 workspace，并默认绑定
 `127.0.0.1:7331`；host 只接受 loopback，测试可使用 port `0` 获取隔离端口。路由提供 workspace/project
 overview、Backlog list/show/update、Docs list/show 和 `GET /api/projects/<id>/read-pages`，统一返回 `{ ok, data }` 或 `{ ok, error }` JSON envelope，并把 stale
-revision 映射为 HTTP 409。请求不能提供 workspace path；除 Backlog list 的 `status` 和 Docs show 的 `path` 外拒绝 query 参数。
+revision 映射为 HTTP 409。请求不能提供 workspace path；除 Backlog list 的 `status` 和 Docs/Research show 的 `path` 外拒绝 query 参数。
 PATCH 接受 `application/json`、无 Origin 或与 server origin 完全相同的 Origin，以及有界 body；状态更新与内容编辑分开校验，内容编辑要求 revision。server 可从显式 static root 提供前端资源，realpath containment 防止 URL
 访问 root 外文件；未提供 static root 时自动查找内置 `dist/web` 生产资源，只有资源尚未构建时才返回占位页。
 关闭先停止接收连接，随后有界清理残留连接。
@@ -170,7 +170,7 @@ Workbench Backlog 页面通过 HTTP list/show/update 获取完整数据，独立
 `backlogController.ts` 管理列表、当前详情和提交状态：提交携带已加载 revision，成功后重读列表和详情并刷新
 project overview；409 保留旧详情和当前选择，用户显式刷新后才能再次提交。项目切换会废弃旧请求的 UI
 结果，进行中的提交不允许重复触发。页面依据 `depends_on` 与已读取 item 状态显示未完成/缺失依赖提示，
-不引入额外的 mutation 规则。五个内容页面经 `markdown.ts` 渲染受限阅读子集，所有输入文本转义；HTTP(S) 外链可点击，Docs/Report 通过各自链接解析器生成受限内部路由；
+不引入额外的 mutation 规则。各内容页面经 `markdown.ts` 渲染受限阅读子集，所有输入文本转义；HTTP(S) 外链可点击，Docs/Report 通过各自链接解析器生成受限内部路由；
 原始 HTML、图片及未支持语法不执行，可展开源码切回原文。源码模式与 details 展开状态仅保存在会话内存，
 `app.ts` 按项目和条目 key 在重新渲染时恢复，不增加持久化状态；Plan 目录通过 DOM 定位，不改写 router hash。
 workspace 连接重试期间的路由变化只更新目标路由，待 workspace 响应到达后再加载项目。
@@ -324,12 +324,16 @@ Plan 创建、批准、物化、任务变化、下一步查询、partial/complet
 此读取是受信任本地 workspace 下的静态边界，不抵抗恶意并发替换祖先；使用现有 Node.js 能力，无 native helper。
 文档正文不加入 read-pages 聚合 payload，`GET /api/projects/<id>/docs?path=...` 仅返回选中文档的 path/body。
 
-`docsView.ts` 复用 `renderReadingBody`，通过 headingId 回调生成章节目录，通过 resolveLink 回调解析相对 Markdown 和章节锚点。
+`docsView.ts` 复用 `renderReadingBody`，通过 headingId 回调生成章节目录，通过 resolveLink 回调解析相对 Markdown 和章节锚点；同一阅读布局也服务 Research root 的列表与正文。
 共享渲染器只接受 HTTP(S) 或解析器产生的内部 `#/projects/` 链接；原始 HTML 和未支持目标不执行。
 `RouteState` 扩展 documentPath/section、retrospectiveId/retrospectiveFilters 和受限 returnTo。
 回顾筛选在已有 projection 上立即执行，详情直达时可单独展示筛选外记录；跨页返回重读数据。
 `app.ts` 用单独 documentRequestId 丢弃晚到的文档响应；路由记录选中目标、章节和过滤，内存 Map 保留 details 与滚动位置。
 整页重载通过 URL 恢复目标/过滤/章节，内存中的源码模式和像素位置不持久化，不新增业务 schema 或派生索引。
+`mermaidClient.ts` 将官方 Mermaid ESM 本地打包为独立浏览器模块，共享 Markdown 入口提供转义源码占位；DOM 更新后渲染，过期结果不挂载。
+采用 strict、禁用 HTML labels 并锁定安全配置；图片节点在渲染前降级，输出拒绝活动元素，页面 CSP 禁止图片、外部样式和嵌入内容。
+语法错误保留源码，其余正文继续可读。集成 API 依据 [Mermaid 官方用法](https://mermaid.js.org/config/usage) 与 [配置契约](https://mermaid.js.org/config/schema-docs/config)。
+Research 通过 manifest 的 `markdown/research@1` descriptor 解析 `projectArtifactRoots(...).research`，只枚举 root 内普通 `.md` 文件；root 或 descriptor 失效作为诊断，不伪装为空目录。Research HTTP 测试覆盖正常阅读、缺失、非 Markdown 和越界目标。
 Docs HTTP 测试覆盖正常阅读、缺失、非 Markdown、路径越界和 symlink 逃逸；Chromium 测试覆盖源码/目录、
 关联返回、浏览器前进后退、读取失败重试、快速切换项目和窄屏，并用文件快照验证只读。
 

@@ -61,13 +61,13 @@ CLI 使用 `pops plan complete <project> <plan> --expected-revision <revision> -
 Plan 的交付报告区列出同项目关联报告，按生成时间降序排列，显示 outcome 与时间；点击报告可查看详情并返回原 Plan。
 全部任务完成但没有报告时会单独提示；报告是创建时快照，当前进度变化不会改写已有报告。Reports 页面可展开完整详情，查看
 交付 outcome、正文、验证、偏离与 workaround；技术记录折叠。关联 Plan、Backlog 和 Repo 文档可点击，并提供返回来源页面入口。
-Docs 提供四份标准文档入口，并列出 `docs/` 下其他 Markdown。点击文档按需读取正文，支持章节目录、
+Docs 提供四份标准文档入口，并列出 `docs/` 下其他 Markdown。Research 提供 manifest Research root 下 Markdown 的只读列表与正文入口；两者复用章节目录、
 相对 Markdown 链接与章节锚点；检查结果不阻止正文阅读。非标准文档标为未参与标准检查，缺失或不可读目标可重试。
 Retrospectives 展示 workspace 完整列表，默认过滤当前项目；支持 status、project、task
 精确过滤，project/task 留空表示全部，填写 `null` 表示 provenance 未记录。回顾按 inbox/active/archive 分组，
 列表从正文派生摘要，详情优先展示渲染正文、下一步和结案说明，技术信息折叠；关联任务可点击。
 Docs 与回顾详情支持直达地址；回顾筛选条件写入地址，刷新或任务往返后恢复。阅读位置与展开状态在当前页面会话内保留。
-malformed artifact 单独显示诊断。Reports、Docs、Retrospectives 保持只读；Plans 可预览并确认修订，也可显式标为完成。点击顶部 Refresh 重读文件。Mermaid 暂按代码显示，图片不加载。
+malformed artifact 单独显示诊断。Reports、Docs、Research、Retrospectives 保持只读；Plans 可预览并确认修订，也可显式标为完成。点击顶部 Refresh 重读文件。Mermaid fenced block 使用本地官方 runtime 的 strict 模式渲染，错误保留源码，图片不加载。
 
 Overview 优先展示未完成计划和活动任务，分开显示计划状态、实时 task 进度与历史报告结果。
 桌面两列、窄屏单列，条目标题完整换行；列表最多预览五条并显示对应范围数量，读取异常单独提示。

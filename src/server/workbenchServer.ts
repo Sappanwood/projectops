@@ -25,7 +25,7 @@ import {
   getWorkbenchWorkspaceOverview,
 } from "../application/workbenchReadModel.js";
 import { getWorkspaceSummary } from "../application/workspaceApi.js";
-import { listDocuments, showDocument } from "../application/docsApi.js";
+import { listDocuments, listResearch, showDocument, showResearch } from "../application/docsApi.js";
 import { completePlan } from "../application/planComplete.js";
 import { showPlanRevision, revisePlan } from "../application/planRevision.js";
 import { decideExecution, listExecutions, showExecution } from "../application/executionApi.js";
@@ -343,6 +343,20 @@ async function handleRequest(
         response,
         getWorkbenchReadPages({ workspaceDir: context.workspaceDir, projectId: segments[2]! }),
       );
+      return;
+    }
+
+    if (
+      segments.length === 4 &&
+      segments[0] === "api" &&
+      segments[1] === "projects" &&
+      segments[3] === "research"
+    ) {
+      requireMethod(request, "GET");
+      const documentPath = singleQueryValue(url, "path");
+      const input = { workspaceDir: context.workspaceDir, projectId: segments[2]! };
+      if (documentPath === undefined) sendApplicationResult(response, listResearch(input));
+      else sendApplicationResult(response, showResearch({ ...input, path: documentPath }));
       return;
     }
 

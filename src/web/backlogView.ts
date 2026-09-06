@@ -20,14 +20,18 @@ export function renderBacklogPanel(state: BacklogViewState): string {
         .filter((item) => item.status === status)
         .sort((a, b) => a.id.localeCompare(b.id));
       if (items.length === 0) return "";
-      return `<section class="backlog-group"><h3>${labels[status]} <span class="group-count">${items.length}</span></h3><ul class="items-list">${items
+      const group = `<ul class="items-list">${items
         .map(
           (item) =>
             `<li><button class="backlog-select" data-backlog-item="${e(item.id)}" ${state.saving ? "disabled" : ""}
         aria-label="${e(item.id)} — ${e(item.title)} (${e(item.priority)})" aria-pressed="${item.id === state.selectedItemId}">
         <span class="backlog-select-title">${e(item.title)}</span><span class="item-meta"><code>${e(item.id)}</code><span class="badge badge-priority">${e(item.priority)}</span><span class="badge badge-${e(status)}">${labels[status]}</span></span></button></li>`,
         )
-        .join("")}</ul></section>`;
+        .join("")}</ul>`;
+      const heading = `${labels[status]} <span class="group-count">${items.length}</span>`;
+      return status === "done"
+        ? `<details class="backlog-group" data-reading-key="backlog-group-done"${state.selectedItemId !== null && items.some((item) => item.id === state.selectedItemId) ? " open" : ""}><summary>${heading}</summary>${group}</details>`
+        : `<section class="backlog-group"><h3>${heading}</h3>${group}</section>`;
     })
     .join("");
   const item = state.item;
