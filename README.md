@@ -182,8 +182,9 @@ pops project doctor
 pops docs scaffold my-app --json
 pops docs check my-app --json
 
-# 5. 为 project 初始化 backlog store
+# 5. 为 project 初始化 backlog store（自动分配 workspace 内未占用代号）
 pops backlog init my-app
+# 如需固定代号，在首次初始化时改用：pops backlog init my-app --id-prefix MYA
 
 # 6. 创建与推进 backlog item
 pops backlog add my-app -T "First task" -c feature --priority P1 --body "First task body."
@@ -252,7 +253,8 @@ capture 的显式和自动 ID 在三个状态目录中保持唯一；运行时�
 - `pops project add/list/doctor`：显式登记、查询、拓扑校验
 - `pops docs scaffold <project> [--json]`：为已登记 project 创建缺失的 README、AGENTS、产品规格和架构文档模板；已有普通文件只跳过，不覆盖
 - `pops docs check <project> [--json]`：只读检查固定四份文档是否为普通文件并各自包含 Markdown 一级标题；失败时按固定顺序返回全部诊断
-- `pops backlog init/add/list/show/update`：store bootstrap、CRUD、状态流转与 revision 保护
+- `pops backlog init <project> [--id-prefix <PREFIX>] [--json]`：初始化并分配当前 manifest 登记 store 内未占用代号；自定义只接受非空 ASCII 大写字母和数字，原样验证。自动候选为 project ID 去连字符、取前三位并转大写，冲突后依次附加 `2`、`3`……（如 `MOC` → `MOC2`）。冲突、不可读/无效 store 和已有目标均明确拒绝；参数、收据和正常并发锁恢复见 [Agent 操作契约](docs/AGENT_CONTRACT.md#backlog初始化与代号)
+- `pops backlog add/list/show/update`：CRUD、状态流转与 revision 保护
 - `pops plan next <project> <plan-id> [--json]`：只读查询该 Plan 的可开始、进行中和受阻 task，解释依赖原因；
   可开始任务按 P0 → P3、ID 排序，next 为首项或 null。依赖可以位于同项目 Plan 外，查询不自动改状态或启动任务
 - `pops plan create/list/show/validate/approve/materialize/revise/complete`：从 JSON 草案创建、列出、查看、校验、批准并将已批准的 `plan/Plan@1` artifact 写入 Backlog；Plan ID 由 title 稳定生成，

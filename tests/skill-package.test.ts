@@ -37,6 +37,11 @@ test("packed CLI installs self-contained references and content-based updates at
   const installed = path.join(root, ".agents/skills/projectops-workflow");
   const bundlePath = path.join(packageDir, "dist/skills/bundle.json");
   const bundle = JSON.parse(readFileSync(bundlePath, "utf8"));
+  const contract = bundle.files["references/AGENT_CONTRACT.md"];
+  assert.match(contract, /backlog init mochi-write --id-prefix MWT/);
+  assert.match(contract, /MOC2/);
+  assert.match(contract, /backlog-init\.lock/);
+  assert.match(bundle.files["SKILL.md"], /--id-prefix/);
   for (const [file, body] of Object.entries(bundle.files) as [string, string][]) {
     assert.doesNotMatch(body, /\/home\/ling|\.\.\/\.\.\/docs/);
     for (const link of body.matchAll(/\]\(([^)]+)\)/g)) {

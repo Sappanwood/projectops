@@ -50,7 +50,11 @@ Commands:
   project add <path>      Register a directory as a project in the workspace
   project list [--json]   List registered projects
   project doctor [--json] Validate workspace topology
-  backlog init <project>  Bootstrap a backlog store for a registered project
+  backlog init <project> [--id-prefix <PREFIX>] [--json]  Bootstrap a backlog store
+    PREFIX: non-empty ASCII A-Z/0-9, no normalization; conflicts are rejected.
+    Default: first 3 project ID characters after removing hyphens, uppercase;
+    try BASE, BASE2, BASE3... against registered stores in this workspace.
+    Unreadable/invalid stores or a busy initialization lock block creation; existing stores are never replaced.
   backlog add <project>   Add a backlog item (requires -T, -c, --priority)
   backlog list <project>  List backlog items (optional --status filter)
   backlog show <project> <item>  Show a full backlog item
@@ -143,12 +147,10 @@ export function runCli(args: readonly string[], io: CliIO, cwd = process.cwd()):
       return 1;
     }
     case "backlog": {
+      if (rest[0] === "init") return initBacklog(rest.slice(1), io, cwd);
       const [sub, first, ...subArgs] = rest;
       const json = [first, ...subArgs].includes("--json");
       const forwarded = subArgs.filter((arg) => arg !== "--json");
-      if (sub === "init") {
-        return initBacklog(first, json, io, cwd);
-      }
       if (sub === "add") {
         return backlogAdd(first, forwarded, json, io, cwd);
       }

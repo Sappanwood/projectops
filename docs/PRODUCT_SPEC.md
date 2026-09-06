@@ -27,7 +27,7 @@ Markdown/JSON artifact 为权威数据，通过统一 `pops` CLI 和 Local Web W
 | 模块 | 目标能力 | 当前状态 |
 |---|---|---|
 | Workspace/Catalog | 初始化、项目注册、typed roots、doctor | 已实现（init、project add/list/doctor） |
-| Backlog | Store bootstrap、CRUD、dependency、queue | 已有状态与内容编辑、revision 保护、depends_on；全局 queue 未实现 |
+| Backlog | Store bootstrap、CRUD、dependency、queue | 初始化代号支持 workspace 内查重及自定义；已有状态与内容编辑、revision 保护、depends_on；全局 queue 未实现 |
 | Plan | authoring、查询、validation、review、approval、materialization、修订 | 已实现创建、校验、批准、物化、下一步查询及 preview/confirm 修订 |
 | Report | delivery evidence 生成和关联 | 部分实现（Report@1 schema/storage、单 Plan 生成资格校验与 `pops report create/list/show`；已覆盖 completed/partial/no-clobber CLI smoke） |
 | Project Docs | roles、templates、scaffold、check | scaffold/check 与 Workbench 文档阅读已实现 |
@@ -64,6 +64,12 @@ Project Docs 提供四份标准文档直达入口，逐项显示可读性与检�
   成功只更新 Plan status，保留批准、mapping 和输入；同 revision 的 done 重试为 no_op。未完成、无法读取和 revision 冲突不写文件。
   done 显示“已完成”，不能重新批准、修订或创建新 run；新增范围另建后续计划。Backlog 后续变化不自动撤销 done，实时进度仍独立展示。
   Report 继续从实时 Backlog 与执行证据校验，接受 approved 或 done Plan；生成报告不会自动标记完成，partial 也不允许跳过完成条件。
+- Backlog 初始化支持 `pops backlog init <project> [--id-prefix <PREFIX>]`。自定义代号仅接受非空 ASCII 大写字母和数字，不改大小写、去空白或替换非法输入；沿用 Store@1，无额外长度限制。
+  自动 base 为 project ID 去连字符、取前三位并转大写，按 `base`、`base2`、`base3`……选择第一个未占用值；mochi 先得到 `MOC` 后，mochi-write 自动得到 `MOC2`。显式指定 `MWT` 后，add 从 `MWT-001` 编号。
+  查重仅使用当前 ProjectOps manifest 登记项目的已初始化 Backlog store，不跨 workspace、不扫描 Workspace Control 或未登记目录，不为尚未初始化项目预留代号。
+  只有可读取 root 中 `backlog.json`、`items/`、`INDEX.md` 均不存在时才视为未初始化；不可读取、缺失或部分 store、非法 schema/prefix、project_id 不匹配均阻止创建，并指出项目、位置和恢复原因。
+  自定义冲突明确指出占用项目；输入或查重失败不创建目标 store 文件。已有 store 和 ID 保持不变，重复 init 拒绝覆盖，即使 store 尚无条目也不借 init 改名；历史重复代号不自动修复或迁移。
+  同 workspace 的初始化以短时排他锁协调正常并发，锁占用时明确失败并可重试；不承诺与手工改写/项目注册并发、崩溃恢复或对抗性 ancestor swap。完整参数、收据及锁恢复见 [Agent 操作契约](AGENT_CONTRACT.md#backlog初始化与代号)。
 - 派生索引和未来 UI preference 不得成为业务 authority。
 - Workbench Read Model 是按请求从现有领域读取能力组合的 projection：workspace overview 返回 workspace identity、
   project summaries 与 doctor diagnostics；project overview 返回 Backlog 状态计数/最近条目、Plan/Report 摘要、

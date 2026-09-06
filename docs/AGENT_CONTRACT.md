@@ -84,6 +84,37 @@ Node.js 22+、无 native helper；不承诺恶意 ancestor swap、跨文件事�
 已通过登记 Git 子 Repo、深层目录和 workspace 根目录的实际资源加载与 read/bash 只读操作验证，无付费模型请求。
 其他外部 Agent 自动发现未验证，不保证全平台通用发现；全局安装不属于这些命令的写入范围。
 
+## Backlog：初始化与代号
+
+```bash
+pops backlog init mochi --json
+pops backlog init mochi-write --id-prefix MWT --json
+```
+
+`pops backlog init <project> [--id-prefix <PREFIX>] [--json]` 只用于已登记、尚未初始化的 store。
+`--id-prefix` 必须为非空 ASCII 大写字母或数字组合（`A-Z`、`0-9`）；无额外长度限制，
+不转换大小写、不去空白、不删除字符。小写、空值、空白、连字符及其他字符明确拒绝，不替换用户输入。
+
+省略参数时，先将 project ID 去连字符、取前三位并转大写作为 base；依次尝试 `base`、`base2`、
+`base3`……，采用第一个未占用候选。例如先初始化 mochi 得到 `MOC`，再初始化 mochi-write 得到 `MOC2`；
+若 `MOC3` 也已占用，后续同 base 项目会跳至 `MOC4`。自动代号取决于初始化时的占用情况，不预留未初始化项目的代号。
+指定 `MWT` 成功后，后续 add 使用 `MWT-001` 等编号，仍从 add 收据读取真实 ID。
+
+查重仅覆盖当前 `.pops/workspace.json` 登记项目、按 manifest layout 解析的 Backlog roots；
+不扫描未登记目录、其他 workspace 或 Workspace Control。只有可读取目录中三个初始化目标
+`backlog.json`、`items/`、`INDEX.md` 均不存在时才视为未初始化。缺失/不可读 root、部分 store、
+非法 manifest 或 project_id 不匹配会阻止创建，诊断指出项目、位置与原因；先检查权限并修复/恢复对应 store，
+不要删除数据绕过检查。自定义冲突报告占用项目，选用其他合法代号后再试。上述拒绝不会创建目标 store 文件。
+
+成功 JSON 沿用 `{ok:true,store:{project_id,id_prefix,root}}`，`id_prefix` 是实际保存值，`root` 为 workspace 相对路径；
+文本输出也显示代号。失败退出 1，错误写 stderr，JSON 模式不保证失败 envelope。未知选项、缺值、重复代号选项和多余参数均拒绝。
+已有 store（即使为空）重复 init 仍失败且保持原数据；此参数不是改名入口，不自动重编号、迁移或修复历史重复代号。
+
+同 workspace 的 backlog init 使用 `.pops/runtime/backlog-init.lock` 空目录排他，覆盖查重、分配和 no-clobber 创建。
+锁占用时失败，等待当前初始化结束后重试；中断遗留锁须先确认没有初始化进程运行，再仅移除该空锁目录。
+正常返回（成功或失败）释放自己取得的锁。初始化期间不要并发手改 manifest/store；锁不协调项目注册或手工修改。
+支持受信任本地 Linux workspace、Node.js，无 native helper；不承诺恶意 ancestor swap、跨文件事务或崩溃自动恢复。
+
 ## Backlog：创建与推进
 
 先列出现有任务，确认范围和依赖；正文写清目标、验收和不在范围。`task.md` 是调用方准备的正文输入文件。

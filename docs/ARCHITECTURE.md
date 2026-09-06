@@ -72,6 +72,7 @@ src/
     result.ts             UI-neutral typed success/error contract
     workspaceApi.ts       workspace identity 与 project summaries 查询
     backlogApi.ts         Backlog list/show/revision-protected update API
+    backlogInit.ts        Backlog 初始化：manifest 内前缀查重、分配和创建编排
     workspaceInspection.ts workspace doctor 的 typed inspection API
     workbenchReadModel.ts workspace/project 跨领域只读 projection
     docsApi.ts            文档列表与单篇正文的共享 application API
@@ -198,6 +199,15 @@ SIGTERM，2 秒未退出则 SIGKILL，4 秒仍未退出则报错；随后清理�
   唯一 workspace-level Retrospective store，默认由 `pops init` 写入 `retrospectives/`。
 - backlog store：`ops/<project-id>/backlog/`，含 `backlog.json`（`backlog/Store@1`，声明
   project_id 与 id_prefix）、`items/` 与 `INDEX.md`。
+- Backlog 初始化由 `application/backlogInit.ts` 编排，CLI 只解析 `--id-prefix`、输出收据与退出码。
+  application 在 workspace 初始化锁内重读 manifest，校验 Backlog descriptor 并只枚举登记项目；filesystem adapter 检查静态目录边界、初始化文件类型和 Store@1，application 核对 project_id 归属。
+  未初始化必须是可读取 root 且三个初始化目标均不存在；缺失/不可读 root、部分初始化或无效 store 返回带项目和相对位置的恢复诊断，不能视为未占用。不扫描条目正文或其他系统。
+  domain 沿用非空 ASCII `A-Z`/`0-9` 代号规则；自定义值原样验证，自动 base 为 project ID 去连字符、取前三位并转大写，依次选择 `base`、`base2`、`base3`……中的首个空闲候选。
+  例如 mochi 占用 `MOC` 后，mochi-write 得到 `MOC2`；自定义冲突返回占用项目，不改用自动值。收据中的 id_prefix 来自实际写入的 manifest，不重新推导。
+  `.pops/runtime/backlog-init.lock` 排他空目录覆盖读取占用集合、分配与 `createStore` 的 `wx` no-clobber 写入；锁忙时立即拒绝，正常成功/失败通过 finally 释放自身锁，不删除其他进程的锁。
+  沿用有限 I/O 失败清理，不建立前缀 registry、通用事务或 migration。旧 store/ID 与重复 init 的保护不变。
+  该协调只覆盖正常并发 backlog init；manifest 注册和手工编辑不参与锁，初始化期间不得并发改写。中断残留空锁须确认无初始化进程后人工移除，不自动恢复崩溃或清理业务数据。
+  支持受信任本地 Linux workspace、Node.js、静态路径检查，无 native helper；不承诺同用户恶意 ancestor swap 或其他平台等价原子性。
 - backlog item：`items/<ID>.md`，YAML 风格 frontmatter + Markdown body；`revision` 是其余内容的
   sha256 前 8 位，用于 `update --expected-revision` 的冲突保护。
 - `INDEX.md` 是从 item 文件重建的可读 projection；add 和真实状态变更后同步刷新，no-op 不改写。
