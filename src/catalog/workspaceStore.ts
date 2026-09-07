@@ -5,6 +5,7 @@ import path from "node:path";
 import { validateDevDescriptor } from "../dev/config.js";
 
 import {
+  isProjectId,
   MANIFEST_DIR,
   MANIFEST_FILE,
   RETROSPECTIVE_ARTIFACT_TYPE,
@@ -83,7 +84,7 @@ function validateManifest(value: unknown): string | null {
   }
   if (!isRecord(value.projects)) return "invalid projects";
   for (const [id, registration] of Object.entries(value.projects)) {
-    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) return `invalid project id: ${id}`;
+    if (!isProjectId(id)) return `invalid project id: ${id}`;
     if (!isRecord(registration) || !isSafeRelativePath(registration.path)) {
       return `invalid project registration: ${id}`;
     }

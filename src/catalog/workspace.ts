@@ -87,6 +87,10 @@ export function workspaceRetrospectiveRoot(
   return path.join(workspaceRoot, retrospectives.root);
 }
 
+export function isProjectId(value: string): boolean {
+  return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value);
+}
+
 export function slugifyProjectId(name: string): string {
   return name
     .toLowerCase()

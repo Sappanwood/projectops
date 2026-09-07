@@ -300,3 +300,19 @@ unknown 不提供启动/重启，恢复使用 CLI 人工核实流程。项目切
 Workbench 仅为独立 manager 的客户端，不因页面关闭或自身重启停止项目；不提供网页 manager stop。
 按当前固定 workspace 的 manifest endpoint 与实际监听端口匹配识别承载网页的项目，Web/API 禁止其 stop/restart
 并指向 CLI；不承诺代理入口或未登记端点的自重启识别和自动重连。
+
+## 跨项目任务依赖契约
+
+本节定义跨项目依赖切片的目标契约。当前已实现纯引用解析基础；Backlog/Plan 写入入口、共享就绪判断、运行保护与 Web 呈现按后续切片接入，不能仅凭本节假定入口已支持。
+
+- Backlog 的 `depends_on: string[]` 使用当前联合语法：`PRO-058` 表示所属项目的任务，`mochi:MOC-001` 表示显式项目与任务。项目名遵循 manifest 的 project ID 规则，ID 遵循 Backlog 格式；不按 ID prefix 推断项目。解析后使用 `{project,item}` 身份，`project:item` 作为比较键；同项目裸 ID 与限定引用视为同一身份，混用重复项必须拒绝。
+- Plan 保留 `plan/Plan@1` 与 `depends_on: string[]`。`prepare` 是该草案局部 key；`projectops:PRO-058`、`mochi:MOC-001` 是既有 task，引用本项目已有任务也必须限定项目。裸 Backlog ID 不是 Plan key。`parent` 仍仅为本 Plan epic 的局部 key，不支持跨项目父子关系。
+- 引用解析的纯函数只校验语法。应用层从当前 workspace manifest 精确路由，校验项目、store prefix、对象 project/id 与 task 类型；未知项目、缺失/不可读对象、损坏数据均给出包含引用身份的诊断。引用不创建、复制或改写上游任务。
+- 创建和依赖编辑校验自依赖、重复身份及从变更节点可达的任务依赖链；用完整身份检测跨项目环。可达对象不可读时拒绝写入，不要求扫描无关项目全部任务。修改以当前 revision 提交完整依赖集合，空集合表示移除全部；失败不改写目标。已有执行输入保护继续适用，引用编辑不绕过活动 run/attempt。
+- Plan create/validate/approve/materialize/revise 校验局部图及既有引用；物化与修订写入前重新校验。上游不必 done 才能建立引用或物化。局部 key 经 mapping 转成本项目 ID，限定引用保留原值。mapping 仅包含本 Plan 新建项，外部任务不进入本 Plan 所有权、进度分母或 completed 范围。完整 mapping 的重复物化保持 no-op；不借重试覆盖数据。
+- 物化后的 Backlog 依赖是执行事实。Plan 修订使用现有 preview/confirm、revision 与受控同步：独立编辑或已有执行历史不能隐式覆盖；Plan 草案不是第二个可独立改写的执行依赖 authority。
+- 就绪判断检查直接前置的当前事实，不递归要求祖先全部 done。上游须为 done；todo/in_progress/blocked/cancelled 均不满足，重新打开后刷新必须重新阻塞。无受管 attempt 的任务以 done 为完成事实；有受管记录时必须具有对应当前输入与验证证据的有效接受，单独 succeeded 不满足；来自并行 run 的接受还必须 landed。取消不视为完成，读取失败不复用缓存解锁。已有本地串行验收与并行 landed 门禁继续保持。
+- 运行仅调度自身 mapping，不启动外部 Repo。冻结快照记录完整引用、上游输入/状态与接受或落地依据；每次派发和 Report 资格检查重新读取。冻结后输入变化或依据失效时阻塞/暂停并解释原因，不自动改写快照或扩大执行范围。本项目既有 completed-task reuse note 与证据规则继续适用。
+- 正向关系列出直接前置及原因；反向关系只读扫描 manifest 已注册项目的 Backlog，使用完整身份匹配。局部损坏返回 diagnostics，并明确结果可能不完整。两种关系都是派生视图，不持久化第二份状态。
+
+本轮不增加 workspace Plan、多项目新任务物化、跨 Repo 调度、全局队列或 Capability/Release 对象。存储格式仍为当前字符串数组联合语法，不新增旧版转换或兼容分支，不需要重写现有自身或其他真实项目数据。受支持边界为受信任本地 Linux workspace、Node.js 22+、无新增 native helper；使用 manifest 路由、静态 containment 与既有 revision/no-clobber，不增加恶意 ancestor-swap 或跨项目事务保证。

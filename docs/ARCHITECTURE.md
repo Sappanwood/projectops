@@ -500,3 +500,27 @@ Origin、JSON、body 上限与错误 envelope。返回的 endpoints 优先保留
 当前 manifest endpoint 端口匹配实际 server 端口时阻止网页 stop/restart，loopback host 别名不会绕过；
 未登记或代理入口不在识别保证内。Workbench close 不调用 manager stop。
 `web/devUi.ts` 维护独立局部查询与操作状态，按项目代次隔离响应、串行提交，并以局部轮询保留焦点和诊断展开状态。
+
+## 跨项目依赖的身份与消费者
+
+`backlog/dependencyReference.ts` 提供纯 `TaskReference`、`parseTaskReference`、`parsePlanDependency` 和
+`taskReferenceKey`。Backlog 裸 ID 在所属项目解释，限定 `project:ID` 显式定位项目；Plan 裸小写 key
+表示草案局部节点，既有任务必须使用限定引用。项目语法与 manifest 共用 `catalog/workspace.ts` 的
+`isProjectId`。parser 不进行 I/O、不验证注册或存在性；完整身份供去重、循环检测与链接使用。
+该基础已实现，其余消费者按下表逐步接入；入口当前可用性仍以对应章节和 CLI 为准。
+
+| 消费者 | 接入要求 |
+|---|---|
+| `backlog/item.ts`、`backlog/add.ts`、`application/backlogApi.ts`、`useCases/backlogAdd.ts`、`useCases/backlogUpdate.ts` | 保持 Markdown string[] 读写；共享应用层按 manifest 解析目标，创建/替换/移除依赖，revision、自依赖、同身份重复和可达跨项目循环校验；外部只读 |
+| `plan/plan.ts`、`useCases/planMaterialize.ts`、`application/planRevision.ts` | 区分局部拓扑和既有引用；物化保留限定引用，mapping 只拥有本项目新项；修订复用受控同步及输入保护 |
+| `application/planNext.ts`、`application/planExecution.ts`、`application/workbenchReadModel.ts` | 共享完整引用解析与满足规则，直接前置当前状态/接受/landed 诊断；进度仅统计 mapping，自身无 ready 不等于 completed |
+| `application/planRunApi.ts`、`planRun/planRun.ts` | 串行快照中的依赖保持项目身份与满足证据；只创建自身节点，派发前复核外部事实并保留本地接受/reuse 规则 |
+| `application/parallelRunApi.ts`、`planRun/parallelRun.ts` | 外部前置不加入本 Repo DAG 节点；重验依赖与冻结证据，保持本地 landed 与资源门禁 |
+| `execution/attempt.ts`、`execution/store.ts`、`application/verificationChecks.ts` | 按目标项目读取受管接受及对应输入/验证；并行成果同时检查 landed，不把模型成功当接受 |
+| `useCases/reportGenerate.ts`、`report/report.ts` 与两类 run 的 delivery evidence 查询 | 上游引用与证据属于前置说明，不能计入本 Plan 已交付任务；发布时再次检查有效性 |
+| `web/backlogView.ts`、`web/backlogController.ts`、Plan 阅读/修订与 HTTP adapter | 复用 typed application API，选择器区分项目/局部 key，支持 revision 编辑和真实项目导航，正反向关系暴露局部读取 diagnostics |
+
+应用层需要共享一次直接依赖事实查询：manifest 路由到目标 Backlog 与 executions，返回身份、条目、
+满足条件及可定位诊断。循环校验单独遍历变更节点可达图，反向查询显式遍历已登记项目；二者不混入
+普通 next 的直接前置查询。运行与 Report 在消费时重新验证冻结依据，外部变化不隐式刷新执行输入。
+详细生命周期、取消/不可读处理、无迁移联合语法和安全边界见 PRODUCT_SPEC 的“跨项目任务依赖契约”。
