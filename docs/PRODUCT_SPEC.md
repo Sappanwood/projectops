@@ -159,7 +159,7 @@ Project Docs 提供四份标准文档直达入口，逐项显示可读性与检�
 ## Plan 下一步任务查询
 
 `pops plan next <project> <plan-id> [--json]` 仅查询该 Plan mapping 中的 task。ready 要求任务为 todo，
-且每个直接依赖能从同项目 Backlog 读取并为 done；无依赖的 todo 可开始。Plan 外的同项目依赖可参与判断，
+且每个直接依赖按完整项目身份读取，并满足下文“跨项目任务依赖契约”的当前 done、有效接受及并行 landed 规则；无依赖的 todo 可开始。Plan mapping 外的同项目或跨项目既有任务均可作为前置，
 不递归检查依赖的依赖，不查询跨项目队列。in_progress 单独列出，done 排除，epic 不参与推荐；
 已有 blocked/cancelled 状态不推荐并给出状态诊断。
 
@@ -312,7 +312,7 @@ Workbench 仅为独立 manager 的客户端，不因页面关闭或自身重启�
 - Plan create/validate/approve/materialize/revise 校验局部图及既有引用；物化与修订写入前重新校验。上游不必 done 才能建立引用或物化。局部 key 经 mapping 转成本项目 ID，限定引用保留原值。mapping 仅包含本 Plan 新建项，外部任务不进入本 Plan 所有权、进度分母或 completed 范围。完整 mapping 的重复物化保持 no-op；不借重试覆盖数据。
 - 物化后的 Backlog 依赖是执行事实。Plan 修订使用现有 preview/confirm、revision 与受控同步：独立编辑或已有执行历史不能隐式覆盖；Plan 草案不是第二个可独立改写的执行依赖 authority。
 - 就绪判断检查直接前置的当前事实，不递归要求祖先全部 done。上游须为 done；todo/in_progress/blocked/cancelled 均不满足，重新打开后刷新必须重新阻塞。无受管 attempt 的任务以 done 为完成事实；有受管记录时必须具有对应当前输入与验证证据的有效接受，单独 succeeded 不满足；来自并行 run 的接受还必须 landed。取消不视为完成，读取失败不复用缓存解锁。已有本地串行验收与并行 landed 门禁继续保持。
-- Plan 允许先创建和物化；run 创建要求直接跨项目前置已满足，否则拒绝创建，待上游完成后可重新创建。运行仅调度自身 mapping，不启动外部 Repo。冻结快照记录完整引用、上游输入/状态与接受或落地依据；每次派发和 Report 资格检查重新读取。冻结后输入变化或依据失效时阻塞/暂停并解释原因，不自动改写快照或扩大执行范围。本项目既有 completed-task reuse note 与证据规则继续适用。
+- Plan 允许先创建和物化；run 创建要求 mapping 外的直接前置（包括同项目既有任务）已满足，否则拒绝创建，待上游完成后可重新创建。运行仅调度自身 mapping，不启动外部 Repo。冻结快照记录完整引用、上游输入/状态与接受或落地依据；每次派发和 Report 资格检查重新读取。冻结后输入变化或依据失效时阻塞/暂停并解释原因，不自动改写快照或扩大执行范围。本项目既有 completed-task reuse note 与证据规则继续适用。
 - 正向关系列出直接前置及原因；反向关系只读扫描 manifest 已注册项目的 Backlog，使用完整身份匹配。局部损坏返回 diagnostics，并明确结果可能不完整。两种关系都是派生视图，不持久化第二份状态。
 
 当前不提供 workspace Plan、多项目新任务物化、跨 Repo 调度、全局队列或 Capability/Release 对象。存储格式仍为当前字符串数组联合语法，不新增旧版转换或兼容分支，不需要重写现有自身或其他真实项目数据。受支持边界为受信任本地 Linux workspace、Node.js 22+、无新增 native helper；使用 manifest 路由、静态 containment 与既有 revision/no-clobber，不增加恶意 ancestor-swap 或跨项目事务保证。

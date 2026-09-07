@@ -147,7 +147,7 @@ test("accepted dependency survives unrelated upstream commits but rejects input 
   assert.throws(() => validateFrozenDependency(f.workspaceDir, frozen), /mochi:MOC-001/);
 });
 
-test("parallel dependency requires actual landing and revalidates its durable evidence", async (t) => {
+async function checkParallelDependency(t: test.TestContext, successor: boolean) {
   const f = fixture(t, true);
   const planId = "plan-api";
   const plans = path.join(f.workspaceDir, "ops/mochi/plans");
@@ -213,6 +213,26 @@ test("parallel dependency requires actual landing and revalidates its durable ev
   run = data(scheduler.advance(mutation(run))).run;
   assert.equal(run.nodes[0]!.state, "awaiting_landing");
   assert.throws(f.freeze, /mochi:MOC-001.*landed/);
+  if (successor) {
+    data(scheduler.closeStopped({ ...mutation(run), note: "Stop without landing accepted work" }));
+    const successorId = "plan-consumer";
+    const plan = JSON.parse(readFileSync(path.join(plans, `${planId}.json`), "utf8"));
+    delete plan.materialization;
+    plan.id = successorId;
+    plan.items[0].depends_on = ["mochi:MOC-001"];
+    writeFileSync(path.join(plans, `${successorId}.json`), JSON.stringify(plan));
+    f.cli(["plan", "materialize", "mochi", successorId]);
+    const result = createParallelRun({
+      ...f.q,
+      planId: successorId,
+      expectedRevision: computePlanRevision(readPlan(plans, successorId)),
+      baseCommit: git(f.repo, "rev-parse", "HEAD"),
+      commands: [[process.execPath, "-e", "process.exit(0)"]],
+    });
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.match(result.error.message, /mochi:MOC-001.*landed/);
+    return;
+  }
   run = data(await scheduler.land({ ...mutation(run), nodeKey: "api" })).run;
   assert.equal(run.nodes[0]!.state, "landed");
   const frozen = f.freeze();
@@ -243,4 +263,9 @@ test("parallel dependency requires actual landing and revalidates its durable ev
   assert.doesNotThrow(() => validateFrozenDependency(f.workspaceDir, frozen));
   writeFileSync(run.nodes[0]!.landings[0]!.evidenceFile, "Changed landing evidence");
   assert.throws(() => validateFrozenDependency(f.workspaceDir, frozen), /mochi:MOC-001/);
-});
+}
+
+test("parallel dependency requires actual landing and revalidates its durable evidence", (t) =>
+  checkParallelDependency(t, false));
+test("parallel creation rejects same-project prerequisite accepted without landing", (t) =>
+  checkParallelDependency(t, true));

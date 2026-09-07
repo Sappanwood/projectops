@@ -17,7 +17,7 @@ function data<T>(result: ApplicationResult<T>): T {
   if (!result.ok) throw Error();
   return result.data;
 }
-function fixture(t: test.TestContext, done = true) {
+function fixture(t: test.TestContext, done = true, localPrerequisite = false) {
   const workspaceDir = mkdtempSync(path.join(tmpdir(), "cross-parallel-"));
   t.after(() => rmSync(workspaceDir, { recursive: true, force: true }));
   const cli = (args: string[]) => {
@@ -61,6 +61,30 @@ function fixture(t: test.TestContext, done = true) {
   writeFileSync(path.join(repo, "base.txt"), "base");
   git("add", ".");
   git("commit", "-qm", "Base");
+  if (localPrerequisite) {
+    cli([
+      "backlog",
+      "add",
+      "repo",
+      "-T",
+      "Existing prerequisite",
+      "-c",
+      "feature",
+      "--priority",
+      "P1",
+    ]);
+    cli([
+      "backlog",
+      "update",
+      "repo",
+      "REP-001",
+      "--status",
+      "done",
+      "--expected-revision",
+      cli(["backlog", "show", "repo", "REP-001"]).revision,
+    ]);
+  }
+  const prerequisite = localPrerequisite ? "repo:REP-001" : "mochi:MOC-001";
   const planId = "plan-cross";
   const plans = path.join(workspaceDir, "ops/repo/plans");
   writeFileSync(
@@ -80,7 +104,7 @@ function fixture(t: test.TestContext, done = true) {
         item_type: "task",
         priority: "P1",
         parallel: true,
-        depends_on: key === "a" ? ["mochi:MOC-001"] : ["a", "mochi:MOC-001"],
+        depends_on: key === "a" ? [prerequisite] : ["a", prerequisite],
       })),
     }),
   );
@@ -213,4 +237,53 @@ test("parallel rechecks external facts before each dispatch in a capacity batch"
   assert.equal(dispatched.length, 1);
   assert.equal(run.state, "paused");
   assert.match(run.diagnostics.join(" "), /mochi:MOC-001/);
+});
+
+test("parallel freezes satisfied existing same-project prerequisites and dispatches only mapping", async (t) => {
+  const f = fixture(t, true, true);
+  const dispatched: string[] = [];
+  const scheduler = new ParallelRunRuntime(
+    new ExecutionRuntime({
+      start(attempt) {
+        dispatched.push(attempt.item_id);
+        return {
+          completion: Promise.resolve({ outcome: "stopped", summary: "Fixture stop" }),
+          stop() {},
+        };
+      },
+    }),
+  );
+  const run = data(f.create()).run;
+  assert.deepEqual(
+    run.nodes.map((node) => node.item_id),
+    ["REP-002", "REP-003"],
+  );
+  assert.deepEqual(
+    run.external_dependencies!.map((dependency) => dependency.reference),
+    [{ project: "repo", item: "REP-001" }],
+  );
+  assert.equal(nextParallelNode(run)?.key, "a");
+  data(scheduler.advance(f.mutation(run)));
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(dispatched, ["REP-002"]);
+});
+
+test("parallel reopened existing same-project prerequisite pauses before dispatch", (t) => {
+  const f = fixture(t, true, true);
+  let run = data(f.create()).run;
+  f.cli([
+    "backlog",
+    "update",
+    "repo",
+    "REP-001",
+    "--status",
+    "todo",
+    "--expected-revision",
+    f.cli(["backlog", "show", "repo", "REP-001"]).revision,
+  ]);
+  const scheduler = new ParallelRunRuntime(new ExecutionRuntime());
+  run = data(scheduler.advance(f.mutation(run))).run;
+  assert.equal(run.state, "paused");
+  assert.match(run.diagnostics.join(" "), /repo:REP-001/);
+  assert.ok(run.nodes.every((node) => node.attempt_ids.length === 0));
 });

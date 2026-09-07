@@ -123,6 +123,9 @@ export function createParallelRun(
     const mapping = plan.materialization.mapping;
     if (new Set(Object.values(mapping)).size !== Object.values(mapping).length)
       invalid("Plan mapping contains duplicate tasks.");
+    const mappedTasks = new Set(
+      plan.items.filter((item) => item.item_type === "task").map((item) => mapping[item.key]!),
+    );
     const external = new Map<string, DependencyEvidence>();
     const dependencyId = (value: string) => {
       const reference = parseTaskReference(value, q.projectId);
@@ -148,7 +151,10 @@ export function createParallelRun(
           invalid("Materialized dependencies do not match the Plan.");
         for (const value of dependencies) {
           const reference = parseTaskReference(value, q.projectId)!;
-          if (reference.project !== q.projectId && !external.has(value))
+          if (
+            (reference.project !== q.projectId || !mappedTasks.has(reference.item)) &&
+            !external.has(value)
+          )
             external.set(value, freezeDependency(q.workspaceDir, reference));
         }
         return {

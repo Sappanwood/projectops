@@ -154,7 +154,9 @@ export function nextParallelNode(run: ParallelRun): ParallelNode | undefined {
   const landed = new Set([
     ...run.nodes.filter((node) => node.state === "landed").map((node) => node.item_id),
     ...(run.external_dependencies ?? []).map((dependency) =>
-      taskReferenceKey(dependency.reference),
+      dependency.reference.project === run.project_id
+        ? dependency.reference.item
+        : taskReferenceKey(dependency.reference),
     ),
   ]);
   return run.nodes
