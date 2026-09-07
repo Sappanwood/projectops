@@ -1,3 +1,4 @@
+import { validatePlanDependencies } from "../application/planDependencies.js";
 // Application use case: create a plan artifact from an explicit JSON draft.
 
 import { readFileSync } from "node:fs";
@@ -56,6 +57,12 @@ export function planCreate(
     io.stderr(`Error: ${plan}`);
     return 1;
   }
+  const dependencies = validatePlanDependencies(cwd, projectId, plan);
+  if (!dependencies.ok) {
+    io.stderr(`Error: ${dependencies.error.message}`);
+    return 1;
+  }
+
   try {
     writePlan(root, plan);
   } catch (error) {

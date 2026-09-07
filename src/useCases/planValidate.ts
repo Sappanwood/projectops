@@ -1,3 +1,4 @@
+import { validatePlanDependencies } from "../application/planDependencies.js";
 // Application use case: validate a stored plan artifact.
 
 import type { CliIO } from "../io.js";
@@ -35,6 +36,12 @@ export function planValidate(
   }
   if (plan.id !== planId) {
     io.stderr(`Error: plan id mismatch: expected ${planId}, got ${plan.id}`);
+    return 1;
+  }
+
+  const dependencies = validatePlanDependencies(cwd, projectId, plan);
+  if (!dependencies.ok) {
+    io.stderr(`Error: ${dependencies.error.message}`);
     return 1;
   }
 

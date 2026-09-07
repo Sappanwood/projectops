@@ -201,8 +201,7 @@ pops plan show projectops "$plan_id" --json
 pops plan validate projectops "$plan_id" --json
 ```
 
-`plan_id` 取创建结果的 `plan.id`；示例标题生成 `plan-agent-workflow`。草案里的 `parent`、`depends_on`
-引用同份草案的局部 key，不是既有 Backlog ID。create 拒绝同 ID 覆盖。修订使用下文 plan revise 的 preview/confirm 流程，不重新 materialize 制造重复任务。
+`plan_id` 取创建结果的 `plan.id`；示例标题生成 `plan-agent-workflow`。草案里的 `parent` 只引用同份草案的 epic 局部 key。`depends_on` 可混用局部 task key 与同 workspace 的既有 task 限定引用，例如 `["prepare", "ccp:CCP-001"]`；本项目既有任务也使用 `project:ID`，不接受裸 Backlog ID。create 拒绝同 ID 覆盖。修订使用下文 plan revise 的 preview/confirm 流程，不重新 materialize 制造重复任务。
 
 approve 是记录审批的写操作。Agent 先完成草案和校验，再依据用户对该具体范围的批准或既有明确授权执行；
 已有授权不重复询问。校验成功不等于用户批准，review note 如实记录依据，不伪造审批或审查结果。
@@ -216,6 +215,8 @@ pops plan show projectops "$plan_id" --json
 approve 要求非空 note，仅支持 draft → approved，再次批准会报错。materialize 只接受 approved Plan，
 按父子关系与依赖顺序创建条目，返回 key → Backlog ID 的 `mapping`；Plan 保存 `materialization.mapping`。
 后续从 mapping 读取任务 ID，不预测编号。完整 materialize 的重复执行返回 `no_op: true`。
+外部任务可以为 todo；create/validate/approve 及首次 materialize 校验引用存在、task 身份与可达依赖图，不检查执行就绪。局部 key 转换为本项目 ID，限定引用原样保留；外部任务不复制、不写入、不加入 mapping 或本 Plan 完成率。
+修订 preview 与 confirm 均重新校验待写任务覆盖后的依赖图，保留 revision、独立编辑及执行历史保护。重复完整 materialize（含 done Plan）保持 no-op，不随外部任务变化改写既有记录。
 失败后先 show Plan 和 list Backlog 核对现状；Alpha 不承诺跨进程事务或崩溃恢复。
 
 ## Plan：查询下一步任务

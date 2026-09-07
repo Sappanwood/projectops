@@ -1,3 +1,8 @@
+import { validateBacklogDependencies } from "../application/backlogDependencies.js";
+import {
+  materializedDependencies,
+  validatePlanDependencies,
+} from "../application/planDependencies.js";
 // Application use case: materialize an approved plan into the project's backlog.
 
 import { realpathSync } from "node:fs";
@@ -79,6 +84,12 @@ export function planMaterialize(
     return 0;
   }
 
+  const dependencies = validatePlanDependencies(cwd, projectId, plan);
+  if (!dependencies.ok) {
+    io.stderr(`Error: ${dependencies.error.message}`);
+    return 1;
+  }
+
   const order = materializationOrder(plan.items);
   if (typeof order === "string") {
     io.stderr(`Error: ${order}`);
@@ -88,18 +99,24 @@ export function planMaterialize(
   const mapping: Record<string, string> = {};
   try {
     for (const item of order) {
-      const result = addBacklogItem(store.root, store.manifest, {
-        title: item.title,
-        category: "feature",
-        priority: item.priority,
-        item_type: item.item_type,
-        parent_id: item.parent === undefined ? null : (mapping[item.parent] ?? null),
-        depends_on: item.depends_on
-          .map((key) => mapping[key]!)
-          .filter((id): id is string => id !== undefined),
-        body: item.body,
-        source: `plan:${plan.id}#${item.key}`,
-      });
+      const result = addBacklogItem(
+        store.root,
+        store.manifest,
+        {
+          title: item.title,
+          category: "feature",
+          priority: item.priority,
+          item_type: item.item_type,
+          parent_id: item.parent === undefined ? null : (mapping[item.parent] ?? null),
+          depends_on: materializedDependencies(item.depends_on, mapping),
+          body: item.body,
+          source: `plan:${plan.id}#${item.key}`,
+        },
+        (id, refs) => {
+          const checked = validateBacklogDependencies(cwd, { project: projectId, item: id }, refs);
+          if (!checked.ok) throw new BacklogAddError(checked.error.message);
+        },
+      );
       mapping[item.key] = result.id;
     }
   } catch (error) {

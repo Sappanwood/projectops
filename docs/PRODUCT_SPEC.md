@@ -57,7 +57,7 @@ Project Docs 提供四份标准文档直达入口，逐项显示可读性与检�
 - Workspace topology、Backlog、Plan、Report、Docs 和 Retrospective 使用独立 versioned schema。
 - 不建立覆盖所有 artifact 的通用 schema 或生命周期。
 - 跨领域关联使用稳定 logical URI，不把机器绝对路径写入 artifact。
-- Plan 使用 `plan/Plan@1` JSON artifact：包含稳定 ID、标题、目标及以局部 key 关联的 Backlog item 草案，并以 `status: draft|approved|done` 表示生命周期；草案可用 `parent` 和 `depends_on` 引用其他局部 key。批准 Plan 额外包含一次 `approval` 记录（`approved_at` 与 `review_note`）；materialize 后增加 `materialization` 记录（`materialized_at` 与 `mapping`），保存局部 key 到 Backlog ID 的映射。
+- Plan 使用 `plan/Plan@1` JSON artifact：包含稳定 ID、标题、目标及以局部 key 关联的 Backlog item 草案，并以 `status: draft|approved|done` 表示生命周期；草案 `parent` 引用局部 epic key，`depends_on` 可混用局部 task key 与同 workspace 既有 task 的 `project:ID` 限定引用。批准 Plan 额外包含一次 `approval` 记录（`approved_at` 与 `review_note`）；materialize 后增加 `materialization` 记录（`materialized_at` 与 `mapping`），保存局部 key 到 Backlog ID 的映射。
 - `pops plan materialize` 只接受通过 schema/依赖校验且 status 为 `approved` 的 Plan；按 parent/dependency 拓扑创建同一 project 的 epic/task，JSON 输出 mutation receipt。已有完整 mapping（含 `done` Plan）的重试为 `no_op`，不创建或改写条目。
 - Plan 完成采用显式 `approved → done`：CLI `pops plan complete` 和 Web“标为完成”共用 application 校验，必须携带当前 Plan revision。
   要求已物化、至少一个 task、全部映射可读且全部 task 为 done；epic 不要求 done。若有串行/并行执行记录，最新记录须通过现有完成与验收/落地证据校验。

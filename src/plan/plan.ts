@@ -1,3 +1,4 @@
+import { parsePlanDependency } from "../backlog/dependencyReference.js";
 // Plan domain: versioned plan artifacts and validation.
 
 export const PLAN_SCHEMA = "plan/Plan@1";
@@ -140,7 +141,10 @@ export function materializationOrder(items: PlanItem[]): PlanItem[] | string {
       (item) =>
         pending.has(item.key) &&
         (item.parent === undefined || available.has(item.parent)) &&
-        (item.depends_on ?? []).every((dependency) => available.has(dependency)),
+        (item.depends_on ?? []).every(
+          (dependency) =>
+            parsePlanDependency(dependency)?.kind === "task" || available.has(dependency),
+        ),
     );
     if (next === undefined) return "plan item parent or dependency graph cannot be materialized";
     pending.delete(next.key);
@@ -177,8 +181,15 @@ function validateDraft(value: unknown): string | null {
       if (itemsByKey.get(item.parent)?.item_type !== "epic")
         return `plan item parent must be an epic: ${item.parent}`;
     }
+    if (new Set(item.depends_on ?? []).size !== (item.depends_on ?? []).length)
+      return `duplicate plan dependency: ${item.key}`;
     for (const dependency of item.depends_on ?? []) {
-      if (!keys.has(dependency)) return `plan item dependency not found: ${dependency}`;
+      const parsed = parsePlanDependency(dependency);
+      if (!parsed) return `invalid plan dependency: ${dependency}`;
+      if (parsed.kind === "local" && !keys.has(parsed.key))
+        return `plan item dependency not found: ${dependency}`;
+      if (parsed.kind === "local" && itemsByKey.get(parsed.key)?.item_type !== "task")
+        return `plan dependency must be a task: ${dependency}`;
     }
   }
   const order = materializationOrder(value.items as PlanItem[]);

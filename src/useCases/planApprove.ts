@@ -1,3 +1,4 @@
+import { validatePlanDependencies } from "../application/planDependencies.js";
 // Application use case: approve a validated plan with an explicit review note.
 
 import { realpathSync } from "node:fs";
@@ -72,6 +73,12 @@ export function planApprove(
   }
   if (plan.status !== "draft") {
     io.stderr(`Error: plan already approved: ${planId}`);
+    return 1;
+  }
+
+  const dependencies = validatePlanDependencies(cwd, projectId, plan);
+  if (!dependencies.ok) {
+    io.stderr(`Error: ${dependencies.error.message}`);
     return 1;
   }
 

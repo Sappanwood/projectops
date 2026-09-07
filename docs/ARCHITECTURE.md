@@ -76,6 +76,7 @@ src/
     workspaceInspection.ts workspace doctor 的 typed inspection API
     workbenchReadModel.ts workspace/project 跨领域只读 projection
     docsApi.ts            文档列表与单篇正文的共享 application API
+    planDependencies.ts   Plan 混合引用转换、manifest 读取与待写任务覆盖图校验
     planExecution.ts      Plan mapping 与同项目 Backlog 的实时执行进度 projection
     planComplete.ts       显式完成 Plan，共享 revision、任务及执行完成校验
     planNext.ts           Plan 查询与共享就绪任务分类、排序、依赖诊断
@@ -217,6 +218,8 @@ SIGTERM，2 秒未退出则 SIGKILL，4 秒仍未退出则报错；随后清理�
   无 ASCII slug 的标题使用 Unicode code point 的 `u<hex>` token。create 验证 plans descriptor 为精确 schema type，
   并在写入前验证 plans root 的 canonical 路径仍在 workspace 内；随后使用 `wx` no-clobber 写入。list/show 读取同一
   artifact；`plan materialize` 直接调用 Backlog application helper，按拓扑顺序创建同一 project 的条目，并在完整成功后更新 Plan。
+  `planDependencies.ts` 将局部 key 转换为本项目 ID，限定引用原样保留；通过 `readTaskReference` 按 manifest 读取可达既有任务，检查重复与循环，不要求外部 done。修订采用 pending tasks 覆盖图检查，避免按磁盘旧图误判批量改动；不写入外部 store。
+  已物化重复调用保留 no-op，未变化的修订不因外部变动重写 Plan 或执行历史；mapping 与完成范围始终只有本 Plan 自有条目。
 - Project Docs：`pops docs scaffold <project>` 为已登记 project 的四个固定路径生成内置 Git-friendly Markdown 模板：`README.md`、`AGENTS.md`、
   `docs/PRODUCT_SPEC.md` 和 `docs/ARCHITECTURE.md`。模板内容由 Docs domain 持有；application use case 预检 project、docs parent 和全部目标，
   通过 `wx` 创建缺失文件，已有普通文件跳过并在 JSON receipt 的 `created`/`skipped` 中返回。canonical 路径必须仍位于 project 和 workspace 内，

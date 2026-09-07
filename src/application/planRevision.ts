@@ -1,3 +1,4 @@
+import { materializedDependencies, validatePlanDependencies } from "./planDependencies.js";
 import { createHash } from "node:crypto";
 import { realpathSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -179,7 +180,8 @@ export function revisePlan(request: PlanRevisionRequest): ApplicationResult<Plan
       item.title !== old.title ||
       item.body.trimEnd() !== old.body.trimEnd() ||
       item.priority !== old.priority ||
-      JSON.stringify(item.depends_on) !== JSON.stringify(old.depends_on.map((k) => mapping![k]))
+      JSON.stringify(item.depends_on) !==
+        JSON.stringify(materializedDependencies(old.depends_on, mapping!))
     )
       return applicationFailure(
         "PLAN_INVALID",
@@ -207,11 +209,20 @@ export function revisePlan(request: PlanRevisionRequest): ApplicationResult<Plan
       title: next.title,
       body: next.body,
       priority: next.priority,
-      depends_on: next.depends_on.map((k) => mapping![k]!),
+      depends_on: materializedDependencies(next.depends_on, mapping!),
       updated: new Date().toISOString().slice(0, 10),
     };
     updated.revision = computeRevision(updated);
     pending.push(updated);
+  }
+  if (changes.length) {
+    const dependencies = validatePlanDependencies(
+      request.workspaceDir,
+      request.projectId,
+      plan,
+      mapping ? pending : undefined,
+    );
+    if (!dependencies.ok) return dependencies;
   }
   const affected_items = affected.map((item) => ({ id: item.id, revision: item.revision }));
   const confirmation_token = digest({ revision, draft, affected_items });
