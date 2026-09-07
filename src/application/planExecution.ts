@@ -1,3 +1,8 @@
+import {
+  planItemProject,
+  planMappingReference,
+  planMaterializationState,
+} from "../plan/planIdentity.js";
 import { readPlanPrerequisites } from "./dependencyReadiness.js";
 import type { Report } from "../report/report.js";
 import type { PlanNextSummary } from "./planNext.js";
@@ -13,6 +18,7 @@ export type PlanExecution = {
   items: Array<{
     key: string;
     id: string;
+    project?: string;
     title: string;
     item_type: PlanItemType;
     status: ItemStatus | "unreadable";
@@ -50,19 +56,24 @@ export function readPlanExecution(
     };
   const mapping = plan.materialization.mapping;
   const items = plan.items.map((draft): PlanExecution["items"][number] => {
-    const id = mapping[draft.key]!;
+    const value = mapping[draft.key];
+    const reference = value ? planMappingReference(request.projectId, value) : null;
+    const id = reference?.item ?? draft.key;
+    const project = reference?.project ?? planItemProject(request.projectId, draft);
     let row: PlanExecution["items"][number] = {
       key: draft.key,
       id,
+      project,
       title: draft.title,
       item_type: draft.item_type,
       status: "unreadable",
     };
     try {
-      const result = showBacklogItem({ ...request, itemId: id });
+      if (!reference) throw new Error("Item is not materialized.");
+      const result = showBacklogItem({ ...request, projectId: project, itemId: id });
       if (
         result.ok &&
-        result.data.item.project === request.projectId &&
+        result.data.item.project === project &&
         result.data.item.item_type === draft.item_type
       ) {
         row = { ...row, title: result.data.item.title, status: result.data.item.status };
@@ -83,9 +94,12 @@ export function readPlanExecution(
   });
   return {
     prerequisites: readPlanPrerequisites(request, plan),
-    materialized: true,
+    materialized: planMaterializationState(plan) === "complete",
     counts,
     items,
-    completion_percent: counts.total === 0 ? null : Math.floor((counts.done / counts.total) * 100),
+    completion_percent:
+      planMaterializationState(plan) !== "complete" || counts.total === 0
+        ? null
+        : Math.floor((counts.done / counts.total) * 100),
   };
 }

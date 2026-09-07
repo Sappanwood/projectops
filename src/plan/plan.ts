@@ -1,4 +1,5 @@
-import { parsePlanDependency } from "../backlog/dependencyReference.js";
+import { isProjectId } from "../catalog/workspace.js";
+import { parseTaskReference, parsePlanDependency } from "../backlog/dependencyReference.js";
 // Plan domain: versioned plan artifacts and validation.
 
 export const PLAN_SCHEMA = "plan/Plan@1";
@@ -16,6 +17,7 @@ export type PlanApproval = {
 };
 
 export type PlanItem = {
+  project?: string;
   key: string;
   title: string;
   item_type: PlanItemType;
@@ -28,6 +30,7 @@ export type PlanItem = {
 };
 
 export type PlanMaterialization = {
+  state?: "partial";
   materialized_at: string;
   mapping: Record<string, string>;
 };
@@ -110,6 +113,8 @@ export function parsePlan(value: unknown): Plan | string {
     if (typeof approval === "string") return approval;
     const materialization = parseMaterialization(value.materialization, draft.items);
     if (typeof materialization === "string") return materialization;
+    if (status === "done" && materialization?.state === "partial")
+      return "done plan cannot have partial materialization";
     if (status === "done" && !materialization)
       return "done plan must have a materialization record";
     return {
@@ -206,6 +211,7 @@ function normalizeDraft(draft: PlanDraft): PlanDraft {
       : { execution_policy: { max_parallel: 2 as const } }),
     items: draft.items.map((item) => ({
       key: item.key,
+      ...(item.project === undefined ? {} : { project: item.project }),
       title: item.title,
       item_type: item.item_type,
       priority: item.priority,
@@ -223,6 +229,11 @@ function validateItem(value: unknown, keys: Set<string>): string | null {
   if (typeof value.key !== "string" || !/^[a-z][a-z0-9-]*$/.test(value.key)) {
     return "plan item key must use lowercase letters, digits, and hyphens";
   }
+  if (
+    value.project !== undefined &&
+    (typeof value.project !== "string" || !isProjectId(value.project))
+  )
+    return `plan item ${value.key} project must be a project ID`;
   if (keys.has(value.key)) return `duplicate plan item key: ${value.key}`;
   if (typeof value.title !== "string" || value.title === "")
     return `plan item ${value.key} title must be a non-empty string`;
@@ -272,20 +283,26 @@ function parseMaterialization(
   ) {
     return "plan materialization must have a timestamp";
   }
+  if (value.state !== undefined && value.state !== "partial")
+    return "plan materialization state must be partial when present";
   if (!isRecord(value.mapping)) return "plan materialization mapping must be an object";
   const keys = new Set(items.map((item) => item.key));
   const mapping: Record<string, string> = {};
   for (const [key, id] of Object.entries(value.mapping)) {
     if (!keys.has(key)) return `plan materialization mapping has unknown key: ${key}`;
-    if (typeof id !== "string" || !/^[A-Z0-9]+-\d{3,}$/.test(id)) {
+    if (typeof id !== "string" || !parseTaskReference(id, "owner")) {
       return `plan materialization mapping has invalid backlog id for ${key}`;
     }
     mapping[key] = id;
   }
-  if (Object.keys(mapping).length !== items.length) {
+  if (value.state !== "partial" && Object.keys(mapping).length !== items.length) {
     return "plan materialization mapping must include every plan item";
   }
-  return { materialized_at: value.materialized_at, mapping };
+  return {
+    materialized_at: value.materialized_at,
+    mapping,
+    ...(value.state === "partial" ? { state: "partial" as const } : {}),
+  };
 }
 
 function parseApproval(value: unknown): PlanApproval | string {

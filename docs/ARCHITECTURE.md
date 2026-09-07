@@ -219,7 +219,7 @@ SIGTERM，2 秒未退出则 SIGKILL，4 秒仍未退出则报错；随后清理�
   `materialization.mapping` 记录局部 key 到 Backlog ID 的映射以及 `materialized_at`。
   无 ASCII slug 的标题使用 Unicode code point 的 `u<hex>` token。create 验证 plans descriptor 为精确 schema type，
   并在写入前验证 plans root 的 canonical 路径仍在 workspace 内；随后使用 `wx` no-clobber 写入。list/show 读取同一
-  artifact；`plan materialize` 直接调用 Backlog application helper，按拓扑顺序创建同一 project 的条目，并在完整成功后更新 Plan。
+  artifact；`plan materialize` 直接调用 Backlog application helper，按拓扑顺序创建各目标 project 的条目，每项写入后保存 partial mapping，全部完成后移除 partial 标记。
   `planDependencies.ts` 将局部 key 转换为本项目 ID，限定引用原样保留；通过 `readTaskReference` 按 manifest 读取可达既有任务，检查重复与循环，不要求外部 done。修订采用 pending tasks 覆盖图检查，避免按磁盘旧图误判批量改动；不写入外部 store。
   已物化重复调用保留 no-op，未变化的修订不因外部变动重写 Plan 或执行历史；mapping 与完成范围始终只有本 Plan 自有条目。
 - Project Docs：`pops docs scaffold <project>` 为已登记 project 的四个固定路径生成内置 Git-friendly Markdown 模板：`README.md`、`AGENTS.md`、
@@ -552,3 +552,40 @@ Origin、JSON、body 上限与错误 envelope。返回的 endpoints 优先保留
 Report 仅把它们作为 verification 说明，不扩大交付任务集合。
 
 验收使用 `tests/browser/three-project-delivery.spec.ts` 贯通设施 → 服务 → 产品的 CLI 创建、依赖编辑、混合 Plan 物化、刷新解锁及跨项目返回。`backlog-dependencies`、`plan-dependencies`、`dependency-evidence`、`cross-project-readiness` 与两类 run 测试分别覆盖 revision/循环、引用保留、接受/landing 和冻结证据失效；同项目既有测试继续作为回归门禁。全部 fixture 位于隔离临时 workspace，测试结束清理，不写真实项目。
+
+
+## Plan 跨项目物化身份基础
+
+`plan/planIdentity.ts` 将可选 item project、mapping 的相对/限定字符串和 Backlog source
+统一解析为明确项目身份。`plan/plan.ts` 保留当前 `plan/Plan@1`，新增可选 `project` 与
+`materialization.state: partial`；省略 state 的完整 mapping 必须覆盖全部 key，done 不接受 partial。
+这是当前联合语法的扩展，不引入旧 schema fallback 或活动数据迁移。
+
+`application/planDependencies.ts` 校验显式目标 store、同目标 parent 与既有 mapping 的项目不变，
+局部节点及修订 pending 节点按真实项目构图。未显式指定项目的普通草案继续允许在 owner Backlog
+初始化前创建；物化写入前必须预检全部目标。普通修订拒绝 partial 和目标迁移。
+
+后续接入点及责任如下（本阶段仅建立身份基础）：
+
+| 消费者 | 完整身份与 partial 的接入责任 |
+|---|---|
+| `useCases/planMaterialize.ts` | 按目标 store 写入、限定来源、逐项证据与恢复、完整 no-op |
+| `application/planExecution.ts`、`planNext.ts`、`dependencyReadiness.ts` | 映射项真实项目读取、完整身份去重、外部依赖不计进度 |
+| `application/planRevision.ts` | 各目标 store revision 与执行历史、实际已应用范围 |
+| `application/executionApi.ts` 及 execution 输入解析 | 任务真实 Repo 与来源 owner Plan |
+| `application/planComplete.ts`、Report generation | 各任务验收及 landing 证据、owner Report、partial 拒绝 |
+| 串行及并行 run API | 在任何运行副作用前拒绝跨 owner mapping 和 partial |
+| Workbench Plan、Backlog、Report 及导航 | 显示目标项目、真实项目链接、跨项目来源返回 |
+
+所有入口应通过 `planMappingReference(owner, value)` 与 `parsePlanSource(value, itemProject)`
+取得完整身份，不通过字符串拼接或任务 ID 前缀推断项目。
+
+
+### 跨 store 物化与恢复
+
+`useCases/planMaterialize.ts` 先解析所有 manifest 目标 store 并校验静态路径 containment 与依赖，
+再按拓扑调用共享 Backlog add。`backlog/add.ts` 的逐项写后回调在索引更新之前记录完整 mapping，
+使索引写失败仍能返回已创建事实。Plan 每次保存前重读 revision；发现其他编辑时停止。
+`plan/materializationRecovery.ts` 用唯一 source 和项目、标题、类型、parent、依赖、正文核对已有条目，
+匹配时复用并重建索引，冲突时返回诊断。Plan 写失败而来源仍存在的重试沿用同一路径，不盲重建。
+这些检查遵循受信任本地 workspace 边界，不提供跨 store 事务或恶意并发防护。

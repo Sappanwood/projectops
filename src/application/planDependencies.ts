@@ -4,6 +4,8 @@ import {
   taskReferenceKey,
 } from "../backlog/dependencyReference.js";
 import type { BacklogItem } from "../backlog/item.js";
+import { planItemProject, planMappingReference } from "../plan/planIdentity.js";
+import { resolveBacklogContext } from "./backlogApi.js";
 import type { Plan } from "../plan/plan.js";
 import { readTaskReference } from "./backlogDependencies.js";
 import { applicationFailure, applicationSuccess, type ApplicationResult } from "./result.js";
@@ -11,10 +13,16 @@ import { applicationFailure, applicationSuccess, type ApplicationResult } from "
 export function materializedDependencies(
   dependencies: string[],
   mapping: Record<string, string>,
+  owner?: string,
+  target = owner,
 ): string[] {
-  return dependencies.map((value) =>
-    parsePlanDependency(value)?.kind === "task" ? value : mapping[value]!,
-  );
+  return dependencies.map((value) => {
+    if (parsePlanDependency(value)?.kind === "task") return value;
+    const mapped = mapping[value]!;
+    if (owner === undefined) return mapped;
+    const reference = planMappingReference(owner, mapped)!;
+    return reference.project === target ? reference.item : taskReferenceKey(reference);
+  });
 }
 
 export function validatePlanDependencies(
@@ -23,16 +31,21 @@ export function validatePlanDependencies(
   plan: Plan,
   pending?: BacklogItem[],
 ): ApplicationResult<null> {
+  const targets = validatePlanTargets(workspaceDir, project, plan);
+  if (!targets.ok) return targets;
   const nodes = new Map<
     string,
     { project: string; item_type: BacklogItem["item_type"]; dependencies: string[] }
   >();
   const mapping = plan.materialization?.mapping;
-  const localKey = (key: string) => (mapping ? `${project}:${mapping[key]}` : `#local:${key}`);
+  const localKey = (key: string) => {
+    const reference = mapping?.[key] ? planMappingReference(project, mapping[key]!) : null;
+    return reference ? taskReferenceKey(reference) : `#local:${key}`;
+  };
   if (pending === undefined) {
     for (const item of plan.items)
       nodes.set(localKey(item.key), {
-        project,
+        project: planItemProject(project, item),
         item_type: item.item_type,
         dependencies: item.depends_on.map((value) =>
           parsePlanDependency(value)?.kind === "local" ? localKey(value) : value,
@@ -40,8 +53,8 @@ export function validatePlanDependencies(
       });
   } else {
     for (const item of pending)
-      nodes.set(`${project}:${item.id}`, {
-        project,
+      nodes.set(`${item.project}:${item.id}`, {
+        project: item.project,
         item_type: item.item_type,
         dependencies: item.depends_on,
       });
@@ -94,6 +107,38 @@ export function validatePlanDependencies(
   for (const key of nodes.keys()) {
     const result = visit(key);
     if (!result.ok) return result;
+  }
+  return applicationSuccess(null);
+}
+
+export function validatePlanTargets(
+  workspaceDir: string,
+  owner: string,
+  plan: Plan,
+): ApplicationResult<null> {
+  for (const project of new Set(
+    plan.items.filter((item) => item.project !== undefined).map((item) => item.project!),
+  )) {
+    const context = resolveBacklogContext(workspaceDir, project);
+    if (!context.ok) return context;
+  }
+  for (const item of plan.items) {
+    const project = planItemProject(owner, item);
+    const parent = plan.items.find((candidate) => candidate.key === item.parent);
+    if (parent && planItemProject(owner, parent) !== project)
+      return applicationFailure(
+        "PLAN_INVALID",
+        `Plan item ${item.key} parent must belong to the same target project.`,
+      );
+    const value = plan.materialization?.mapping[item.key];
+    if (value !== undefined) {
+      const reference = planMappingReference(owner, value);
+      if (!reference || reference.project !== project)
+        return applicationFailure(
+          "PLAN_INVALID",
+          `Plan item ${item.key} materialized project cannot change.`,
+        );
+    }
   }
   return applicationSuccess(null);
 }

@@ -9,8 +9,17 @@ import { realpathSync } from "node:fs";
 import path from "node:path";
 
 import { addBacklogItem, BacklogAddError } from "../backlog/add.js";
+import { listItemIds, readItemFile, rebuildIndex } from "../backlog/itemFs.js";
+import {
+  formatPlanSource,
+  planItemProject,
+  planMappingReference,
+  planMaterializationState,
+} from "../plan/planIdentity.js";
+import { recoverMaterializedItem } from "../plan/materializationRecovery.js";
 import { INDEX_FILE, ITEMS_DIR } from "../backlog/store.js";
 import { materializationOrder, type Plan } from "../plan/plan.js";
+import { computePlanRevision } from "../application/planRevision.js";
 import {
   PlanNotFoundError,
   PlanParseError,
@@ -24,11 +33,13 @@ import { resolveStoreRoot } from "./backlogContext.js";
 import { resolvePlansRoot } from "./planContext.js";
 
 type MaterializationReceipt = {
-  ok: true;
+  ok: boolean;
+  state: "partial" | "complete";
   no_op: boolean;
   plan_id: string;
   mapping: Record<string, string>;
-  items: { key: string; id: string; disposition: "created" | "reused" }[];
+  items: { key: string; project: string; id: string; disposition: "created" | "reused" }[];
+  diagnostic?: string;
 };
 
 export function planMaterialize(
@@ -44,8 +55,6 @@ export function planMaterialize(
   }
   const plansRoot = resolvePlansRoot(projectId, io, cwd, true);
   if (plansRoot === null) return 1;
-  const store = resolveStoreRoot(projectId, io, cwd);
-  if (store === null) return 1;
 
   let plan: Plan;
   try {
@@ -71,14 +80,27 @@ export function planMaterialize(
     io.stderr(`Error: ${targetProblem}`);
     return 1;
   }
-  const backlogTargetProblem = materializationTargetProblem(store.workspaceRoot, store.root);
-  if (backlogTargetProblem !== null) {
-    io.stderr(`Error: ${backlogTargetProblem}`);
-    return 1;
+  const stores = new Map<string, NonNullable<ReturnType<typeof resolveStoreRoot>>>();
+  for (const project of new Set(plan.items.map((item) => planItemProject(projectId, item)))) {
+    const store = resolveStoreRoot(project, io, cwd);
+    if (store === null) return 1;
+    const problem = materializationTargetProblem(store.workspaceRoot, store.root);
+    if (problem !== null || store.manifest.project_id !== project) {
+      io.stderr(`Error: ${project}: ${problem ?? "backlog project identity mismatch"}`);
+      return 1;
+    }
+    stores.set(project, store);
   }
 
-  if (plan.materialization !== undefined) {
-    const receipt = buildReceipt(plan, plan.materialization.mapping, "reused");
+  if (planMaterializationState(plan) === "complete") {
+    const receipt = buildReceipt(
+      projectId,
+      plan,
+      plan.materialization!.mapping,
+      new Set(),
+      undefined,
+      true,
+    );
     if (json) io.stdout(JSON.stringify(receipt));
     else io.stdout(`No changes (${plan.id})`);
     return 0;
@@ -96,64 +118,121 @@ export function planMaterialize(
     return 1;
   }
 
-  const mapping: Record<string, string> = {};
-  try {
-    for (const item of order) {
-      const result = addBacklogItem(
-        store.root,
-        store.manifest,
-        {
-          title: item.title,
-          category: "feature",
-          priority: item.priority,
-          item_type: item.item_type,
-          parent_id: item.parent === undefined ? null : (mapping[item.parent] ?? null),
-          depends_on: materializedDependencies(item.depends_on, mapping),
-          body: item.body,
-          source: `plan:${plan.id}#${item.key}`,
-        },
-        (id, refs) => {
-          const checked = validateBacklogDependencies(cwd, { project: projectId, item: id }, refs);
-          if (!checked.ok) throw new BacklogAddError(checked.error.message);
-        },
+  const mapping = { ...plan.materialization?.mapping };
+  const created = new Set<string>();
+  let expectedRevision = computePlanRevision(plan);
+  const persist = (partial: boolean) => {
+    if (computePlanRevision(readPlan(plansRoot, planId)) !== expectedRevision)
+      throw new Error(
+        "Plan revision changed; reload and reconcile materialization sources before retrying.",
       );
-      mapping[item.key] = result.id;
-    }
-  } catch (error) {
-    if (error instanceof BacklogAddError) {
-      io.stderr(`Error: ${error.message}`);
-      return 1;
-    }
-    throw error;
-  }
-
-  const materialized = {
-    materialized_at: new Date().toISOString(),
-    mapping: Object.fromEntries(plan.items.map((item) => [item.key, mapping[item.key]!])),
+    const next: Plan = {
+      ...plan,
+      materialization: {
+        materialized_at: plan.materialization?.materialized_at ?? new Date().toISOString(),
+        mapping: { ...mapping },
+        ...(partial ? { state: "partial" as const } : {}),
+      },
+    };
+    updatePlan(plansRoot, next);
+    plan = next;
+    expectedRevision = computePlanRevision(next);
   };
-  updatePlan(plansRoot, { ...plan, materialization: materialized });
-
-  const receipt = buildReceipt(
-    { ...plan, materialization: materialized },
-    materialized.mapping,
-    "created",
-  );
+  try {
+    // Read all target items before writing so source conflicts cannot be ignored.
+    const existing = new Map(
+      [...stores].map(([project, store]) => [
+        project,
+        listItemIds(store.root).map((id) => readItemFile(store.root, id)),
+      ]),
+    );
+    for (const item of order) {
+      const project = planItemProject(projectId, item);
+      const store = stores.get(project)!;
+      const draft = {
+        title: item.title,
+        category: "feature" as const,
+        priority: item.priority,
+        item_type: item.item_type,
+        parent_id:
+          item.parent === undefined
+            ? null
+            : planMappingReference(projectId, mapping[item.parent]!)!.item,
+        depends_on: materializedDependencies(item.depends_on, mapping, projectId, project),
+        body: item.body,
+        source: formatPlanSource({ project: projectId, planId: plan.id, key: item.key }, project),
+      };
+      const reused = recoverMaterializedItem(
+        existing.get(project)!,
+        draft,
+        project,
+        mapping[item.key] === undefined
+          ? undefined
+          : planMappingReference(projectId, mapping[item.key]!)!.item,
+      );
+      const record = (id: string) => {
+        mapping[item.key] = project === projectId ? id : `${project}:${id}`;
+        persist(true);
+      };
+      if (reused) {
+        record(reused.id);
+        rebuildIndex(store.root);
+      } else {
+        addBacklogItem(
+          store.root,
+          store.manifest,
+          draft,
+          (id, refs) => {
+            const checked = validateBacklogDependencies(cwd, { project, item: id }, refs);
+            if (!checked.ok) throw new BacklogAddError(checked.error.message);
+          },
+          (result) => {
+            created.add(item.key);
+            record(result.id);
+          },
+        );
+      }
+    }
+    persist(false);
+  } catch (error) {
+    const diagnostic = `${error instanceof Error ? error.message : String(error)}. Known mapping is returned; retry verifies source and content before reusing items. If the Plan cannot be read, reconcile its source records before retrying.`;
+    const receipt = buildReceipt(projectId, plan, mapping, created, diagnostic);
+    if (json) io.stdout(JSON.stringify(receipt));
+    io.stderr(`Error: ${diagnostic}`);
+    return 1;
+  }
+  const receipt = buildReceipt(projectId, plan, mapping, created);
   if (json) io.stdout(JSON.stringify(receipt));
   else io.stdout(`Materialized ${plan.id}`);
   return 0;
 }
 
 function buildReceipt(
+  owner: string,
   plan: Plan,
   mapping: Record<string, string>,
-  disposition: "created" | "reused",
+  created: Set<string>,
+  diagnostic?: string,
+  noOp = false,
 ): MaterializationReceipt {
   return {
-    ok: true,
-    no_op: disposition === "reused",
+    ok: diagnostic === undefined,
+    state: diagnostic === undefined ? "complete" : "partial",
+    no_op: noOp,
     plan_id: plan.id,
     mapping,
-    items: plan.items.map((item) => ({ key: item.key, id: mapping[item.key]!, disposition })),
+    items: plan.items
+      .filter((item) => mapping[item.key] !== undefined)
+      .map((item) => {
+        const reference = planMappingReference(owner, mapping[item.key]!)!;
+        return {
+          key: item.key,
+          project: reference.project,
+          id: reference.item,
+          disposition: created.has(item.key) ? "created" : "reused",
+        };
+      }),
+    ...(diagnostic === undefined ? {} : { diagnostic }),
   };
 }
 

@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import { syncBuiltinESMExports } from "node:module";
 import assert from "node:assert/strict";
 import {
   existsSync,
@@ -300,4 +302,150 @@ test("plan materialize rejects an INDEX.md symlink escaping the backlog store", 
     rmSync(ws, { recursive: true, force: true });
     rmSync(outside, { recursive: true, force: true });
   }
+});
+
+function crossProjectWorkspace(): string {
+  const plan = approvedPlan();
+  const items = plan.items as Record<string, unknown>[];
+  items[0]!.project = "repo-b";
+  items[2]!.project = "repo-b";
+  delete items[1]!.parent;
+  const ws = setupWorkspace(plan);
+  mkdirSync(path.join(ws, "repo-b"));
+  assert.equal(run(["project", "add", "repo-b"], ws).code, 0);
+  assert.equal(run(["backlog", "init", "repo-b", "--id-prefix", "B"], ws).code, 0);
+  return ws;
+}
+
+const materialize = (ws: string) =>
+  run(["plan", "materialize", "repo-a", "plan-release-workflow", "--json"], ws);
+
+test("cross-project materialization uses target stores, source, parent and dependency identities", (t) => {
+  const ws = crossProjectWorkspace();
+  t.after(() => rmSync(ws, { recursive: true, force: true }));
+  const result = materialize(ws);
+  assert.equal(result.code, 0, result.stderr.join("\n"));
+  const receipt = JSON.parse(result.stdout[0]!);
+  assert.deepEqual(receipt.mapping, {
+    release: "repo-b:B-001",
+    prepare: "REP-001",
+    publish: "repo-b:B-002",
+  });
+  const published = JSON.parse(
+    run(["backlog", "show", "repo-b", "B-002", "--json"], ws).stdout[0]!,
+  );
+  assert.equal(published.project, "repo-b");
+  assert.equal(published.parent_id, "B-001");
+  assert.equal(published.source, "plan:repo-a:plan-release-workflow#publish");
+  assert.deepEqual(published.depends_on, ["repo-a:REP-001"]);
+  assert.equal(receipt.items[2].project, "repo-b");
+  assert.equal(receipt.items[2].id, "B-002");
+  assert.equal(JSON.parse(materialize(ws).stdout[0]!).no_op, true);
+});
+
+test("cross-project invalid target is rejected before any item creation", (t) => {
+  const ws = crossProjectWorkspace();
+  t.after(() => rmSync(ws, { recursive: true, force: true }));
+  rmSync(path.join(ws, "ops", "repo-b", "backlog", "backlog.json"));
+  assert.equal(materialize(ws).code, 1);
+  for (const project of ["repo-a", "repo-b"])
+    assert.deepEqual(readdirSync(path.join(ws, "ops", project, "backlog", "items")), []);
+});
+
+test("second-store write failure persists partial mapping and retry never duplicates items", (t) => {
+  const ws = crossProjectWorkspace();
+  t.after(() => rmSync(ws, { recursive: true, force: true }));
+  const restore = failWrites((file) => file.includes("/repo-a/backlog/items/"));
+  let failed;
+  try {
+    failed = materialize(ws);
+  } finally {
+    restore();
+  }
+  assert.equal(failed.code, 1);
+  const receipt = JSON.parse(failed.stdout[0]!);
+  assert.equal(receipt.ok, false);
+  assert.equal(receipt.state, "partial");
+  assert.deepEqual(receipt.mapping, { release: "repo-b:B-001" });
+  assert.equal(
+    JSON.parse(readFileSync(planArtifactPath(ws), "utf8")).materialization.state,
+    "partial",
+  );
+  const retry = materialize(ws);
+  assert.equal(retry.code, 0, retry.stderr.join("\n"));
+  assert.equal(JSON.parse(retry.stdout[0]!).items[0].disposition, "reused");
+  assert.deepEqual(readdirSync(path.join(ws, "ops", "repo-b", "backlog", "items")), [
+    "B-001.md",
+    "B-002.md",
+  ]);
+});
+
+test("created item survives Plan receipt write failure and retry checks its source before reuse", (t) => {
+  const ws = crossProjectWorkspace();
+  t.after(() => rmSync(ws, { recursive: true, force: true }));
+  const restore = failWrites((file) => file === planArtifactPath(ws));
+  let failed;
+  try {
+    failed = materialize(ws);
+  } finally {
+    restore();
+  }
+  assert.equal(failed.code, 1);
+  assert.deepEqual(JSON.parse(failed.stdout[0]!).mapping, { release: "repo-b:B-001" });
+  assert.equal(materialize(ws).code, 0);
+  assert.deepEqual(readdirSync(path.join(ws, "ops", "repo-b", "backlog", "items")), [
+    "B-001.md",
+    "B-002.md",
+  ]);
+});
+
+function failWrites(matches: (file: string) => boolean): () => void {
+  const original = fs.writeFileSync;
+  fs.writeFileSync = ((...args: Parameters<typeof fs.writeFileSync>) => {
+    if (matches(String(args[0]))) throw new Error("Injected write failure");
+    return original(...args);
+  }) as typeof fs.writeFileSync;
+  syncBuiltinESMExports();
+  return () => {
+    fs.writeFileSync = original;
+    syncBuiltinESMExports();
+  };
+}
+
+test("index write failure returns the created item and recovery rebuilds without duplication", (t) => {
+  const ws = crossProjectWorkspace();
+  t.after(() => rmSync(ws, { recursive: true, force: true }));
+  const restore = failWrites((file) => file.endsWith("/repo-b/backlog/INDEX.md"));
+  let failed;
+  try {
+    failed = materialize(ws);
+  } finally {
+    restore();
+  }
+  assert.equal(failed.code, 1);
+  assert.deepEqual(JSON.parse(failed.stdout[0]!).mapping, { release: "repo-b:B-001" });
+  assert.equal(materialize(ws).code, 0);
+  assert.deepEqual(readdirSync(path.join(ws, "ops", "repo-b", "backlog", "items")), [
+    "B-001.md",
+    "B-002.md",
+  ]);
+});
+
+test("recovery refuses conflicting source content without replacing or duplicating it", (t) => {
+  const ws = crossProjectWorkspace();
+  t.after(() => rmSync(ws, { recursive: true, force: true }));
+  const restore = failWrites((file) => file === planArtifactPath(ws));
+  try {
+    assert.equal(materialize(ws).code, 1);
+  } finally {
+    restore();
+  }
+  const itemPath = path.join(ws, "ops", "repo-b", "backlog", "items", "B-001.md");
+  const changed = readFileSync(itemPath, "utf8").replace("Release work.", "Independent edit.");
+  writeFileSync(itemPath, changed);
+  const retry = materialize(ws);
+  assert.equal(retry.code, 1);
+  assert.match(retry.stderr.join("\n"), /conflicts/);
+  assert.equal(readFileSync(itemPath, "utf8"), changed);
+  assert.deepEqual(readdirSync(path.dirname(itemPath)), ["B-001.md"]);
 });

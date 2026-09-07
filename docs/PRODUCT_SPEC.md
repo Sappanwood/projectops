@@ -58,7 +58,7 @@ Project Docs 提供四份标准文档直达入口，逐项显示可读性与检�
 - 不建立覆盖所有 artifact 的通用 schema 或生命周期。
 - 跨领域关联使用稳定 logical URI，不把机器绝对路径写入 artifact。
 - Plan 使用 `plan/Plan@1` JSON artifact：包含稳定 ID、标题、目标及以局部 key 关联的 Backlog item 草案，并以 `status: draft|approved|done` 表示生命周期；草案 `parent` 引用局部 epic key，`depends_on` 可混用局部 task key 与同 workspace 既有 task 的 `project:ID` 限定引用。批准 Plan 额外包含一次 `approval` 记录（`approved_at` 与 `review_note`）；materialize 后增加 `materialization` 记录（`materialized_at` 与 `mapping`），保存局部 key 到 Backlog ID 的映射。
-- `pops plan materialize` 只接受通过 schema/依赖校验且 status 为 `approved` 的 Plan；按 parent/dependency 拓扑创建同一 project 的 epic/task，JSON 输出 mutation receipt。已有完整 mapping（含 `done` Plan）的重试为 `no_op`，不创建或改写条目。
+- `pops plan materialize` 只接受通过 schema/依赖校验且 status 为 `approved` 的 Plan；先预检全部目标 store 与依赖，再按 parent/dependency 拓扑向各目标项目创建 epic/task，JSON 输出含项目身份的 mutation receipt。已有完整 mapping（含 `done` Plan）的重试为 `no_op`，不创建或改写条目。
 - Plan 完成采用显式 `approved → done`：CLI `pops plan complete` 和 Web“标为完成”共用 application 校验，必须携带当前 Plan revision。
   要求已物化、至少一个 task、全部映射可读且全部 task 为 done；epic 不要求 done。若有串行/并行执行记录，最新记录须通过现有完成与验收/落地证据校验。
   成功只更新 Plan status，保留批准、mapping 和输入；同 revision 的 done 重试为 no_op。未完成、无法读取和 revision 冲突不写文件。
@@ -322,3 +322,21 @@ Workbench 仅为独立 manager 的客户端，不因页面关闭或自身重启�
 Web 任务详情提供按项目筛选的 task 选择器，展示标题、项目、ID 与状态；添加、移除后以 revision 保存。冲突或引用失效时保留草稿，重读版本后由用户核对再提交。直接前置显示实时满足状态及原因，反向查询显示依赖当前任务的各项目任务；读取不完整时显式显示诊断。
 
 Plan 修订的依赖选择器区分 Plan 内 key 与既有 project:ID，编辑进入同一 JSON 草案并沿用 preview/confirm。任务正文显示局部草案关系，物化任务另读取实际 Backlog 正反向关系。既有引用数量独立列出，不进入本 Plan 自有任务进度。任务链接进入真实所属项目，并将来源 Plan 或任务编码在路由中；刷新和浏览器历史导航保留来源返回入口。
+
+
+## Plan 跨项目物化身份契约
+
+同一 workspace 内，Plan 保留唯一 owner；item 的可选 `project` 指定目标项目，省略时使用 owner。
+显式目标须在 manifest 注册且具有有效 Backlog store。局部依赖允许跨目标项目，`parent` 仅允许同目标项目 epic。
+`materialization.mapping` 保持字符串值：裸 ID 相对于 Plan owner，跨项目项必须使用 `project:ID`，
+二者统一解码为完整 `TaskReference`。mapping 只包含本 Plan 新建项，既有引用不计入交付范围。
+物化后的目标项目固定，修订不能迁移任务；同项目现有数据无需重写。
+
+无 `materialization` 表示尚未开始；有记录且 `state: partial` 表示尚未完成，mapping 保存已确认创建项；
+省略 state 表示完整物化，必须覆盖全部 item。partial 不能标为 done 或普通修订，先恢复物化。
+每个条目写入后立即保存 partial mapping；失败 receipt 返回已知 mapping、条目项目/ID 和 diagnostic。重试按唯一 source、项目与草案内容核对已写项，复用并补齐剩余项，同时重建索引；来源重复、内容冲突或 Plan revision 改变时停止，不覆盖或删除已有条目。若 Plan 记录写入失败，仍返回已知事实，后续从 Backlog source 核对恢复；Plan 本身不可读时须先人工核对恢复 Plan。完整 mapping 的重试为 no-op。
+生命周期阶段负责 complete、Report 与两类自动 run 的统一限制。
+
+Backlog 来源采用相对或限定语法：`plan:plan-id#key` 相对于任务所属项目，
+跨项目创建项使用 `plan:owner:plan-id#key`。解析结果始终包含 owner、Plan ID 与 item key，
+因此远端任务能定位原 Plan，不同项目同名 Plan 不会混淆。

@@ -1,3 +1,4 @@
+import { planMappingReference } from "../plan/planIdentity.js";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
@@ -175,21 +176,22 @@ export function readPlanPrerequisites(
   const diagnostics: DependencyDiagnostic[] = [];
   if (!plan.materialization) return { evidence, diagnostics };
   const owned = new Set(
-    Object.values(plan.materialization.mapping).map((id) => `${request.projectId}:${id}`),
+    Object.values(plan.materialization.mapping).map((id) =>
+      taskReferenceKey(planMappingReference(request.projectId, id)!),
+    ),
   );
   const seen = new Set<string>();
   for (const draft of plan.items.filter((item) => item.item_type === "task")) {
-    const reference = {
-      project: request.projectId,
-      item: plan.materialization.mapping[draft.key]!,
-    };
+    const value = plan.materialization.mapping[draft.key];
+    if (!value) continue;
+    const reference = planMappingReference(request.projectId, value)!;
     const loaded = readTaskReference(request.workspaceDir, reference);
     if (!loaded.ok) {
       diagnostics.push({ id: taskReferenceKey(reference), ...loaded.error });
       continue;
     }
     for (const value of loaded.data.item.depends_on) {
-      const ref = parseTaskReference(value, request.projectId);
+      const ref = parseTaskReference(value, reference.project);
       if (!ref) {
         diagnostics.push({
           id: value,

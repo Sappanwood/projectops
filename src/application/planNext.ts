@@ -1,3 +1,4 @@
+import { planMappingReference, planMaterializationState } from "../plan/planIdentity.js";
 import { dependencyProblems } from "./dependencyReadiness.js";
 import type { BacklogItem } from "../backlog/item.js";
 import { projectArtifactRoots } from "../catalog/workspace.js";
@@ -11,8 +12,8 @@ import { readPlan, PlanNotFoundError } from "../plan/planFs.js";
 import { showBacklogItem } from "./backlogApi.js";
 import { applicationFailure, applicationSuccess, type ApplicationResult } from "./result.js";
 
-export type PlanNextTask = Pick<BacklogItem, "id" | "title" | "priority" | "status">;
-export type PlanNextDiagnostic = { id: string; code: string; message: string };
+export type PlanNextTask = Pick<BacklogItem, "id" | "title" | "priority" | "status" | "project">;
+export type PlanNextDiagnostic = { id: string; project?: string; code: string; message: string };
 export type PlanNextSummary = {
   plan_id: string;
   ready: PlanNextTask[];
@@ -84,10 +85,19 @@ export function readPlanNext(request: ProjectRequest, plan: Plan): PlanNextSumma
     });
     return summary;
   }
+  if (planMaterializationState(plan) === "partial")
+    summary.diagnostics.push({
+      id: plan.id,
+      code: "PLAN_PARTIALLY_MATERIALIZED",
+      message: "计划部分物化；先恢复物化再执行。",
+    });
   for (const draft of plan.items) {
     if (draft.item_type !== "task") continue;
-    const id = plan.materialization.mapping[draft.key]!;
-    const loaded = readTask(request, id);
+    const value = plan.materialization.mapping[draft.key];
+    if (!value) continue;
+    const reference = planMappingReference(request.projectId, value)!;
+    const id = reference.item;
+    const loaded = readTask({ ...request, projectId: reference.project }, id);
     if (!loaded.ok) {
       summary.diagnostics.push(loaded.diagnostic);
       continue;
@@ -97,7 +107,13 @@ export function readPlanNext(request: ProjectRequest, plan: Plan): PlanNextSumma
       summary.diagnostics.push({ id, code: "ITEM_TYPE_MISMATCH", message: "映射目标不是 task。" });
       continue;
     }
-    const task = { id: item.id, title: item.title, priority: item.priority, status: item.status };
+    const task = {
+      project: item.project,
+      id: item.id,
+      title: item.title,
+      priority: item.priority,
+      status: item.status,
+    };
     if (item.status === "done") continue;
     if (item.status === "in_progress") {
       summary.in_progress.push(task);
@@ -111,17 +127,18 @@ export function readPlanNext(request: ProjectRequest, plan: Plan): PlanNextSumma
       });
       continue;
     }
-    const reasons = dependencyProblems(request.workspaceDir, request.projectId, item.depends_on);
+    const reasons = dependencyProblems(request.workspaceDir, item.project, item.depends_on);
     if (reasons.length) summary.blocked.push({ ...task, reasons });
     else summary.ready.push(task);
   }
   const byPriorityAndId = (a: PlanNextTask, b: PlanNextTask) =>
-    a.priority.localeCompare(b.priority) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+    a.priority.localeCompare(b.priority) ||
+    `${a.project}:${a.id}`.localeCompare(`${b.project}:${b.id}`);
   summary.ready.sort(byPriorityAndId);
   summary.in_progress.sort(byPriorityAndId);
   summary.blocked.sort(byPriorityAndId);
   summary.diagnostics.sort((a, b) => a.id.localeCompare(b.id));
-  summary.next = summary.ready[0] ?? null;
+  summary.next = planMaterializationState(plan) === "complete" ? (summary.ready[0] ?? null) : null;
   return summary;
 }
 
@@ -147,6 +164,11 @@ function readTask(
   };
   return {
     ok: false,
-    diagnostic: { id, code, message: reasons[code] ?? "无法读取当前项目中的条目。" },
+    diagnostic: {
+      id,
+      project: request.projectId,
+      code,
+      message: reasons[code] ?? "无法读取当前项目中的条目。",
+    },
   };
 }

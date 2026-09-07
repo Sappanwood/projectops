@@ -1,6 +1,11 @@
-import { materializedDependencies, validatePlanDependencies } from "./planDependencies.js";
+import { formatPlanSource, planMappingReference } from "../plan/planIdentity.js";
+import {
+  materializedDependencies,
+  validatePlanDependencies,
+  validatePlanTargets,
+} from "./planDependencies.js";
 import { createHash } from "node:crypto";
-import { realpathSync, readFileSync, writeFileSync } from "node:fs";
+import { realpathSync } from "node:fs";
 import path from "node:path";
 import { isWithinWorkspace, projectArtifactRoots } from "../catalog/workspace.js";
 import { loadWorkspace } from "../catalog/workspaceStore.js";
@@ -8,7 +13,7 @@ import { parsePlanDraft, PLAN_SCHEMA, type Plan } from "../plan/plan.js";
 import { readPlan, planPath, updatePlan, PlanNotFoundError } from "../plan/planFs.js";
 import { computeRevision, type BacklogItem } from "../backlog/item.js";
 import { updateItemFile, rebuildIndex } from "../backlog/itemFs.js";
-import { showBacklogItem } from "./backlogApi.js";
+import { resolveBacklogContext, showBacklogItem } from "./backlogApi.js";
 import { applicationFailure, applicationSuccess, type ApplicationResult } from "./result.js";
 
 import { listExecutions } from "./executionApi.js";
@@ -25,7 +30,7 @@ export type PlanRevisionReceipt = {
   applied: boolean;
   confirmation_token: string;
   changes: { key: string; fields: string[]; item_id?: string }[];
-  affected_items: { id: string; revision: string }[];
+  affected_items: { id: string; project: string; revision: string }[];
 };
 export function computePlanRevision(plan: Plan): string {
   return digest(plan);
@@ -85,11 +90,16 @@ export function showPlanRevision(
 export function revisePlan(request: PlanRevisionRequest): ApplicationResult<PlanRevisionReceipt> {
   const loaded = loadPlanContext(request);
   if (!loaded.ok) return loaded;
-  const { plan: before, plans, backlog } = loaded.data;
+  const { plan: before, plans } = loaded.data;
   if (before.status === "done")
     return applicationFailure(
       "PLAN_INVALID",
       "Completed plans cannot be revised. Create a follow-up plan.",
+    );
+  if (before.materialization?.state === "partial")
+    return applicationFailure(
+      "PLAN_INVALID",
+      "Partial materialization must be recovered before revision.",
     );
   const revision = computePlanRevision(before);
   if (request.expectedRevision !== revision)
@@ -100,6 +110,8 @@ export function revisePlan(request: PlanRevisionRequest): ApplicationResult<Plan
   const draft = parsePlanDraft(request.draft);
   if (typeof draft === "string") return applicationFailure("PLAN_INVALID", draft);
   const plan: Plan = { ...before, ...draft };
+  const targets = validatePlanTargets(request.workspaceDir, request.projectId, plan);
+  if (!targets.ok) return targets;
   if (draft.execution_policy === undefined) delete plan.execution_policy;
   const changes: PlanRevisionReceipt["changes"] = [];
   const pending: BacklogItem[] = [];
@@ -137,6 +149,7 @@ export function revisePlan(request: PlanRevisionRequest): ApplicationResult<Plan
     const fields =
       old && next
         ? [
+            "project",
             "title",
             "body",
             "priority",
@@ -160,10 +173,15 @@ export function revisePlan(request: PlanRevisionRequest): ApplicationResult<Plan
         "PLAN_INVALID",
         `UNSUPPORTED_PLAN_CHANGE: ${key} type/parent changes require a separate follow-up plan.`,
       );
-    const found = showBacklogItem({ ...request, itemId: id });
+    const reference = planMappingReference(request.projectId, id)!;
+    const targetRequest = { ...request, projectId: reference.project, itemId: reference.item };
+    const context = resolveBacklogContext(request.workspaceDir, reference.project);
+    if (!context.ok) return context;
+    const backlog = context.data.root;
+    const found = showBacklogItem(targetRequest);
     if (!found.ok) return found;
     const item = found.data.item;
-    const executions = listExecutions({ ...request, itemId: id });
+    const executions = listExecutions(targetRequest);
     if (!executions.ok) return executions;
     if (executions.data.attempts.length)
       return applicationFailure(
@@ -176,12 +194,18 @@ export function revisePlan(request: PlanRevisionRequest): ApplicationResult<Plan
         `TASK_PROTECTED: ${id} is ${item.status}. Keep its plan input unchanged and create follow-up work.`,
       );
     if (
-      item.source !== `plan:${before.id}#${key}` ||
+      item.source !==
+        formatPlanSource(
+          { project: request.projectId, planId: before.id, key },
+          reference.project,
+        ) ||
       item.title !== old.title ||
       item.body.trimEnd() !== old.body.trimEnd() ||
       item.priority !== old.priority ||
       JSON.stringify(item.depends_on) !==
-        JSON.stringify(materializedDependencies(old.depends_on, mapping!))
+        JSON.stringify(
+          materializedDependencies(old.depends_on, mapping!, request.projectId, reference.project),
+        )
     )
       return applicationFailure(
         "PLAN_INVALID",
@@ -195,7 +219,7 @@ export function revisePlan(request: PlanRevisionRequest): ApplicationResult<Plan
         ) ||
         !isWithinWorkspace(
           realpathSync(backlog),
-          realpathSync(path.join(backlog, "items", `${id}.md`)),
+          realpathSync(path.join(backlog, "items", `${reference.item}.md`)),
         ) ||
         !isWithinWorkspace(realpathSync(backlog), realpathSync(path.join(backlog, "INDEX.md")))
       )
@@ -209,7 +233,12 @@ export function revisePlan(request: PlanRevisionRequest): ApplicationResult<Plan
       title: next.title,
       body: next.body,
       priority: next.priority,
-      depends_on: materializedDependencies(next.depends_on, mapping!),
+      depends_on: materializedDependencies(
+        next.depends_on,
+        mapping!,
+        request.projectId,
+        reference.project,
+      ),
       updated: new Date().toISOString().slice(0, 10),
     };
     updated.revision = computeRevision(updated);
@@ -224,7 +253,11 @@ export function revisePlan(request: PlanRevisionRequest): ApplicationResult<Plan
     );
     if (!dependencies.ok) return dependencies;
   }
-  const affected_items = affected.map((item) => ({ id: item.id, revision: item.revision }));
+  const affected_items = affected.map((item) => ({
+    id: item.id,
+    project: item.project,
+    revision: item.revision,
+  }));
   const confirmation_token = digest({ revision, draft, affected_items });
   if (request.confirm !== undefined && request.confirm !== confirmation_token)
     return applicationFailure(
@@ -237,39 +270,26 @@ export function revisePlan(request: PlanRevisionRequest): ApplicationResult<Plan
         approved_at: new Date().toISOString(),
         review_note: `Explicitly confirmed revision ${confirmation_token}`,
       };
-    const files = [
-      planPath(plans, plan.id),
-      ...pending.map((item) => path.join(backlog, "items", `${item.id}.md`)),
-      ...(pending.length ? [path.join(backlog, "INDEX.md")] : []),
-    ];
-    let backups: { file: string; content: string }[];
+    const applied: string[] = [];
+    const indexed: string[] = [];
     try {
-      backups = files.map((file) => ({ file, content: readFileSync(file, "utf8") }));
-    } catch {
-      return applicationFailure(
-        "PLAN_INVALID",
-        "Cannot read revision targets; nothing was written.",
-      );
-    }
-    try {
-      for (const item of pending) updateItemFile(backlog, item);
-      if (pending.length) rebuildIndex(backlog);
+      const stores = new Set<string>();
+      for (const item of pending) {
+        const context = resolveBacklogContext(request.workspaceDir, item.project);
+        if (!context.ok) throw new Error(context.error.message);
+        updateItemFile(context.data.root, item);
+        applied.push(`${item.project}:${item.id}`);
+        stores.add(context.data.root);
+      }
+      for (const root of stores) {
+        rebuildIndex(root);
+        indexed.push(root);
+      }
       updatePlan(plans, plan);
     } catch {
-      let restored = true;
-      for (const backup of backups) {
-        try {
-          if (readFileSync(backup.file, "utf8") !== backup.content)
-            writeFileSync(backup.file, backup.content);
-        } catch {
-          restored = false;
-        }
-      }
       return applicationFailure(
         "PLAN_INVALID",
-        restored
-          ? "Revision write failed; original plan and tasks were restored. Resolve the filesystem error and preview again."
-          : "Revision write failed and restoration was incomplete. Inspect the plan and affected task files before retrying.",
+        `Revision write failed. Applied task files: ${applied.join(", ") || "none"}; rebuilt indexes: ${indexed.length}; Plan write not confirmed (it may already have been saved). Reload the Plan and affected tasks. If the Plan still has its old draft, explicitly restore the applied task fields to that draft using current item revisions, then preview and confirm again. If the Plan already has the requested draft, verify task contents and indexes before further edits. No rollback was attempted.`,
       );
     }
   }

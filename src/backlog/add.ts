@@ -39,6 +39,7 @@ export function addBacklogItem(
   manifest: BacklogStoreManifest,
   draft: BacklogItemDraft,
   validateDependencies?: (itemId: string, dependencies: string[]) => void,
+  onItemWritten?: (item: BacklogItem) => void,
 ): BacklogItem {
   if (typeof draft.title !== "string" || !draft.title.trim())
     throw new BacklogAddError("--title is required");
@@ -107,6 +108,7 @@ export function addBacklogItem(
   };
   item.revision = computeRevision(item);
   writeItemFile(storeRoot, item);
+  onItemWritten?.(item);
   rebuildIndex(storeRoot);
   return item;
 }
