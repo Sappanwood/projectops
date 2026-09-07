@@ -38,8 +38,10 @@ export function addBacklogItem(
   storeRoot: string,
   manifest: BacklogStoreManifest,
   draft: BacklogItemDraft,
+  validateDependencies?: (itemId: string, dependencies: string[]) => void,
 ): BacklogItem {
-  if (draft.title === "") throw new BacklogAddError("--title is required");
+  if (typeof draft.title !== "string" || !draft.title.trim())
+    throw new BacklogAddError("--title is required");
   if (!CATEGORIES.includes(draft.category)) {
     throw new BacklogAddError(`--category must be one of: ${CATEGORIES.join(", ")}`);
   }
@@ -69,18 +71,21 @@ export function addBacklogItem(
   }
 
   const existingIds = listItemIds(storeRoot);
-  for (const dependency of draft.depends_on) {
-    if (!isItemIdForPrefix(dependency, manifest.id_prefix)) {
-      throw new BacklogAddError(`invalid item id: ${dependency}`);
+  const id = nextItemId(manifest.id_prefix, existingIds);
+  if (validateDependencies) validateDependencies(id, draft.depends_on);
+  else
+    for (const dependency of draft.depends_on) {
+      if (!isItemIdForPrefix(dependency, manifest.id_prefix)) {
+        throw new BacklogAddError(`invalid item id: ${dependency}`);
+      }
+      if (!existingIds.includes(dependency)) {
+        throw new BacklogAddError(`dependency item not found: ${dependency}`);
+      }
     }
-    if (!existingIds.includes(dependency)) {
-      throw new BacklogAddError(`dependency item not found: ${dependency}`);
-    }
-  }
 
   const today = new Date().toISOString().slice(0, 10);
   const item: BacklogItem = {
-    id: nextItemId(manifest.id_prefix, existingIds),
+    id,
     project: manifest.project_id,
     title: draft.title,
     item_type: draft.item_type,

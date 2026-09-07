@@ -520,6 +520,13 @@ Origin、JSON、body 上限与错误 envelope。返回的 endpoints 优先保留
 | `useCases/reportGenerate.ts`、`report/report.ts` 与两类 run 的 delivery evidence 查询 | 上游引用与证据属于前置说明，不能计入本 Plan 已交付任务；发布时再次检查有效性 |
 | `web/backlogView.ts`、`web/backlogController.ts`、Plan 阅读/修订与 HTTP adapter | 复用 typed application API，选择器区分项目/局部 key，支持 revision 编辑和真实项目导航，正反向关系暴露局部读取 diagnostics |
 
+`application/backlogDependencies.ts` 已提供 `readTaskReference`、`validateBacklogDependencies` 和
+`getBacklogDependencies`。创建通过 `createBacklogItem` 把共享验证注入 `backlog/add.ts`，编辑复用
+`updateBacklogItemContent` 的 revision 与 receipt；CLI 和 HTTP 使用相同 application 入口。
+引用读取复用 `resolveBacklogContext` 的 manifest/store identity 与静态 containment 检查；验证只遍历
+变更节点可达的链，以完整项目身份检测重复、自依赖和环，外部任务保持只读。
+直接查询返回解析成功项与逐引用 diagnostics；状态满足、execution 证据和反向关系由后续切片扩展。
+
 应用层需要共享一次直接依赖事实查询：manifest 路由到目标 Backlog 与 executions，返回身份、条目、
 满足条件及可定位诊断。循环校验单独遍历变更节点可达图，反向查询显式遍历已登记项目；二者不混入
 普通 next 的直接前置查询。运行与 Report 在消费时重新验证冻结依据，外部变化不隐式刷新执行输入。

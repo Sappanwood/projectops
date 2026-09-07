@@ -135,7 +135,45 @@ pops backlog update projectops "$item_id" --status in_progress --expected-revisi
 为 `done`。发生冲突时读取最新内容、判断原意是否仍成立，再决定是否提交；不得去掉 revision 强制重试。
 CLI 的 revision 参数可选，Agent 写入必须携带。状态支持 `todo|in_progress|done`；update 也支持单独的标题/正文编辑，不能与状态混合提交。已有执行记录的任务必须通过 execution accept 完成，不能直接 update done。
 更新后的状态从 `result.status` 读取，更新前状态从 `before.status` 读取；成功收据没有 `after` 字段。
-创建可用 `--item-type task|epic`、`--parent-id <ID>`、`--depends-on <ID1,ID2>`。
+创建可用 `--item-type task|epic`、`--parent-id <ID>`、`--depends-on <reference1,reference2>`。
+引用支持同项目 ID 或显式 `project:ID`，例如 `MOC-001,ccp:CCP-001`；同项目限定与裸 ID 是同一身份，重复项拒绝。
+`parent-id` 仍是同项目 epic ID。依赖目标必须是当前 workspace 登记项目内的可读 task，不按 prefix 猜项目。
+
+编辑依赖使用完整集合，必须携带当前 revision；可以与标题/正文一起提交，不能与状态混合。
+添加依赖需把既有引用包含在新集合中；移除单项提交剩余集合；空字符串移除全部：
+
+```bash
+pops backlog add mochi -T "部署服务" -c feature --priority P1 --depends-on ccp:CCP-001 --json
+pops backlog update mochi "$item_id" --depends-on ccp:CCP-001,MOC-001 --expected-revision "$revision" --json
+pops backlog update mochi "$item_id" --depends-on '' --expected-revision "$revision" --json
+```
+
+每次 mutation 后重新读取返回的 revision；示例 ID 必须替换为实际存在的任务。
+自依赖、重复身份、可达依赖链中的环，以及无效项目/缺失/不可读任务都会拒绝写入；诊断包含目标身份。
+失败不改写目标，引用不写外部任务。依赖参与 item revision，既有 execution/run 输入校验会发现编辑。
+
+Typed application API：`createBacklogItem({workspaceDir,projectId,draft})` 接收
+`draft:{title,category,priority,item_type,parent_id,depends_on,body,source?}`；
+`updateBacklogItemContent({workspaceDir,projectId,itemId,dependsOn,expectedRevision,title?,body?})` 返回现有 mutation receipt。
+`getBacklogDependencies({workspaceDir,projectId,itemId})` 返回直接前置的 `{dependencies:[{reference:{project,item},item}],diagnostics}`；
+不可读前置进入 diagnostics，不持久化状态，也不把部分结果视为完整。
+
+HTTP 与上述应用层实现一致，使用固定服务 workspace；mutation 仍要求同源与 JSON Content-Type：
+
+- `POST /api/projects/:project/backlog`：必填 title/category/priority，默认 item_type=task、parent_id=null、depends_on=[]、body=""。
+- `PATCH /api/projects/:project/backlog/:item`：提交 depends_on 数组与 expected_revision，[] 清空。
+- `GET /api/projects/:project/backlog/:item/dependencies`：直接引用解析和 diagnostics。
+
+```json
+{"title":"部署服务","category":"feature","priority":"P1","depends_on":["ccp:CCP-001"]}
+```
+
+```json
+{"depends_on":[],"expected_revision":"<最新 item revision>"}
+```
+
+HTTP 成功返回 `{ok:true,data:...}`；创建 data 为 `{item}`，编辑 data 为 mutation receipt；stale revision 返回 409。
+请求不接受 workspace/path 等越界字段。
 依赖不会自动执行，也不会强制阻止状态变更；Agent 根据验收与依赖实际情况推进，不能仅为生成 Report 标记完成。
 
 ## Plan：草案、批准与 materialize

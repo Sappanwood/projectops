@@ -1,3 +1,5 @@
+import { addBacklogItem, BacklogAddError, type BacklogItemDraft } from "../backlog/add.js";
+import { validateBacklogDependencies } from "./backlogDependencies.js";
 import { existsSync, statSync, realpathSync } from "node:fs";
 import path from "node:path";
 
@@ -59,6 +61,36 @@ type BacklogContext = {
   root: string;
   manifest: BacklogStoreManifest;
 };
+
+export function createBacklogItem(request: {
+  workspaceDir: string;
+  projectId: string;
+  draft: BacklogItemDraft;
+}): ApplicationResult<{ item: BacklogItem }> {
+  const context = resolveBacklogContext(request.workspaceDir, request.projectId);
+  if (!context.ok) return context;
+  try {
+    const item = addBacklogItem(
+      context.data.root,
+      context.data.manifest,
+      request.draft,
+      (itemId, dependencies) => {
+        const validation = validateBacklogDependencies(
+          request.workspaceDir,
+          { project: request.projectId, item: itemId },
+          dependencies,
+        );
+        if (!validation.ok) throw new BacklogAddError(validation.error.message);
+      },
+    );
+    return applicationSuccess({ item });
+  } catch (error) {
+    return applicationFailure(
+      "ITEM_INVALID",
+      String(error instanceof Error ? error.message : error),
+    );
+  }
+}
 
 export function listBacklogItems(
   request: ListBacklogItemsRequest,
@@ -168,6 +200,7 @@ export function updateBacklogItemStatus(
 export type UpdateBacklogItemContentRequest = ShowBacklogItemRequest & {
   title?: string;
   body?: string;
+  dependsOn?: string[];
   expectedRevision: string;
 };
 
@@ -179,9 +212,12 @@ export function updateBacklogItemContent(
   if (
     (request.title !== undefined && (typeof request.title !== "string" || !request.title.trim())) ||
     (request.body !== undefined && typeof request.body !== "string") ||
-    (request.title === undefined && request.body === undefined)
+    (request.title === undefined && request.body === undefined && request.dependsOn === undefined)
   )
-    return applicationFailure("ITEM_INVALID", "Provide a non-empty title or a body string.");
+    return applicationFailure(
+      "ITEM_INVALID",
+      "Provide a non-empty title, a body string or dependsOn.",
+    );
   const context = resolveBacklogContext(request.workspaceDir, request.projectId);
   if (!context.ok) return context;
   const loaded = showBacklogItem(request);
@@ -192,12 +228,25 @@ export function updateBacklogItemContent(
       "REVISION_MISMATCH",
       `Revision mismatch for ${before.id}: current ${before.revision}. Reload and reapply your edit.`,
     );
+  if (request.dependsOn !== undefined) {
+    const validation = validateBacklogDependencies(
+      request.workspaceDir,
+      { project: request.projectId, item: request.itemId },
+      request.dependsOn,
+    );
+    if (!validation.ok) return validation;
+  }
   const result = {
     ...before,
     ...(request.title === undefined ? {} : { title: request.title }),
     ...(request.body === undefined ? {} : { body: request.body }),
+    ...(request.dependsOn === undefined ? {} : { depends_on: request.dependsOn }),
   };
-  if (result.title === before.title && result.body === before.body)
+  if (
+    result.title === before.title &&
+    result.body === before.body &&
+    JSON.stringify(result.depends_on) === JSON.stringify(before.depends_on)
+  )
     return applicationSuccess(buildReceipt(before, before, []));
   result.updated = new Date().toISOString().slice(0, 10);
   result.revision = computeRevision(result);
@@ -221,7 +270,7 @@ export function updateBacklogItemContent(
   return applicationSuccess(buildReceipt(before, result, diffFields(before, result)));
 }
 
-function resolveBacklogContext(
+export function resolveBacklogContext(
   workspaceDir: string,
   projectId: string,
 ): ApplicationResult<BacklogContext> {
@@ -235,7 +284,7 @@ function resolveBacklogContext(
     if (error instanceof ManifestParseError) {
       return applicationFailure("WORKSPACE_INVALID", "Workspace manifest is invalid.");
     }
-    throw error;
+    return applicationFailure("WORKSPACE_INVALID", `Workspace cannot be read: ${String(error)}`);
   }
   if (!Object.hasOwn(workspace.manifest.projects, projectId)) {
     return applicationFailure("PROJECT_NOT_FOUND", `Project "${projectId}" is not registered.`);
@@ -248,6 +297,22 @@ function resolveBacklogContext(
   ).backlog;
   try {
     const manifest = loadStore(root);
+    if (manifest.project_id !== projectId)
+      return applicationFailure(
+        "BACKLOG_STORE_INVALID",
+        `Backlog store project mismatch for ${projectId}.`,
+      );
+    const realRoot = realpathSync(root);
+    if (
+      !isWithinWorkspace(realpathSync(workspace.root), realRoot) ||
+      !isWithinWorkspace(realRoot, realpathSync(path.join(root, ITEMS_DIR))) ||
+      !isWithinWorkspace(realRoot, realpathSync(path.join(root, "backlog.json"))) ||
+      !isWithinWorkspace(realRoot, realpathSync(path.join(root, "INDEX.md")))
+    )
+      return applicationFailure(
+        "BACKLOG_STORE_INVALID",
+        `Backlog store for ${projectId} resolves outside its declared workspace.`,
+      );
     const itemsDir = path.join(root, ITEMS_DIR);
     if (!existsSync(itemsDir) || !statSync(itemsDir).isDirectory()) {
       return applicationFailure(
@@ -269,7 +334,10 @@ function resolveBacklogContext(
         `Backlog store is invalid for project "${projectId}".`,
       );
     }
-    throw error;
+    return applicationFailure(
+      "BACKLOG_STORE_INVALID",
+      `Backlog store for ${projectId} cannot be read: ${String(error)}`,
+    );
   }
 }
 
@@ -281,6 +349,12 @@ function validateItemId(itemId: string, prefix: string): ApplicationResult<never
 function readItem(storeRoot: string, itemId: string): ApplicationResult<BacklogItem> {
   let item;
   try {
+    const target = path.join(storeRoot, ITEMS_DIR, `${itemId}.md`);
+    if (existsSync(target) && !isWithinWorkspace(realpathSync(storeRoot), realpathSync(target)))
+      return applicationFailure(
+        "ITEM_INVALID",
+        `${itemId}: item resolves outside its declared store.`,
+      );
     item = readItemFile(storeRoot, itemId);
   } catch (error) {
     if (error instanceof ItemNotFoundError) {

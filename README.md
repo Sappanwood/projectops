@@ -413,3 +413,11 @@ IPC 路径过长、权限问题或版本不兼容会明确报错，不自动改�
 不会停止其他开发项目。未配置项目通过 manifest/CLI 配置流程登记；unknown 禁止盲重启，连接错误先查询状态。
 如果当前 workspace 的项目 endpoint 端口与实际 Workbench 监听端口一致，网页与 API 禁止停止/重启该项目，
 请改用 `pops dev stop <project>` 或 `pops dev restart <project>`。首版没有网页 manager stop、配置编辑器或实时终端。
+
+
+### 跨项目 Backlog 依赖
+
+Backlog 创建的 `--depends-on` 支持 `project:ID`；`backlog update --depends-on <完整集合>`
+配合 `--expected-revision` 替换依赖，空字符串清空。引用仅连接当前 workspace 内已登记项目的 task，
+不会创建或改写外部任务。CLI、typed application API 与 HTTP POST/PATCH 共用校验，拒绝重复、自依赖、
+可达循环及不可读目标。实际参数和 JSON 示例见 [Backlog 操作契约](docs/AGENT_CONTRACT.md#backlog创建与推进)。

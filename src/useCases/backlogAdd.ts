@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 
 import type { CliIO } from "../io.js";
-import { addBacklogItem, BacklogAddError } from "../backlog/add.js";
+import { createBacklogItem } from "../application/backlogApi.js";
 import {
   CATEGORIES,
   ITEM_TYPES,
@@ -13,7 +13,6 @@ import {
   type ItemType,
   type Priority,
 } from "../backlog/item.js";
-import { resolveStoreRoot } from "./backlogContext.js";
 
 type AddOptions = {
   title?: string;
@@ -40,8 +39,6 @@ export function backlogAdd(
     );
     return 1;
   }
-  const store = resolveStoreRoot(projectId, io, cwd);
-  if (store === null) return 1;
 
   let values: AddOptions;
   try {
@@ -100,9 +97,10 @@ export function backlogAdd(
     body = io.stdin?.() ?? "";
   }
 
-  let item;
-  try {
-    item = addBacklogItem(store.root, store.manifest, {
+  const result = createBacklogItem({
+    workspaceDir: cwd,
+    projectId,
+    draft: {
       title,
       category: values.category as Category,
       priority: values.priority as Priority,
@@ -110,14 +108,15 @@ export function backlogAdd(
       parent_id: values["parent-id"] ?? null,
       depends_on: dependsOn,
       body,
-    });
-  } catch (error) {
-    if (error instanceof BacklogAddError) {
-      io.stderr(`Error: ${error.message}`);
-      return 1;
-    }
-    throw error;
+    },
+  });
+  if (!result.ok) {
+    io.stderr(
+      `Error: ${result.error.message}${result.error.code === "BACKLOG_STORE_NOT_FOUND" ? ` Run "pops backlog init ${projectId}" first.` : ""}`,
+    );
+    return 1;
   }
+  const item = result.data.item;
 
   if (json) {
     io.stdout(JSON.stringify({ ok: true, item }));

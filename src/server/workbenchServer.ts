@@ -1,3 +1,5 @@
+import { getBacklogDependencies } from "../application/backlogDependencies.js";
+import type { BacklogItemDraft } from "../backlog/add.js";
 import { handleDevRoute } from "./devRoutes.js";
 import { DEFAULT_PARALLEL_COMMANDS } from "../planRun/commands.js";
 import { handleParallelRunRoute } from "./parallelRunRoutes.js";
@@ -11,6 +13,7 @@ import path from "node:path";
 
 import {
   listBacklogItems,
+  createBacklogItem,
   showBacklogItem,
   updateBacklogItemStatus,
   updateBacklogItemContent,
@@ -283,6 +286,52 @@ async function handleRequest(
       segments[1] === "projects" &&
       segments[3] === "backlog"
     ) {
+      if (request.method === "POST") {
+        requireNoQuery(url);
+        requireAllowedOrigin(request, context.origin);
+        requireJsonContentType(request);
+        const record = await readJsonRecord(request, [
+          "title",
+          "category",
+          "priority",
+          "item_type",
+          "parent_id",
+          "depends_on",
+          "body",
+        ]);
+        if (
+          ["title", "category", "priority"].some((key) => typeof record[key] !== "string") ||
+          ["item_type", "body"].some(
+            (key) => record[key] !== undefined && typeof record[key] !== "string",
+          ) ||
+          (record.parent_id !== undefined &&
+            record.parent_id !== null &&
+            typeof record.parent_id !== "string") ||
+          (record.depends_on !== undefined &&
+            (!Array.isArray(record.depends_on) ||
+              record.depends_on.some((value) => typeof value !== "string")))
+        )
+          throw new HttpError(400, "INVALID_REQUEST", "Request body is invalid.");
+        const draft = {
+          title: record.title as string,
+          category: record.category as BacklogItemDraft["category"],
+          priority: record.priority as BacklogItemDraft["priority"],
+          item_type: "task",
+          parent_id: null,
+          depends_on: [],
+          body: "",
+          ...record,
+        } as BacklogItemDraft;
+        sendApplicationResult(
+          response,
+          createBacklogItem({
+            workspaceDir: context.workspaceDir,
+            projectId: segments[2] ?? "",
+            draft,
+          }),
+        );
+        return;
+      }
       requireMethod(request, "GET");
       const status = singleQueryValue(url, "status");
       sendApplicationResult(
@@ -291,6 +340,26 @@ async function handleRequest(
           workspaceDir: context.workspaceDir,
           projectId: segments[2] ?? "",
           ...(status === undefined ? {} : { status }),
+        }),
+      );
+      return;
+    }
+
+    if (
+      segments.length === 6 &&
+      segments[0] === "api" &&
+      segments[1] === "projects" &&
+      segments[3] === "backlog" &&
+      segments[5] === "dependencies"
+    ) {
+      requireMethod(request, "GET");
+      requireNoQuery(url);
+      sendApplicationResult(
+        response,
+        getBacklogDependencies({
+          workspaceDir: context.workspaceDir,
+          projectId: segments[2] ?? "",
+          itemId: segments[4] ?? "",
         }),
       );
       return;
@@ -325,6 +394,7 @@ async function handleRequest(
               itemId,
               ...(body.title === undefined ? {} : { title: body.title }),
               ...(body.body === undefined ? {} : { body: body.body }),
+              ...(body.depends_on === undefined ? {} : { dependsOn: body.depends_on }),
               expectedRevision: body.expected_revision!,
             }),
           );
@@ -692,20 +762,43 @@ function requireJsonContentType(request: IncomingMessage): void {
   throw new HttpError(415, "UNSUPPORTED_MEDIA_TYPE", "Content-Type must be application/json.");
 }
 
-async function readUpdateBody(
-  request: IncomingMessage,
-): Promise<{ status?: string; title?: string; body?: string; expected_revision?: string }> {
-  const record = await readJsonRecord(request, ["status", "title", "body", "expected_revision"]);
-  const content = Object.hasOwn(record, "title") || Object.hasOwn(record, "body");
+async function readUpdateBody(request: IncomingMessage): Promise<{
+  status?: string;
+  title?: string;
+  body?: string;
+  depends_on?: string[];
+  expected_revision?: string;
+}> {
+  const record = await readJsonRecord(request, [
+    "status",
+    "title",
+    "body",
+    "depends_on",
+    "expected_revision",
+  ]);
+  const content =
+    Object.hasOwn(record, "title") ||
+    Object.hasOwn(record, "body") ||
+    Object.hasOwn(record, "depends_on");
   if (
     (content && Object.hasOwn(record, "status")) ||
     (!content && typeof record.status !== "string") ||
-    Object.values(record).some((value) => typeof value !== "string") ||
+    Object.entries(record).some(([key, value]) =>
+      key === "depends_on"
+        ? !Array.isArray(value) || value.some((ref) => typeof ref !== "string")
+        : typeof value !== "string",
+    ) ||
     (content && (typeof record.expected_revision !== "string" || !record.expected_revision))
   ) {
     throw new HttpError(400, "INVALID_REQUEST", "Request body is invalid.");
   }
-  return record as { status?: string; title?: string; body?: string; expected_revision?: string };
+  return record as {
+    status?: string;
+    title?: string;
+    body?: string;
+    depends_on?: string[];
+    expected_revision?: string;
+  };
 }
 
 async function readJsonRecord(

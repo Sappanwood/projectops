@@ -10,6 +10,7 @@ import { ITEM_STATUSES, type ItemStatus } from "../backlog/item.js";
 type UpdateOptions = {
   status?: string;
   title?: string;
+  "depends-on"?: string;
   "body-file"?: string;
   "expected-revision"?: string;
 };
@@ -24,7 +25,7 @@ export function backlogUpdate(
 ): number {
   if (projectId === undefined || itemId === undefined) {
     io.stderr(
-      "Usage: pops backlog update <project-id> <item-id> (--status <status> | --title <title> | --body-file <file>) [--expected-revision <rev>] [--json]",
+      "Usage: pops backlog update <project-id> <item-id> (--status <status> | --title <title> | --body-file <file> | --depends-on <refs>) [--expected-revision <rev>] [--json]",
     );
     return 1;
   }
@@ -35,6 +36,7 @@ export function backlogUpdate(
       options: {
         status: { type: "string" },
         title: { type: "string" },
+        "depends-on": { type: "string" },
         "body-file": { type: "string" },
         "expected-revision": { type: "string" },
       },
@@ -46,7 +48,10 @@ export function backlogUpdate(
     io.stderr("Error: invalid arguments");
     return 1;
   }
-  const contentEdit = values.title !== undefined || values["body-file"] !== undefined;
+  const contentEdit =
+    values.title !== undefined ||
+    values["body-file"] !== undefined ||
+    values["depends-on"] !== undefined;
   if (contentEdit && values.status !== undefined) {
     io.stderr("Error: edit content and status separately.");
     return 1;
@@ -73,6 +78,9 @@ export function backlogUpdate(
         expectedRevision: values["expected-revision"] ?? "",
         ...(values.title === undefined ? {} : { title: values.title }),
         ...(body === undefined ? {} : { body }),
+        ...(values["depends-on"] === undefined
+          ? {}
+          : { dependsOn: values["depends-on"] === "" ? [] : values["depends-on"].split(",") }),
       })
     : updateBacklogItemStatus({
         workspaceDir: cwd,

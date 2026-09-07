@@ -303,7 +303,7 @@ Workbench 仅为独立 manager 的客户端，不因页面关闭或自身重启�
 
 ## 跨项目任务依赖契约
 
-本节定义跨项目依赖切片的目标契约。当前已实现纯引用解析基础；Backlog/Plan 写入入口、共享就绪判断、运行保护与 Web 呈现按后续切片接入，不能仅凭本节假定入口已支持。
+本节定义跨项目依赖切片的目标契约。当前已实现引用解析、Backlog CLI/application/HTTP 创建和 revision 保护的依赖集合编辑、直接引用查询；Plan 写入入口、共享就绪判断、运行保护与 Web 呈现按后续切片接入，不能仅凭本节假定入口已支持。
 
 - Backlog 的 `depends_on: string[]` 使用当前联合语法：`PRO-058` 表示所属项目的任务，`mochi:MOC-001` 表示显式项目与任务。项目名遵循 manifest 的 project ID 规则，ID 遵循 Backlog 格式；不按 ID prefix 推断项目。解析后使用 `{project,item}` 身份，`project:item` 作为比较键；同项目裸 ID 与限定引用视为同一身份，混用重复项必须拒绝。
 - Plan 保留 `plan/Plan@1` 与 `depends_on: string[]`。`prepare` 是该草案局部 key；`projectops:PRO-058`、`mochi:MOC-001` 是既有 task，引用本项目已有任务也必须限定项目。裸 Backlog ID 不是 Plan key。`parent` 仍仅为本 Plan epic 的局部 key，不支持跨项目父子关系。

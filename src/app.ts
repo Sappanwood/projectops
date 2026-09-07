@@ -64,7 +64,7 @@ Commands:
   backlog add <project>   Add a backlog item (requires -T, -c, --priority)
   backlog list <project>  List backlog items (optional --status filter)
   backlog show <project> <item>  Show a full backlog item
-  backlog update <project> <item>  Update status or content (--title, --body-file, --expected-revision)
+  backlog update <project> <item>  Update status or content (--title, --body-file, --depends-on, --expected-revision)
   plan create <project> --input <draft.json>  Create a Plan from a JSON draft
   plan list <project>     List Plans for a project
   plan show <project> <plan>  Show a complete Plan
