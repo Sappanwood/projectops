@@ -455,6 +455,8 @@ ports 返回 `{ok,projects,ports,problems}`，projects 为解析后的配置（c
 
 ## 独立开发服务生命周期
 
+已有 manager 的 status、stop、manager stop 与 TERM/INT 清理使用 owner 的运行配置快照；当前 manifest 的 dev 配置编辑为无效值，不阻断查询、ledger 更新或旧进程组清理。启动新进程仍验证当前 manifest；无有效配置不 bootstrap 新 manager。
+
 `pops dev start/status/stop/restart <project> [--json]` 与 `pops dev manager stop [--json]` 调用同一 typed application/IPC。
 JSON 收据为 `{ok,project,state,manager,endpoints,processes,instance?,issue?,affected?}`；state 为
 `stopped|starting|running|stopping|failed|unknown`，manager 为 `running|stopped|unknown`。

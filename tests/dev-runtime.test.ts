@@ -398,3 +398,83 @@ test("manager stop during an in-flight start drains it and does not orphan the n
   assert.equal((await command(root, "status", "app")).result.state, "stopped");
   assert.equal((await command(root, "check", "app")).result.ports[0].status, "free");
 });
+
+for (const action of ["project-stop", "manager-stop", "manager-term"] as const) {
+  test(`invalid edited manifest preserves owner snapshot for ${action}`, {
+    timeout: 15000,
+  }, async (t) => {
+    const { existsSync, readFileSync } = await import("node:fs");
+    const root = mkdtempSync("/tmp/pdev-");
+    mkdirSync(path.join(root, "repo"));
+    const port = await freePort();
+    const manifest = newWorkspaceManifest("test");
+    manifest.projects.app = {
+      path: "repo",
+      dev: {
+        host: "127.0.0.1",
+        endpoints: { web: { port } },
+        processes: {
+          web: {
+            command: [
+              process.execPath,
+              "-e",
+              'require("http").createServer((q,s)=>s.end("ok")).listen(Number(process.argv[1]),"127.0.0.1")',
+              String(port),
+            ],
+            cwd: ".",
+            env: {},
+          },
+        },
+      },
+    };
+    createWorkspaceManifestFile(root, manifest);
+    const manifestFile = path.join(root, ".pops/workspace.json");
+    const lockFile = path.join(root, ".pops/runtime/dev/lock.json");
+    const valid = readFileSync(manifestFile, "utf8");
+    let servicePid: number | undefined;
+    t.after(async () => {
+      writeFileSync(manifestFile, valid);
+      await command(root, "manager", "stop").catch(() => {});
+      if (servicePid)
+        try {
+          process.kill(-servicePid, "SIGKILL");
+        } catch {}
+      rmSync(root, { recursive: true, force: true });
+    });
+    const started = await command(root, "start", "app");
+    assert.equal(started.result.state, "running");
+    servicePid = started.result.processes[0].pid;
+    const managerPid = JSON.parse(
+      readFileSync(path.join(root, ".pops/runtime/dev/ledger.json"), "utf8"),
+    ).pid;
+    const edited = JSON.parse(valid);
+    edited.projects.app.dev.endpoints.web.port = "editing";
+    writeFileSync(manifestFile, JSON.stringify(edited));
+    if (action === "project-stop") {
+      const status = await command(root, "status", "app");
+      assert.equal(status.code, 0);
+      assert.equal(status.result.state, "running");
+      assert.equal(status.result.endpoints[0].port, port);
+      assert.equal((await command(root, "stop", "app")).result.state, "stopped");
+      assert.equal((await command(root, "start", "app")).code, 1);
+    } else if (action === "manager-stop") {
+      assert.equal((await command(root, "manager", "stop")).code, 0);
+    } else {
+      process.kill(managerPid, "SIGTERM");
+      for (let i = 0; i < 80 && existsSync(lockFile); i++)
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      assert.equal(existsSync(lockFile), false);
+    }
+    assert.equal((await command(root, "status", "app")).result.state, "stopped");
+    const probe = createServer();
+    await new Promise<void>((resolve, reject) => {
+      probe.once("error", reject);
+      probe.listen(port, "127.0.0.1", resolve);
+    });
+    await new Promise<void>((resolve) => probe.close(() => resolve()));
+    if (action !== "project-stop") {
+      assert.equal((await command(root, "start", "app")).code, 1);
+      assert.equal(existsSync(lockFile), false);
+    }
+  });
+}

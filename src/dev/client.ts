@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { createConnection } from "node:net";
 import { fileURLToPath } from "node:url";
+import { loadWorkspace } from "../catalog/workspaceStore.js";
 import { devFiles, readLedger } from "./files.js";
 import {
   DEV_PROTOCOL,
@@ -117,6 +118,7 @@ export async function devRequest(
       processes: [],
       ...(action === "manager-stop" ? { affected: [] } : {}),
     };
+  loadWorkspace(files.workspace);
   files = devFiles(cwd, true);
   lock = { instance: randomUUID() };
   try {

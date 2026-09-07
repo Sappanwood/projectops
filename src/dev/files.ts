@@ -8,7 +8,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
-import { loadWorkspace } from "../catalog/workspaceStore.js";
+import { findWorkspaceRoot, WorkspaceNotFoundError } from "../catalog/workspaceStore.js";
 import type { DevStatus } from "./protocol.js";
 export type Ledger = {
   workspace: string;
@@ -17,7 +17,9 @@ export type Ledger = {
   projects: Record<string, DevStatus>;
 };
 export function devFiles(cwd: string, create = false) {
-  const workspace = realpathSync(loadWorkspace(cwd).root);
+  const root = findWorkspaceRoot(cwd);
+  if (root === null) throw new WorkspaceNotFoundError(cwd);
+  const workspace = realpathSync(root);
   const dir = path.join(workspace, ".pops/runtime/dev");
   for (const relative of [".pops", ".pops/runtime", ".pops/runtime/dev"]) {
     const target = path.join(workspace, relative);
