@@ -131,7 +131,7 @@ npm run quality:full
 不应用旧 build 验证新源码。`quality:full` 复用它们以避免重复构建。浏览器测试用 headless Chromium 运行 smoke：选择项目、浏览详情、
 更新 Backlog、revision 冲突后刷新重试，以及领域阅读页的正常、空和 diagnostic 页面；还覆盖内容修订、执行控制及验收。
 它也验证未知项目和 server 断连不会修改 authority 文件。每个测试自动创建并清理临时 workspace，
-server 使用隔离端口，不需要运行真实开发服务。整套 E2E 上限 120 秒，单项 30 秒；失败 trace 保留在
+server 使用隔离端口，不需要运行真实开发服务。整套 E2E 上限 240 秒，单项 30 秒；失败 trace 保留在
 已被 Git 忽略的 `test-results/`。浏览器版本由 Playwright 锁定，升级依赖后重新运行浏览器安装命令。
 Linux 若提示系统库缺失，可按 [Playwright 浏览器安装说明](https://playwright.dev/docs/browsers) 安装所需依赖。
 

@@ -92,6 +92,21 @@ test("independent built CLI owns two processes after CLI exit, restart and isola
   assert.notEqual(restarted.instance, first.instance);
   assert.equal((await command(root, "stop", "app")).result.state, "stopped");
   assert.equal((await command(root, "status", "other")).result.state, "running");
+  const failing = (await command(root, "start", "app")).result;
+  process.kill(failing.processes[0].pid, "SIGTERM");
+  let failed;
+  for (let i = 0; i < 60; i++) {
+    failed = (await command(root, "status", "app")).result;
+    if (failed.state === "failed") break;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  assert.equal(failed.state, "failed");
+  assert.match(failed.issue, /exited/);
+  assert.ok(
+    (await command(root, "check", "app")).result.ports.every((p: any) => p.status === "free"),
+  );
+  assert.equal((await command(root, "status", "other")).result.state, "running");
+  assert.equal(await (await fetch(`http://127.0.0.1:${ports[2]}`)).text(), "ok");
   assert.equal((await command(root, "manager", "stop")).code, 0);
   assert.equal((await command(root, "status", "other")).result.state, "stopped");
 });

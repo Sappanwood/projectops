@@ -23,7 +23,8 @@ test("Overview keeps long titles, IDs and metadata readable at every viewport", 
     await route.fulfill({ response, json: payload });
   });
   await page.goto(`${workbench.origin}/#/projects/alpha`);
-  await expect(page.locator(".overview-card")).toHaveCount(5);
+  const summaryCards = page.locator(".overview-grid .overview-card");
+  await expect(summaryCards).toHaveCount(5);
   await expect(page.locator(".overview-card .item-title").first()).toContainText(
     "完整标题需要换行阅读而不能隐藏",
   );
@@ -40,14 +41,14 @@ test("Overview keeps long titles, IDs and metadata readable at every viewport", 
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
       true,
     );
-    await expect(page.locator(".overview-card h3")).toHaveText([
+    await expect(summaryCards.locator("h3")).toHaveText([
       "Plans (1)",
       "Backlog",
       "Reports (1)",
       "Retrospectives",
       "Project Docs",
     ]);
-    const cards = await page.locator(".overview-card").evaluateAll((elements) =>
+    const cards = await summaryCards.evaluateAll((elements) =>
       elements.map((element) => {
         const { x, y, width, height } = element.getBoundingClientRect();
         return { x, y, width, height };
