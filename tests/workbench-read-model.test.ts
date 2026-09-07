@@ -386,6 +386,7 @@ test("Workbench project overview combines stable domain summaries", () => {
       status: "draft",
       item_count: 1,
       execution: {
+        prerequisites: { evidence: [], diagnostics: [] },
         materialized: false,
         counts: {
           total: 0,

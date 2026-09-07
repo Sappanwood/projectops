@@ -1,3 +1,4 @@
+import { readPlanPrerequisites } from "../application/dependencyReadiness.js";
 // Application use case: derive delivery evidence from a materialized Plan and its Backlog items.
 
 import { parseReport, type Report } from "../report/report.js";
@@ -143,6 +144,22 @@ function deriveReport(input: ReportDerivationInput): Report {
  */
 export function writeGeneratedReport(input: GeneratedReportInput): Report {
   const report = generateReport(input);
+  const prerequisites = readPlanPrerequisites(
+    { workspaceDir: input.workspaceRoot, projectId: input.projectId },
+    readSourcePlan(input.plansRoot, input.planId),
+  );
+  if (prerequisites.diagnostics.length) {
+    const message = prerequisites.diagnostics.map((d) => d.message).join(" ");
+    if (!input.partialAcceptance?.trim()) throw new ReportGenerationError(message);
+    report.outcome = "partial";
+    report.deviations.push(input.partialAcceptance.trim(), message);
+  }
+  report.verification.push(
+    ...prerequisites.evidence.map(
+      (e) =>
+        `Prerequisite ${e.reference.project}:${e.reference.item}; basis: ${e.basis}; task revision: ${e.input.revision}; attempt: ${e.attempt_id ?? "none"}; snapshot: ${e.snapshot_digest ?? "none"}; verification: ${e.verification_digest ?? "none"}; landing: ${e.landing_digest ?? "none"}`,
+    ),
+  );
   const runs = listPlanRuns({
     workspaceDir: input.workspaceRoot,
     projectId: input.projectId,

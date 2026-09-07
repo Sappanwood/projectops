@@ -256,7 +256,7 @@ capture 的显式和自动 ID 在三个状态目录中保持唯一；运行时�
 - `pops backlog init <project> [--id-prefix <PREFIX>] [--json]`：初始化并分配当前 manifest 登记 store 内未占用代号；自定义只接受非空 ASCII 大写字母和数字，原样验证。自动候选为 project ID 去连字符、取前三位并转大写，冲突后依次附加 `2`、`3`……（如 `MOC` → `MOC2`）。冲突、不可读/无效 store 和已有目标均明确拒绝；参数、收据和正常并发锁恢复见 [Agent 操作契约](docs/AGENT_CONTRACT.md#backlog初始化与代号)
 - `pops backlog add/list/show/update`：CRUD、状态流转与 revision 保护
 - `pops plan next <project> <plan-id> [--json]`：只读查询该 Plan 的可开始、进行中和受阻 task，解释依赖原因；
-  可开始任务按 P0 → P3、ID 排序，next 为首项或 null。依赖可以位于同项目 Plan 外，查询不自动改状态或启动任务
+  可开始任务按 P0 → P3、ID 排序，next 为首项或 null。依赖可以位于 Plan 外或其他已登记项目，查询实时核对完成/接受/落地依据，不自动改状态或启动任务
 - `pops plan create/list/show/validate/approve/materialize/revise/complete`：从 JSON 草案创建、列出、查看、校验、批准并将已批准的 `plan/Plan@1` artifact 写入 Backlog；Plan ID 由 title 稳定生成，
   无 ASCII slug 的标题使用每个 Unicode code point 的 `u<hex>` token
 - `pops report create/list/show`：从已批准且 materialized 的 Plan 生成 completed 或显式 partial Delivery Report，并查询已生成的 Report；create 需要至少一条 `--verification`
@@ -421,3 +421,7 @@ Backlog 创建的 `--depends-on` 支持 `project:ID`；`backlog update --depends
 配合 `--expected-revision` 替换依赖，空字符串清空。引用仅连接当前 workspace 内已登记项目的 task，
 不会创建或改写外部任务。CLI、typed application API 与 HTTP POST/PATCH 共用校验，拒绝重复、自依赖、
 可达循环及不可读目标。实际参数和 JSON 示例见 [Backlog 操作契约](docs/AGENT_CONTRACT.md#backlog创建与推进)。
+
+`plan next` 与 Workbench projection 实时解析跨项目直接前置；依赖详情 API 同时返回“依赖谁／谁依赖我”与不完整诊断。
+串行和并行 run 冻结外部完成依据，每次派发与完成前重验，仍只调度本项目任务。Plan 可先物化，
+run 创建须等待前置满足；依据变化后按显式暂停/恢复或终止后重建处理。Plan/Report 的交付范围只计本项目 mapping。

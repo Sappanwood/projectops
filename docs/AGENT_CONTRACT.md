@@ -155,14 +155,14 @@ pops backlog update mochi "$item_id" --depends-on '' --expected-revision "$revis
 Typed application API：`createBacklogItem({workspaceDir,projectId,draft})` 接收
 `draft:{title,category,priority,item_type,parent_id,depends_on,body,source?}`；
 `updateBacklogItemContent({workspaceDir,projectId,itemId,dependsOn,expectedRevision,title?,body?})` 返回现有 mutation receipt。
-`getBacklogDependencies({workspaceDir,projectId,itemId})` 返回直接前置的 `{dependencies:[{reference:{project,item},item}],diagnostics}`；
-不可读前置进入 diagnostics，不持久化状态，也不把部分结果视为完整。
+`getBacklogDependencies({workspaceDir,projectId,itemId})` 返回 `{dependencies:[{reference:{project,item},item,satisfied,reasons}],dependents:[{reference,item}],complete,diagnostics}`；
+不可读前置、反向扫描中不可读项目/store/条目进入 diagnostics；complete=false 表示结果可能不完整。反向扫描只读当前 manifest 已登记项目。
 
 HTTP 与上述应用层实现一致，使用固定服务 workspace；mutation 仍要求同源与 JSON Content-Type：
 
 - `POST /api/projects/:project/backlog`：必填 title/category/priority，默认 item_type=task、parent_id=null、depends_on=[]、body=""。
 - `PATCH /api/projects/:project/backlog/:item`：提交 depends_on 数组与 expected_revision，[] 清空。
-- `GET /api/projects/:project/backlog/:item/dependencies`：直接引用解析和 diagnostics。
+- `GET /api/projects/:project/backlog/:item/dependencies`：直接引用、满足原因、反向依赖与完整性 diagnostics。
 
 ```json
 {"title":"部署服务","category":"feature","priority":"P1","depends_on":["ccp:CCP-001"]}
@@ -227,11 +227,11 @@ pops plan next projectops "$plan_id"
 ```
 
 成功返回 `{ok:true,plan_id,ready,in_progress,blocked,next,diagnostics}`；任务含 id/title/priority/status，
-blocked 额外含 reasons（依赖 id/code/message）。ready 为 todo 且同项目全部直接依赖可读并 done 的 task，
+blocked 额外含 reasons（依赖 id/project/code/message）。ready 为 todo 且全部直接依赖满足当前完成依据的 task，
 按 P0 → P3、ID 排序；next 是首项或 null。in_progress 单独列出，done 与 epic 不推荐。
-依赖可以在 Plan 外，但不能跨项目；查询只检查直接依赖。未物化时成功返回空推荐与诊断；
+依赖可以在 Plan 外或其他已登记项目；查询只检查直接依赖。无 execution 的 done 可满足；有记录时必须最新 succeeded、当前输入匹配、accepted 且验证证据可读有效，并行成果还须 landed。未物化时成功返回空推荐与诊断；
 映射任务不可读进入 diagnostics，不推荐。未知/损坏 Plan、workspace/project 错误或参数错误
-返回 `{ok:false,error}`、退出 1，JSON 模式只写 stdout。没有可开始任务不代表失败。
+返回 `{ok:false,error}`、退出 1，JSON 模式只写 stdout。没有可开始任务不代表完成。
 Workbench Plan 详情复用相同查询展示三类任务与依赖原因，可点击任务进入 Backlog 详情。
 这是只读建议；Agent 仍按任务验收、实际依赖与用户阶段确认推进，命令不自动改状态或启动执行。
 
@@ -519,3 +519,19 @@ Workbench 的项目 Overview 可控制同一独立 manager。`GET /api/projects/
 `ok/data` envelope；data 含 `configured`、`hosts_workbench`、`status`（DevStatus）及 `problems`，服务失败事实在
 `status.ok/state/issue` 中，不能将成功 HTTP envelope 误读为启动成功。请求边界/连接错误使用 `ok:false/error`。
 网页不提供 manager stop；承载当前 Workbench 的登记端口禁止 Web/API stop/restart，改用 CLI。
+
+
+### 跨项目前置与运行证据
+
+Plan 可以在上游未完成时创建、批准和物化；串行/并行 run 创建要求直接跨项目前置已满足。
+创建被拒绝后，由上游项目推进完成，再重新创建 run。两种运行只派发本项目 mapping；引用不授权跨 Repo 操作。
+快照的串行 `cross_project_dependencies`、并行 `external_dependencies` 保存 reference、input、basis
+（done/accepted/landed）、attempt_id、snapshot_digest、verification_digest、landing_digest。
+每次派发、显式恢复和完成资格检查重新读取上游；状态重新打开、取消、输入改变或冻结依据改变会暂停/拒绝。
+恢复不重写冻结依据；需要采用新输入或新证据时先按既有流程终止旧 run，再创建新 run。
+并行前置的 candidate 必须仍是实际 integration ref 当前 tip 的祖先；ref 删除或回退丢失 candidate 会失效，保留 candidate 的后续提交仍有效。
+外部 Repo 的无关提交不使已记录接受失效；本项目 mapped task 的 reuse note、基线与 landed 门禁保持原规则。
+
+Plan execution projection 增加 `prerequisites:{evidence,diagnostics}`，映射进度仍只统计本计划新项。
+Plan complete 与 Report 发布重新检查直接非 mapping 前置；completed Report 将上游身份、任务 revision 与证据摘要
+写入 verification，不计入 backlog 交付清单。未满足仅能依据显式 partial acceptance 输出 partial 和诊断。

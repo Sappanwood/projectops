@@ -1,3 +1,4 @@
+import type { DependencyEvidence } from "../execution/attempt.js";
 import { createHash } from "node:crypto";
 import type { BacklogItem } from "../backlog/item.js";
 import type { CodeSnapshot } from "../execution/attempt.js";
@@ -41,6 +42,7 @@ export type PlanRun = {
   baseline: CodeSnapshot;
   nodes: PlanRunNode[];
   external_dependencies: Array<{ input: BacklogItem; attempt_id: string; note: string }>;
+  cross_project_dependencies?: DependencyEvidence[];
   controls: Array<{
     action: "pause" | "resume" | "stop" | "close_stopped";
     note: string;
@@ -71,6 +73,9 @@ export function nextReadyNode(run: PlanRun): PlanRunNode | undefined {
   const accepted = new Set([
     ...run.nodes.filter((node) => node.state === "accepted").map((node) => node.item_id),
     ...run.external_dependencies.map((entry) => entry.input.id),
+    ...(run.cross_project_dependencies ?? []).map(
+      (entry) => `${entry.reference.project}:${entry.reference.item}`,
+    ),
   ]);
   return run.nodes
     .filter((node) => node.state === "pending" && node.depends_on.every((id) => accepted.has(id)))

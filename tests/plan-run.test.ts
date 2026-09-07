@@ -566,3 +566,98 @@ test("historical Plan completion permits later development but still checks acce
   assert.deepEqual(f.current(run), run);
   assert.equal(validatePlanRunCompletion({ ...f.q, runId: run.id }).ok, false);
 });
+
+test("cross-project serial run freezes external facts without dispatching them and pauses on reopen", async () => {
+  const f = setup();
+  const output: string[] = [];
+  const cli = (args: string[]) => {
+    output.length = 0;
+    assert.equal(
+      runCli(
+        [...args, "--json"],
+        { stdout: (s) => output.push(s), stderr: (s) => output.push(s) },
+        f.q.workspaceDir,
+      ),
+      0,
+      output.join("\n"),
+    );
+    return JSON.parse(output.join("\n"));
+  };
+  mkdirSync(path.join(f.q.workspaceDir, "infra"));
+  cli(["project", "add", "infra"]);
+  cli(["backlog", "init", "infra"]);
+  const upstream = cli([
+    "backlog",
+    "add",
+    "infra",
+    "-T",
+    "Infrastructure",
+    "-c",
+    "feature",
+    "--priority",
+    "P1",
+  ]).item.id;
+  const dependency = `infra:${upstream}`;
+  f.plan.items[0]!.depends_on = [dependency];
+  updatePlan(path.join(f.q.workspaceDir, "ops/repo/plans"), f.plan);
+  const local = data(
+    showBacklogItem({ ...f.q, itemId: f.plan.materialization!.mapping.first! }),
+  ).item;
+  data(
+    updateBacklogItemContent({
+      ...f.q,
+      itemId: local.id,
+      expectedRevision: local.revision,
+      dependsOn: [dependency],
+    }),
+  );
+  assert.equal(createPlanRun({ ...f.q, expectedRevision: computePlanRevision(f.plan) }).ok, false);
+  cli(["backlog", "update", "infra", upstream, "--status", "done"]);
+  const run = f.create();
+  assert.equal(run.nodes.length, 2);
+  assert.ok(run.nodes.every((n) => n.input.project === "repo"));
+  cli(["backlog", "update", "infra", upstream, "--status", "todo"]);
+  const paused = data(f.scheduler.advance(f.mutation(run))).run;
+  assert.equal(paused.state, "paused");
+  assert.equal(f.controls.length, 0);
+  assert.match(paused.diagnostics.join(" "), /infra:/);
+  assert.equal(f.scheduler.resume({ ...f.mutation(paused), note: "Still blocked" }).ok, false);
+  cli(["backlog", "update", "infra", upstream, "--status", "done"]);
+  const resumed = data(
+    f.scheduler.resume({ ...f.mutation(paused), note: "Rechecked restored external completion" }),
+  ).run;
+  const started = data(f.scheduler.advance(f.mutation(resumed))).run;
+  assert.equal(started.nodes[0]!.state, "running");
+  assert.equal(f.controls.length, 1);
+  await f.finish("stopped");
+});
+
+test("serial Plan dependency identity accepts qualified local spelling but rejects missing prerequisites", () => {
+  const f = setup();
+  const id = f.plan.materialization!.mapping.second!;
+  let item = data(showBacklogItem({ ...f.q, itemId: id })).item;
+  data(
+    updateBacklogItemContent({
+      ...f.q,
+      itemId: id,
+      expectedRevision: item.revision,
+      dependsOn: [],
+    }),
+  );
+  const missing = createPlanRun({ ...f.q, expectedRevision: computePlanRevision(f.plan) });
+  assert.equal(missing.ok, false);
+  if (!missing.ok) assert.match(missing.error.message, /missing Plan dependencies/);
+  item = data(showBacklogItem({ ...f.q, itemId: id })).item;
+  const qualified = `repo:${f.plan.materialization!.mapping.first!}`;
+  data(
+    updateBacklogItemContent({
+      ...f.q,
+      itemId: id,
+      expectedRevision: item.revision,
+      dependsOn: [qualified],
+    }),
+  );
+  const run = f.create();
+  assert.deepEqual(run.nodes[1]!.input.depends_on, [qualified]);
+  assert.deepEqual(run.nodes[1]!.depends_on, [f.plan.materialization!.mapping.first!]);
+});

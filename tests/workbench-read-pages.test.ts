@@ -344,6 +344,7 @@ test("read page requests discard stale responses and expose retry after a read f
         status: "draft",
         items: [],
         execution: {
+          prerequisites: { evidence: [], diagnostics: [] },
           materialized: false,
           counts: {
             total: 0,

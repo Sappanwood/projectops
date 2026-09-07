@@ -8,6 +8,8 @@ import {
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
+import type { DependencyEvidence } from "../execution/attempt.js";
+import { taskReferenceKey } from "../backlog/dependencyReference.js";
 import type { BacklogItem } from "../backlog/item.js";
 import type { Plan } from "../plan/plan.js";
 import { ExecutionError } from "../execution/store.js";
@@ -51,6 +53,7 @@ export type ParallelRun = {
   integration_head: string;
   commands: string[][];
   nodes: ParallelNode[];
+  external_dependencies?: DependencyEvidence[];
   controls: Array<{
     action: string;
     note: string;
@@ -93,6 +96,7 @@ export function readParallelRun(root: string, runId: string, projectId: string):
     run.capacity !== 2 ||
     !["ready", "running", "paused", "completed", "stopped"].includes(run.state) ||
     !Array.isArray(run.nodes) ||
+    (run.external_dependencies !== undefined && !Array.isArray(run.external_dependencies)) ||
     !Array.isArray(run.commands) ||
     !Array.isArray(run.controls) ||
     !Array.isArray(run.diagnostics) ||
@@ -147,9 +151,12 @@ export function nextParallelNode(run: ParallelRun): ParallelNode | undefined {
     ),
   );
   if (occupied.length >= 2) return undefined;
-  const landed = new Set(
-    run.nodes.filter((node) => node.state === "landed").map((node) => node.item_id),
-  );
+  const landed = new Set([
+    ...run.nodes.filter((node) => node.state === "landed").map((node) => node.item_id),
+    ...(run.external_dependencies ?? []).map((dependency) =>
+      taskReferenceKey(dependency.reference),
+    ),
+  ]);
   return run.nodes
     .filter((node) => node.state === "pending" && node.depends_on.every((id) => landed.has(id)))
     .sort(

@@ -1,3 +1,7 @@
+import { loadWorkspace } from "../catalog/workspaceStore.js";
+import { listItemIds } from "../backlog/itemFs.js";
+import { resolveBacklogContext } from "./backlogApi.js";
+import { dependencyProblems } from "./dependencyReadiness.js";
 import {
   parseTaskReference,
   taskReferenceKey,
@@ -84,12 +88,24 @@ export function getBacklogDependencies(request: {
   projectId: string;
   itemId: string;
 }): ApplicationResult<{
-  dependencies: { reference: TaskReference; item: BacklogItem }[];
+  dependencies: {
+    reference: TaskReference;
+    item: BacklogItem;
+    satisfied: boolean;
+    reasons: import("./dependencyReadiness.js").DependencyDiagnostic[];
+  }[];
+  dependents: { reference: TaskReference; item: BacklogItem }[];
+  complete: boolean;
   diagnostics: { reference: string; code: string; message: string }[];
 }> {
   const item = showBacklogItem(request);
   if (!item.ok) return item;
-  const dependencies: { reference: TaskReference; item: BacklogItem }[] = [];
+  const dependencies: {
+    reference: TaskReference;
+    item: BacklogItem;
+    satisfied: boolean;
+    reasons: import("./dependencyReadiness.js").DependencyDiagnostic[];
+  }[] = [];
   const diagnostics: { reference: string; code: string; message: string }[] = [];
   for (const value of item.data.item.depends_on) {
     const reference = parseTaskReference(value, request.projectId);
@@ -102,8 +118,52 @@ export function getBacklogDependencies(request: {
       continue;
     }
     const result = readTaskReference(request.workspaceDir, reference);
-    if (result.ok) dependencies.push(result.data);
-    else diagnostics.push({ reference: taskReferenceKey(reference), ...result.error });
+    if (result.ok) {
+      const reasons = dependencyProblems(request.workspaceDir, request.projectId, [value]);
+      dependencies.push({ ...result.data, satisfied: reasons.length === 0, reasons });
+    } else diagnostics.push({ reference: taskReferenceKey(reference), ...result.error });
   }
-  return applicationSuccess({ dependencies, diagnostics });
+  const dependents: { reference: TaskReference; item: BacklogItem }[] = [];
+  const target = taskReferenceKey({ project: request.projectId, item: request.itemId });
+  try {
+    for (const project of Object.keys(
+      loadWorkspace(request.workspaceDir).manifest.projects,
+    ).sort()) {
+      const context = resolveBacklogContext(request.workspaceDir, project);
+      if (!context.ok) {
+        diagnostics.push({ reference: project, ...context.error });
+        continue;
+      }
+      for (const id of listItemIds(context.data.root).sort()) {
+        const loaded = showBacklogItem({
+          workspaceDir: request.workspaceDir,
+          projectId: project,
+          itemId: id,
+        });
+        if (!loaded.ok) {
+          diagnostics.push({ reference: `${project}:${id}`, ...loaded.error });
+          continue;
+        }
+        if (
+          loaded.data.item.depends_on.some((value) => {
+            const ref = parseTaskReference(value, project);
+            return ref && taskReferenceKey(ref) === target;
+          })
+        )
+          dependents.push({ reference: { project, item: id }, item: loaded.data.item });
+      }
+    }
+  } catch {
+    diagnostics.push({
+      reference: target,
+      code: "DEPENDENCY_SCAN_INCOMPLETE",
+      message: "Reverse dependency scan is incomplete.",
+    });
+  }
+  return applicationSuccess({
+    dependencies,
+    dependents,
+    complete: diagnostics.length === 0,
+    diagnostics,
+  });
 }

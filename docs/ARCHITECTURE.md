@@ -528,9 +528,17 @@ Origin、JSON、body 上限与错误 envelope。返回的 endpoints 优先保留
 `updateBacklogItemContent` 的 revision 与 receipt；CLI 和 HTTP 使用相同 application 入口。
 引用读取复用 `resolveBacklogContext` 的 manifest/store identity 与静态 containment 检查；验证只遍历
 变更节点可达的链，以完整项目身份检测重复、自依赖和环，外部任务保持只读。
-直接查询返回解析成功项与逐引用 diagnostics；状态满足、execution 证据和反向关系由后续切片扩展。
+直接查询返回解析成功项、当前满足原因和逐引用 diagnostics；反向扫描保留可读结果并以 complete=false 暴露局部损坏。
 
 应用层需要共享一次直接依赖事实查询：manifest 路由到目标 Backlog 与 executions，返回身份、条目、
 满足条件及可定位诊断。循环校验单独遍历变更节点可达图，反向查询显式遍历已登记项目；二者不混入
 普通 next 的直接前置查询。运行与 Report 在消费时重新验证冻结依据，外部变化不隐式刷新执行输入。
 详细生命周期、取消/不可读处理、无迁移联合语法和安全边界见 PRODUCT_SPEC 的“跨项目任务依赖契约”。
+
+
+`application/dependencyReadiness.ts` 统一直接前置的当前状态、最新 attempt 接受、durable verification 与并行 landed 校验。
+`freezeDependency` 返回完整引用、任务输入、依据类型、attempt/snapshot/verification/landing 摘要；
+`validateFrozenDependency` 在运行派发、恢复和完成时重验。串行本地 reuse 继续使用原 acceptedAttempt 与基线，
+并行本地节点继续等待 landed；外部引用只加入已满足前置集合，不生成外部节点。
+`readPlanPrerequisites` 为 execution projection、Plan complete 和 Report 发布提供非 mapping 前置，
+Report 仅把它们作为 verification 说明，不扩大交付任务集合。

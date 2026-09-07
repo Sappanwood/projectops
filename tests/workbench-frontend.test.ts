@@ -74,6 +74,7 @@ const mockProjectOverview: WorkbenchProjectOverview = {
       status: "approved",
       item_count: 4,
       execution: {
+        prerequisites: { evidence: [], diagnostics: [] },
         materialized: false,
         counts: {
           total: 0,

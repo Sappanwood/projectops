@@ -1,3 +1,10 @@
+import { parseTaskReference, taskReferenceKey } from "../backlog/dependencyReference.js";
+import { materializedDependencies } from "./planDependencies.js";
+import {
+  freezeDependency,
+  validateFrozenDependency,
+  type DependencyEvidence,
+} from "./dependencyReadiness.js";
 import { showBacklogItem } from "./backlogApi.js";
 import { executionResult } from "./executionApi.js";
 import { verificationChecksForSnapshot, verificationChecksPass } from "./verificationChecks.js";
@@ -142,8 +149,11 @@ export function createPlanRun(
             "EXECUTION_INVALID",
             "Plan task mapping does not match its source.",
           );
-        const expected = draft.depends_on.map((key) => mapping[key]!);
-        if (expected.some((id) => !input.depends_on.includes(id)))
+        const expected = materializedDependencies(draft.depends_on, mapping);
+        const identity = (value: string) =>
+          taskReferenceKey(parseTaskReference(value, q.projectId)!);
+        const dependencies = new Set(input.depends_on.map(identity));
+        if (expected.some((id) => !dependencies.has(identity(id))))
           throw new ExecutionError(
             "EXECUTION_INVALID",
             "Materialized dependency graph is missing Plan dependencies.",
@@ -161,7 +171,10 @@ export function createPlanRun(
           key: draft.key,
           item_id: input.id,
           input: structuredClone(input),
-          depends_on: [...input.depends_on],
+          depends_on: input.depends_on.map((value) => {
+            const reference = parseTaskReference(value, q.projectId)!;
+            return reference.project === q.projectId ? reference.item : value;
+          }),
           state: choice ? "accepted" : "pending",
           attempt_ids: history,
           accepted_attempt_id: choice?.attemptId ?? null,
@@ -173,9 +186,16 @@ export function createPlanRun(
     const nodeIds = new Set(nodes.map((node) => node.item_id));
     const externalDependencies: PlanRun["external_dependencies"] = [];
     const externalIds = new Set<string>();
+    const crossProjectDependencies: DependencyEvidence[] = [];
     for (const node of nodes)
       for (const dependency of node.depends_on) {
         if (nodeIds.has(dependency) || externalIds.has(dependency)) continue;
+        const reference = parseTaskReference(dependency, q.projectId)!;
+        if (reference.project !== q.projectId) {
+          crossProjectDependencies.push(freezeDependency(q.workspaceDir, reference));
+          externalIds.add(dependency);
+          continue;
+        }
         const input = task(q, dependency);
         if (input.item_type !== "task")
           throw new ExecutionError(
@@ -220,6 +240,7 @@ export function createPlanRun(
       baseline,
       nodes,
       external_dependencies: externalDependencies,
+      cross_project_dependencies: crossProjectDependencies,
       controls: [],
       diagnostics: [],
     };
@@ -301,6 +322,8 @@ export function validatePlanRunCompletion(
 }
 
 function inputsValid(q: PlanRunQuery, c: Context, run: PlanRun): void {
+  for (const dependency of run.cross_project_dependencies ?? [])
+    validateFrozenDependency(q.workspaceDir, dependency);
   if (computePlanExecutionRevision(readPlan(c.plans, run.plan_id)) !== run.plan_revision)
     throw new ExecutionError(
       "EXECUTION_CONFLICT",

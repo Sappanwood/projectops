@@ -1,3 +1,4 @@
+import { dependencyProblems } from "./dependencyReadiness.js";
 import type { BacklogItem } from "../backlog/item.js";
 import { projectArtifactRoots } from "../catalog/workspace.js";
 import {
@@ -110,17 +111,7 @@ export function readPlanNext(request: ProjectRequest, plan: Plan): PlanNextSumma
       });
       continue;
     }
-    const reasons: PlanNextDiagnostic[] = [];
-    for (const dependencyId of item.depends_on) {
-      const dependency = readTask(request, dependencyId);
-      if (!dependency.ok) reasons.push(dependency.diagnostic);
-      else if (dependency.item.status !== "done")
-        reasons.push({
-          id: dependencyId,
-          code: "DEPENDENCY_NOT_DONE",
-          message: `依赖状态为 ${dependency.item.status}，尚未完成。`,
-        });
-    }
+    const reasons = dependencyProblems(request.workspaceDir, request.projectId, item.depends_on);
     if (reasons.length) summary.blocked.push({ ...task, reasons });
     else summary.ready.push(task);
   }

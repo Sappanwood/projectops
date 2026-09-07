@@ -1,3 +1,4 @@
+import { readPlanPrerequisites } from "./dependencyReadiness.js";
 import { computePlanRevision, loadPlanContext } from "./planRevision.js";
 import { readPlanExecution } from "./planExecution.js";
 import { updatePlan } from "../plan/planFs.js";
@@ -20,6 +21,12 @@ export function completePlan(request: {
     return applicationFailure(
       "REVISION_MISMATCH",
       "Plan revision changed. Reload before marking it complete.",
+    );
+  const prerequisites = readPlanPrerequisites(request, plan);
+  if (prerequisites.diagnostics.length)
+    return applicationFailure(
+      "PLAN_INVALID",
+      prerequisites.diagnostics.map((d) => d.message).join(" "),
     );
   if (plan.status === "done") return applicationSuccess({ plan, revision, no_op: true });
   if (plan.status !== "approved" || !plan.materialization)

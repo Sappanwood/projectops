@@ -1,3 +1,4 @@
+import { readPlanPrerequisites } from "./dependencyReadiness.js";
 import type { Report } from "../report/report.js";
 import type { PlanNextSummary } from "./planNext.js";
 import type { ItemStatus } from "../backlog/item.js";
@@ -5,6 +6,7 @@ import type { Plan, PlanItemType } from "../plan/plan.js";
 import { showBacklogItem } from "./backlogApi.js";
 
 export type PlanExecution = {
+  prerequisites: ReturnType<typeof readPlanPrerequisites>;
   materialized: boolean;
   counts: Record<ItemStatus | "total" | "unreadable", number>;
   completion_percent: number | null;
@@ -39,7 +41,13 @@ export function readPlanExecution(
     unreadable: 0,
   };
   if (!plan.materialization)
-    return { materialized: false, counts, completion_percent: null, items: [] };
+    return {
+      prerequisites: { evidence: [], diagnostics: [] },
+      materialized: false,
+      counts,
+      completion_percent: null,
+      items: [],
+    };
   const mapping = plan.materialization.mapping;
   const items = plan.items.map((draft): PlanExecution["items"][number] => {
     const id = mapping[draft.key]!;
@@ -74,6 +82,7 @@ export function readPlanExecution(
     return row;
   });
   return {
+    prerequisites: readPlanPrerequisites(request, plan),
     materialized: true,
     counts,
     items,

@@ -1,3 +1,4 @@
+import type { TaskReference } from "../backlog/dependencyReference.js";
 import type { BacklogItem } from "../backlog/item.js";
 import type { ModelRef } from "./models.js";
 export const EXECUTION_SCHEMA = "execution/Attempt@1";
@@ -63,3 +64,13 @@ export type ExecutionAttempt = {
   } | null;
 };
 export const activeStates: ExecutionState[] = ["running", "stop_requested", "unknown"];
+
+export type DependencyEvidence = {
+  reference: TaskReference;
+  input: BacklogItem;
+  basis: "done" | "accepted" | "landed";
+  attempt_id: string | null;
+  snapshot_digest: string | null;
+  landing_digest: string | null;
+  verification_digest: string | null;
+};

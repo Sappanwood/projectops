@@ -17,6 +17,13 @@ import {
   readAttempt,
 } from "../execution/store.js";
 import { readPlan } from "../plan/planFs.js";
+import { parseTaskReference, taskReferenceKey } from "../backlog/dependencyReference.js";
+import { materializedDependencies } from "./planDependencies.js";
+import {
+  freezeDependency,
+  validateFrozenDependency,
+  type DependencyEvidence,
+} from "./dependencyReadiness.js";
 import { sameTaskInput } from "../planRun/planRun.js";
 import { listStoredPlanRuns, newPlanRunId, planRunRoot } from "../planRun/store.js";
 import {
@@ -116,6 +123,12 @@ export function createParallelRun(
     const mapping = plan.materialization.mapping;
     if (new Set(Object.values(mapping)).size !== Object.values(mapping).length)
       invalid("Plan mapping contains duplicate tasks.");
+    const external = new Map<string, DependencyEvidence>();
+    const dependencyId = (value: string) => {
+      const reference = parseTaskReference(value, q.projectId);
+      if (!reference) invalid(`Invalid task dependency: ${value}.`);
+      return reference.project === q.projectId ? reference.item : taskReferenceKey(reference);
+    };
     const nodes: ParallelNode[] = plan.items
       .filter((item) => item.item_type === "task")
       .map((draft) => {
@@ -126,13 +139,23 @@ export function createParallelRun(
           !["todo", "in_progress"].includes(input.status)
         )
           invalid("Parallel run requires current unfinished mapped tasks.");
-        if (draft.depends_on.some((key) => !input.depends_on.includes(mapping[key]!)))
+        const dependencies = input.depends_on.map(dependencyId);
+        if (
+          materializedDependencies(draft.depends_on, mapping).some(
+            (value) => !dependencies.includes(dependencyId(value)),
+          )
+        )
           invalid("Materialized dependencies do not match the Plan.");
+        for (const value of dependencies) {
+          const reference = parseTaskReference(value, q.projectId)!;
+          if (reference.project !== q.projectId && !external.has(value))
+            external.set(value, freezeDependency(q.workspaceDir, reference));
+        }
         return {
           key: draft.key,
           item_id: input.id,
           input: structuredClone(input),
-          depends_on: [...input.depends_on],
+          depends_on: dependencies,
           parallel: draft.parallel ?? false,
           resources: [...(draft.resources ?? [])],
           state: "pending",
@@ -142,7 +165,7 @@ export function createParallelRun(
         };
       });
     if (!nodes.length) invalid("Plan has no executable tasks.");
-    const reached = new Set<string>();
+    const reached = new Set(external.keys());
     while (true) {
       const ready = nodes.filter(
         (node) => !reached.has(node.item_id) && node.depends_on.every((id) => reached.has(id)),
@@ -179,6 +202,7 @@ export function createParallelRun(
       integration_head: workspace.baseCommit,
       commands: structuredClone(q.commands),
       nodes,
+      external_dependencies: [...external.values()],
       controls: [],
       diagnostics: [],
     };
@@ -239,6 +263,8 @@ function accepted(
 function inputsValid(q: ParallelRunQuery, c: Context, run: ParallelRun, checkHead = true) {
   if (computePlanExecutionRevision(readPlan(c.plans, run.plan_id)) !== run.plan_revision)
     invalid("Plan input changed; use a newly reviewed run for revised scope.");
+  for (const dependency of run.external_dependencies ?? [])
+    validateFrozenDependency(q.workspaceDir, dependency);
   for (const node of run.nodes) {
     const current = task(q, node.item_id);
     if (
@@ -403,6 +429,7 @@ export class ParallelRunRuntime {
         }
         let node: ParallelNode | undefined;
         while ((node = nextParallelNode(run))) {
+          inputsValid(q, c, run);
           if (!this.execution.available)
             throw new ExecutionError(
               "RUNNER_UNAVAILABLE",
@@ -613,8 +640,16 @@ export class ParallelRunRuntime {
           node.state = "landed";
           run.integration_head = landing.candidateCommit!;
           if (run.nodes.every((n) => n.state === "landed")) {
-            run.state = "completed";
-            run.diagnostics = [];
+            try {
+              inputsValid(q, context(q.workspaceDir, q.projectId), run);
+              run.state = "completed";
+              run.diagnostics = [];
+            } catch (error) {
+              run.state = "paused";
+              run.diagnostics = [
+                error instanceof Error ? error.message : "Parallel inputs are unavailable.",
+              ];
+            }
           }
         } else {
           node.state = "awaiting_landing";
