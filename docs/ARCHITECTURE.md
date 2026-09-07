@@ -466,3 +466,15 @@ Pi 集成以安装的 0.85.0 类型声明及源码为准，并核对
 
 `tests/skill-install.test.ts`、`skill-package.test.ts`、`skill-write-safety.test.ts` 与 `pi-skill-discovery.test.ts`
 覆盖 built CLI 默认/跳过/补装/no-op/内容更新/冲突、隔离 npm 包引用闭合、部分 I/O 失败重试、正常并发编辑与 Pi 真实发现。
+
+## 开发服务配置边界
+
+`catalog/workspace.ts` 的项目登记包含可选 `dev`；`dev/config.ts` 提供 descriptor 类型、纯结构校验与受限变量替换，
+`workspaceStore` 在读取 manifest 时校验结构。`application/devApi.ts` 为 CLI 与后续运行层共享配置解析、
+静态 realpath containment、workspace 内端口冲突和异步端口预检；返回已解析 argv、绝对 cwd、显式环境变量与诊断。
+`OwnedDevEndpoint` 由实际持有进程的运行层提供，不能从 PID 文件或端口占用推定归属；配置层自身没有 manager。
+`workspaceInspection` 复用不探测端口的校验。真实 CLI 使用 `runAsyncCli` 分发异步 dev 命令，既有 `runCli` 同步接口保留。
+
+本能力独立于 Pi、Workbench 与 Workspace Control。当前配置读操作仅承诺受信任本地 Linux workspace 的静态 symlink
+containment；不抵抗恶意 ancestor swap，不使用 native helper。bind 预检释放 socket 后仍存在正常端口竞争窗口，
+实际启动还须由服务的 strict-port 行为报错，不能将预检成功解释为持有端口。

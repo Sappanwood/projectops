@@ -434,3 +434,21 @@ Plan 的可选 `execution_policy` 目前仅接受 `{ "max_parallel": 2 }`；item
 HTTP 集合入口 `/api/projects/<project>/parallel-runs`，详情与控制在 `/<run>`；集合 POST 创建，详情下 POST `advance`、`pause`、`resume`、`close-stopped`、`land`、`rework` 控制运行。浏览器不能提交执行命令、base commit 或工作目录，配置来自服务端。单任务、串行 run 和并行 run 共享活动/unknown 排他边界，不用新 run 绕过未结束工作。
 
 并行完成 Report 校验最新 run、Plan/任务输入、节点接受及完整证据、landing 证据、实际 integration ref/head 与祖先关系；仅 Backlog done 不足以声明 completed。结束范围不会删除失败 worktree 或历史，用户自行决定最终目标分支合入。
+
+## 开发服务配置检查
+
+配置 authority 是 `.pops/workspace.json` 的 `projects.<id>.dev`，首版通过明文编辑；不自动修改真实服务登记。
+字段与占位符见 PRODUCT_SPEC 的“开发服务配置”。先核对工作区保留端口，再运行：
+
+```bash
+pops dev ports --json
+pops dev check <project> --json
+pops project doctor --json
+```
+
+ports 返回 `{ok,projects,ports,problems}`，projects 为解析后的配置（command/cwd/env），ports 为
+`{project,endpoint,host,port,origin}`。check 返回 `{ok,project,configuration,ports,problems}`，ports 额外包含
+`status: free|managed|external|error` 及可选 issue。共享接口接受运行层的 owned endpoint；当前 CLI 尚无 manager 接线，
+不会自行声称 managed。无 dev 或未知 project 的 check 返回失败诊断。全 manifest 配置冲突阻止 check 探测。
+结构无效返回 `{ok:false,error:{code:"DEV_CONFIG_INVALID",message}}`；正常诊断放在 problems，失败均退出 1。
+默认文本输出相同端点与诊断。只支持 ports 与单项目 check，不支持 `--all`；查询不启动进程或写入文件。

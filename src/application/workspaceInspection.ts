@@ -1,3 +1,4 @@
+import { inspectDevConfiguration } from "./devApi.js";
 import { existsSync, lstatSync, realpathSync, statSync } from "node:fs";
 import path from "node:path";
 
@@ -44,7 +45,7 @@ export function inspectWorkspace(request: {
   }
 
   const { root, manifest } = workspace;
-  const problems: WorkspaceProblem[] = [];
+  const problems: WorkspaceProblem[] = [...inspectDevConfiguration(root).problems];
   if (manifest.retrospectives.type !== RETROSPECTIVE_ARTIFACT_TYPE) {
     problems.push({
       project: "workspace",

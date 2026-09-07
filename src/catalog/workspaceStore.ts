@@ -2,6 +2,7 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { validateDevDescriptor } from "../dev/config.js";
 
 import {
   MANIFEST_DIR,
@@ -85,6 +86,10 @@ function validateManifest(value: unknown): string | null {
     if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) return `invalid project id: ${id}`;
     if (!isRecord(registration) || !isSafeRelativePath(registration.path)) {
       return `invalid project registration: ${id}`;
+    }
+    if (registration.dev !== undefined) {
+      const problem = validateDevDescriptor(registration.dev);
+      if (problem) return `${id}: ${problem}`;
     }
   }
   return null;

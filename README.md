@@ -354,3 +354,36 @@ pops parallel-run resume projectops <run-id> --note '已核对失败原因' --ex
 ```
 
 最终交付提供 integration ref、head 与每次落地的证据；是否合并到用户目标分支由用户另行决定。
+
+### 开发服务配置与预检
+
+ProjectOps 可读取项目登记的可选 `dev` 配置并检查固定端口；配置/查询不需要 Workbench 或 Pi。
+在隔离 workspace 的 manifest 项目登记中加入以下 descriptor（示例端口不代表工作区已分配）：
+
+```json
+{
+  "path": "my-app",
+  "dev": {
+    "host": "127.0.0.1",
+    "endpoints": { "web": { "port": 12345 } },
+    "processes": {
+      "web": {
+        "command": ["npm", "run", "dev", "--", "--host", "${HOST}", "--port", "${WEB_PORT}", "--strictPort"],
+        "cwd": ".",
+        "env": {}
+      }
+    }
+  }
+}
+```
+
+```bash
+pops dev ports --json
+pops dev check my-app --json
+pops project doctor --json
+```
+
+command 使用 argv；变量只替换 HOST 与端点 PORT/ORIGIN，自动注入对应 env。命令须支持并启用自身 strict-port；
+不通过 shell 执行。cwd 必须静态解析到 Repo 内。doctor 检查全 manifest 重复分配，check 额外探测端口占用。
+查询不会启动项目；本阶段仅交付配置与预检。现有 Workspace Control 服务和端口 authority 保持原状，
+登记真实端口前仍须核对工作区保留分配。

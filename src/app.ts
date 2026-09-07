@@ -1,3 +1,4 @@
+import { devCommand } from "./useCases/devCommand.js";
 import { skillCommand } from "./useCases/skillCommand.js";
 import { initWorkspace } from "./useCases/initWorkspace.js";
 import { registerProject } from "./useCases/registerProject.js";
@@ -50,6 +51,8 @@ Commands:
   project add <path>      Register a directory as a project in the workspace
   project list [--json]   List registered projects
   project doctor [--json] Validate workspace topology
+  dev ports [--json]      List configured development endpoints
+  dev check <project> [--json]  Check configuration and port availability
   backlog init <project> [--id-prefix <PREFIX>] [--json]  Bootstrap a backlog store
     PREFIX: non-empty ASCII A-Z/0-9, no normalization; conflicts are rejected.
     Default: first 3 project ID characters after removing hyphens, uppercase;
@@ -283,4 +286,14 @@ export function runCli(args: readonly string[], io: CliIO, cwd = process.cwd()):
       io.stderr(`Unknown command: ${command}`);
       return 1;
   }
+}
+
+export async function runAsyncCli(
+  args: readonly string[],
+  io: CliIO,
+  cwd = process.cwd(),
+): Promise<number> {
+  if (args[0] === "dev" && !args.includes("--help") && !args.includes("-h"))
+    return devCommand(args.slice(1), io, cwd);
+  return runCli(args, io, cwd);
 }

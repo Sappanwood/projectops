@@ -269,3 +269,20 @@ Repo 内最多两个节点并行，许可来自 Plan 的 `execution_policy.max_p
 并行范围完成表示所有节点已验证、验收、落地，实际 ref 与落地证据仍匹配。交付显示最终 ref/head，不自动修改用户 checkout、合并用户分支或 push。仅 Backlog 状态不能代替执行证据生成完成 Report。
 
 串行 Plan 标为 done 是对已完成 run 的结案：后续 Repo 开发不撤销历史验收，结案校验保存的完成基线、当前任务输入和完整验收证据。它不表示当前代码重新通过了验证；Report 发布仍校验当前代码基线。
+
+## 开发服务配置
+
+项目登记可在 manifest 明文增加可选 `dev`，无配置项目仍正常可读。`host` 为 `127.0.0.1` 或 `::1`；
+`endpoints` 以名称声明固定 `port`（1–65535），`processes` 以名称声明非空 `command` argv、Repo 相对 `cwd`
+（根目录使用 `.`）及显式 `env`。名称为小写字母开头的小写字母、数字和下划线。端点与进程独立，
+支持一个命令提供多个端点或多个进程分别提供端点。服务命令必须配置自身 strict-port 行为，不能自动递增。
+
+配置解析自动提供 `HOST`、`<ENDPOINT>_PORT`、`<ENDPOINT>_ORIGIN` 环境变量（端点名转大写），
+argv 和显式 env 可用 `${HOST}` 等占位符引用；保留变量不能覆盖，未知变量和 shell 风格 `$HOME` 拒绝。
+不执行 shell 展开、不探测 npm scripts、不提供配置编辑器。
+
+`pops dev ports` 列出本 manifest 端点并校验配置；`pops dev check <project>` 额外用 loopback bind 探测占用。
+`project doctor` 纳入配置、Repo 内 cwd 的静态 realpath containment 和全 manifest 重复端口检查，不探测实时占用。
+端口号即使配置不同 loopback host 也不能重复。check 能通过运行层提供的精确 owned endpoint 区分已管理端点与外部占用；
+当前 CLI 尚未接入 manager，所有实际占用均视为外部占用。查询不启动服务、不写 manifest、不保留端口。
+跨 Workspace Control 的未启动保留端口无法检测，真实服务登记前须核对工作区 authority。

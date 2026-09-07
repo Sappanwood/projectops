@@ -1,6 +1,7 @@
 // Catalog domain: workspace manifest schema and pure layout logic.
 
 import path from "node:path";
+import type { DevDescriptor } from "../dev/config.js";
 
 export const WORKSPACE_SCHEMA = "workspace/Manifest@1";
 export const MANIFEST_DIR = ".pops";
@@ -34,6 +35,7 @@ export type WorkspaceRetrospectives = {
 
 export type ProjectRegistration = {
   path: string;
+  dev?: DevDescriptor;
 };
 
 export type WorkspaceManifest = {
