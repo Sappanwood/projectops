@@ -1,10 +1,15 @@
+import {
+  planItemProject,
+  planMappingReference,
+  planMaterializationState,
+} from "../plan/planIdentity.js";
+import { showBacklogItem } from "../application/backlogApi.js";
+import { freezeDependency } from "../application/dependencyReadiness.js";
 import { readPlanPrerequisites } from "../application/dependencyReadiness.js";
 // Application use case: derive delivery evidence from a materialized Plan and its Backlog items.
 
 import { parseReport, type Report } from "../report/report.js";
 import { writeReport } from "../report/reportFs.js";
-import { isItemIdForPrefix } from "../backlog/item.js";
-import { ItemNotFoundError, readItemFile } from "../backlog/itemFs.js";
 import { loadStore, StoreNotFoundError, StoreParseError } from "../backlog/storeFs.js";
 import { PLAN_SCHEMA, type Plan } from "../plan/plan.js";
 import { PlanNotFoundError, PlanParseError, readPlan } from "../plan/planFs.js";
@@ -12,6 +17,7 @@ import { listPlanRuns, validatePlanRunCompletion } from "../application/planRunA
 import { listParallelRuns, validateParallelRunCompletion } from "../application/parallelRunApi.js";
 
 export type ReportGenerationInput = {
+  workspaceRoot: string;
   projectId: string;
   plansRoot: string;
   planId: string;
@@ -69,35 +75,26 @@ function deriveReport(input: ReportDerivationInput): Report {
   }
 
   const mappedItems = plan.items.map((planItem) => {
-    const id = plan.materialization!.mapping[planItem.key];
-    if (typeof id !== "string") {
-      throw new ReportGenerationError(`plan materialization mapping is missing ${planItem.key}`);
-    }
-    if (!isItemIdForPrefix(id, store.id_prefix)) {
+    const value = plan.materialization!.mapping[planItem.key]!;
+    const reference = planMappingReference(projectId, value);
+    if (!reference || reference.project !== planItemProject(projectId, planItem))
       throw new ReportGenerationError(
-        `backlog item ${id} for plan item ${planItem.key} does not belong to project ${projectId}`,
+        `backlog item ${value} for plan item ${planItem.key} does not belong to project ${planItemProject(projectId, planItem)}`,
       );
-    }
-    try {
-      const item = readItemFile(input.backlogRoot, id);
-      if (item.id !== id) {
-        throw new ReportGenerationError(`backlog item id mismatch: expected ${id}, got ${item.id}`);
-      }
-      if (item.project !== projectId) {
-        throw new ReportGenerationError(
-          `backlog item ${id} belongs to project ${item.project}, not ${projectId}`,
-        );
-      }
-      return { planItem, item };
-    } catch (error) {
-      if (error instanceof ReportGenerationError) throw error;
-      if (error instanceof ItemNotFoundError) {
-        throw new ReportGenerationError(
-          `backlog item ${id} for plan item ${planItem.key} was not found`,
-        );
-      }
-      throw new ReportGenerationError(`cannot read backlog item ${id}: ${formatError(error)}`);
-    }
+    const loaded = showBacklogItem({
+      workspaceDir: input.workspaceRoot,
+      projectId: reference.project,
+      itemId: reference.item,
+    });
+    if (!loaded.ok) throw new ReportGenerationError(loaded.error.message);
+    if (
+      loaded.data.item.project !== reference.project ||
+      loaded.data.item.item_type !== planItem.item_type
+    )
+      throw new ReportGenerationError(
+        `backlog item ${value} does not match its mapped project/type`,
+      );
+    return { planItem, item: loaded.data.item };
   });
   const items = mappedItems.map(({ item }) => item);
 
@@ -111,24 +108,42 @@ function deriveReport(input: ReportDerivationInput): Report {
     );
   }
 
+  const evidence: string[] = [];
+  const evidenceProblems: string[] = [];
+  for (const { planItem, item } of mappedItems) {
+    if (planItem.item_type !== "task" || item.status !== "done") continue;
+    try {
+      const proof = freezeDependency(input.workspaceRoot, { project: item.project, item: item.id });
+      evidence.push(
+        `Task ${item.project}:${item.id}; basis: ${proof.basis}; attempt: ${proof.attempt_id ?? "none"}; snapshot: ${proof.snapshot_digest ?? "none"}; verification: ${proof.verification_digest ?? "none"}; landing: ${proof.landing_digest ?? "none"}`,
+      );
+    } catch (error) {
+      if (!partialAcceptance) throw new ReportGenerationError(formatError(error));
+      evidenceProblems.push(formatError(error));
+    }
+  }
   const report: Report = {
     schema: "report/Report@1",
     id: input.reportId ?? reportIdForPlan(plan),
     title: input.title ?? plan.title,
     project: projectId,
     created_at: input.createdAt ?? new Date().toISOString(),
-    outcome: unfinished.length === 0 ? "completed" : "partial",
+    outcome: unfinished.length === 0 && !evidenceProblems.length ? "completed" : "partial",
     plan: `project-ops:plans/${plan.id}.json`,
     backlog: items.map((item) => ({
       id: item.id,
+      project: item.project,
       status: item.status,
       revision: item.revision,
       uri: `project-ops:backlog/items/${item.id}.md`,
     })),
-    verification: [...(input.verification ?? [])],
+    verification: [...(input.verification ?? []), ...evidence],
     deviations: [
       ...(input.deviations ?? []),
-      ...(unfinished.length === 0 || partialAcceptance === undefined ? [] : [partialAcceptance]),
+      ...evidenceProblems,
+      ...((unfinished.length === 0 && !evidenceProblems.length) || partialAcceptance === undefined
+        ? []
+        : [partialAcceptance]),
     ],
     workarounds: [...(input.workarounds ?? [])],
     repo_docs: [...(input.repoDocs ?? [])],
@@ -247,12 +262,12 @@ function validateMaterializedPlan(plan: Plan): void {
   if (plan.status !== "approved" && plan.status !== "done") {
     throw new ReportGenerationError("plan must be approved before Report generation");
   }
-  if (plan.materialization === undefined) {
+  if (planMaterializationState(plan) !== "complete") {
     throw new ReportGenerationError("plan must be materialized before Report generation");
   }
 
   const itemKeys = new Set(plan.items.map((item) => item.key));
-  const mapping = plan.materialization.mapping;
+  const mapping = plan.materialization!.mapping;
   if (
     mapping === undefined ||
     typeof mapping !== "object" ||

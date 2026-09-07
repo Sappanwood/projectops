@@ -179,6 +179,7 @@ test("report create/list/show expose a completed Report and preserve no-clobber"
         backlog: [
           {
             id: "REP-001",
+            project: "repo-a",
             status: "done",
             revision: (
               JSON.parse(created.stdout[0] ?? "null") as {
@@ -189,6 +190,7 @@ test("report create/list/show expose a completed Report and preserve no-clobber"
           },
           {
             id: "REP-002",
+            project: "repo-a",
             status: "done",
             revision: (
               JSON.parse(created.stdout[0] ?? "null") as {
@@ -198,7 +200,12 @@ test("report create/list/show expose a completed Report and preserve no-clobber"
             uri: "project-ops:backlog/items/REP-002.md",
           },
         ],
-        verification: ["npm test", "npm run typecheck"],
+        verification: [
+          "npm test",
+          "npm run typecheck",
+          "Task repo-a:REP-001; basis: done; attempt: none; snapshot: none; verification: none; landing: none",
+          "Task repo-a:REP-002; basis: done; attempt: none; snapshot: none; verification: none; landing: none",
+        ],
         deviations: [],
         workarounds: [],
         repo_docs: ["docs/README.md"],

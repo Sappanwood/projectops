@@ -1,3 +1,4 @@
+import { isProjectId } from "../catalog/workspace.js";
 // Report domain: versioned delivery evidence and Markdown serialization.
 
 import path from "node:path";
@@ -8,6 +9,7 @@ export const REPORT_OUTCOMES = ["completed", "partial"] as const;
 export type ReportOutcome = (typeof REPORT_OUTCOMES)[number];
 
 export type ReportBacklogResult = {
+  project?: string;
   id: string;
   status: string;
   revision?: string;
@@ -54,6 +56,7 @@ export function parseReport(value: unknown): Report | string {
   const input = value as Record<string, unknown>;
   const backlog = (input.backlog as ReportBacklogResult[]).map((item) => ({
     id: item.id,
+    ...(item.project === undefined ? {} : { project: item.project }),
     status: item.status,
     ...(item.revision === undefined ? {} : { revision: item.revision }),
     ...(item.uri === undefined ? {} : { uri: item.uri }),
@@ -152,6 +155,11 @@ function validateBacklogResult(value: unknown): string | null {
   if (typeof value.id !== "string" || !/^[A-Z0-9]+-\d{3,}$/.test(value.id)) {
     return "report backlog result id is invalid";
   }
+  if (
+    value.project !== undefined &&
+    (typeof value.project !== "string" || !isProjectId(value.project))
+  )
+    return "report backlog result project is invalid";
   if (typeof value.status !== "string" || value.status.trim() === "") {
     return `report backlog result ${value.id ?? "?"} status must be a non-empty string`;
   }

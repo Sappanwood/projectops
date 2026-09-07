@@ -1,3 +1,4 @@
+import { parsePlanSource } from "../plan/planIdentity.js";
 import { execFileSync } from "node:child_process";
 import { isDeepStrictEqual } from "node:util";
 import { computePlanRevision } from "./planRevision.js";
@@ -97,11 +98,13 @@ export function createExecution(
         "Task revision changed; reload before starting.",
       );
     let plan: ExecutionAttempt["input"]["plan"] = null;
-    const planMatch = /^plan:(plan-[a-z0-9-]+)#(.+)$/.exec(item.source);
+    const planMatch = parsePlanSource(item.source, q.projectId);
     if (planMatch) {
-      const snapshot = readPlan(c.plans, planMatch[1]!);
+      const owner = context(q.workspaceDir, planMatch.project);
+      const snapshot = readPlan(owner.plans, planMatch.planId);
       plan = {
-        ref: `project-ops:plans/${planMatch[1]}.json`,
+        ref: `project-ops:plans/${planMatch.planId}.json`,
+        project: planMatch.project,
         revision: computePlanRevision(snapshot),
         snapshot,
       };

@@ -1,3 +1,5 @@
+import { requireSingleProjectRun } from "./planRunScope.js";
+import { planMappingReference } from "../plan/planIdentity.js";
 import { parseTaskReference, taskReferenceKey } from "../backlog/dependencyReference.js";
 import { materializedDependencies } from "./planDependencies.js";
 import {
@@ -92,6 +94,7 @@ export function createPlanRun(
     if (q.instructions !== undefined && typeof q.instructions !== "string")
       throw new ExecutionError("EXECUTION_INVALID", "Run instructions must be text.");
     const plan = readPlan(c.plans, q.planId);
+    requireSingleProjectRun(q.projectId, plan);
     const revision = computePlanRevision(plan);
     if (q.expectedRevision !== revision)
       throw new ExecutionError(
@@ -123,7 +126,12 @@ export function createPlanRun(
         "Existing active or unknown work must be resolved first.",
       );
     const baseline = captureSnapshot(c.repo);
-    const mapping = plan.materialization.mapping;
+    const mapping = Object.fromEntries(
+      Object.entries(plan.materialization.mapping).map(([key, value]) => [
+        key,
+        planMappingReference(q.projectId, value)!.item,
+      ]),
+    );
     if (new Set(Object.values(mapping)).size !== Object.values(mapping).length)
       throw new ExecutionError("EXECUTION_INVALID", "Plan mapping contains duplicate task IDs.");
     const reuse = new Map((q.reuse ?? []).map((entry) => [entry.itemId, entry]));
@@ -441,6 +449,8 @@ export class PlanRunRuntime {
 
   advance(q: PlanRunMutation) {
     return this.mutate(q, (run, c) => {
+      requireSingleProjectRun(q.projectId, readPlan(c.plans, run.plan_id));
+      requireSingleProjectRun(q.projectId, run.plan_snapshot);
       if (["completed", "stopped"].includes(run.state)) return;
       const paused = run.state === "paused";
       const problems: string[] = [];
@@ -543,6 +553,8 @@ export class PlanRunRuntime {
           "EXECUTION_CONFLICT",
           "Resume requires a paused run and an inspection note.",
         );
+      requireSingleProjectRun(q.projectId, readPlan(c.plans, run.plan_id));
+      requireSingleProjectRun(q.projectId, run.plan_snapshot);
       inputsValid(q, c, run);
       const attempts = listAttempts(c.root, q.projectId);
       if (attempts.some((attempt) => activeStates.includes(attempt.state)))

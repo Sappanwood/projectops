@@ -1,3 +1,5 @@
+import { planMaterializationState } from "../plan/planIdentity.js";
+import { planCompletionEvidence } from "./planCompletionEvidence.js";
 import { readPlanPrerequisites } from "./dependencyReadiness.js";
 import { computePlanRevision, loadPlanContext } from "./planRevision.js";
 import { readPlanExecution } from "./planExecution.js";
@@ -22,14 +24,19 @@ export function completePlan(request: {
       "REVISION_MISMATCH",
       "Plan revision changed. Reload before marking it complete.",
     );
+  if (planMaterializationState(plan) !== "complete")
+    return applicationFailure(
+      "PLAN_INVALID",
+      "Complete materialization is required; recover partial materialization first.",
+    );
   const prerequisites = readPlanPrerequisites(request, plan);
   if (prerequisites.diagnostics.length)
     return applicationFailure(
       "PLAN_INVALID",
       prerequisites.diagnostics.map((d) => d.message).join(" "),
     );
-  if (plan.status === "done") return applicationSuccess({ plan, revision, no_op: true });
-  if (plan.status !== "approved" || !plan.materialization)
+
+  if (!["approved", "done"].includes(plan.status) || !plan.materialization)
     return applicationFailure(
       "PLAN_INVALID",
       "Completion requires an approved, materialized Plan.",
@@ -45,6 +52,15 @@ export function completePlan(request: {
       "Plan must contain at least one task, all mapped items must be readable, and every task must be done.",
     );
   }
+  try {
+    planCompletionEvidence(request.workspaceDir, request.projectId, plan);
+  } catch (error) {
+    return applicationFailure(
+      "PLAN_INVALID",
+      error instanceof Error ? error.message : "Task evidence unavailable.",
+    );
+  }
+  if (plan.status === "done") return applicationSuccess({ plan, revision, no_op: true });
   const runs = listPlanRuns(request);
   if (!runs.ok) return runs;
   const latest = runs.data.runs[0];

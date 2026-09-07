@@ -45,6 +45,7 @@ export type ExecutionAttempt = {
     item: BacklogItem;
     instructions: string;
     plan: {
+      project?: string;
       ref: string;
       revision: string;
       snapshot: unknown;

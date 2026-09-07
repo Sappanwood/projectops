@@ -1,3 +1,5 @@
+import { requireSingleProjectRun } from "./planRunScope.js";
+import { planMappingReference } from "../plan/planIdentity.js";
 import { execFile, execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { promisify } from "node:util";
@@ -98,6 +100,7 @@ export function createParallelRun(
     validateCommands(q.commands);
     const c = context(q.workspaceDir, q.projectId);
     const plan = readPlan(c.plans, q.planId);
+    requireSingleProjectRun(q.projectId, plan);
     if (computePlanRevision(plan) !== q.expectedRevision)
       throw new ExecutionError("REVISION_MISMATCH", "Plan revision changed.");
     if (
@@ -120,7 +123,12 @@ export function createParallelRun(
     const attempts = listAttempts(c.root, q.projectId);
     if (attempts.some((attempt) => activeStates.includes(attempt.state)))
       invalid("Resolve existing active or unknown attempts first.");
-    const mapping = plan.materialization.mapping;
+    const mapping = Object.fromEntries(
+      Object.entries(plan.materialization.mapping).map(([key, value]) => [
+        key,
+        planMappingReference(q.projectId, value)!.item,
+      ]),
+    );
     if (new Set(Object.values(mapping)).size !== Object.values(mapping).length)
       invalid("Plan mapping contains duplicate tasks.");
     const mappedTasks = new Set(
@@ -414,6 +422,8 @@ export class ParallelRunRuntime {
   }
   advance(q: ParallelRunMutation) {
     return this.mutate(q, (run, c) => {
+      requireSingleProjectRun(q.projectId, readPlan(c.plans, run.plan_id));
+      requireSingleProjectRun(q.projectId, run.plan_snapshot);
       if (["completed", "stopped"].includes(run.state)) return;
       this.observe(run, c);
       try {
@@ -505,6 +515,8 @@ export class ParallelRunRuntime {
     return this.mutate(q, (run, c) => {
       if (run.state !== "paused" || !q.note?.trim())
         invalid("Resume requires a paused run and an inspection note.");
+      requireSingleProjectRun(q.projectId, readPlan(c.plans, run.plan_id));
+      requireSingleProjectRun(q.projectId, run.plan_snapshot);
       inputsValid(q, c, run, false);
       if (run.nodes.some((node) => node.state === "landing"))
         invalid("Inspect uncertain landing before resuming.");

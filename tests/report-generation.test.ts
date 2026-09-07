@@ -114,6 +114,7 @@ function createMaterializedPlan(
 
 function inputFor(values: ReturnType<typeof createMaterializedPlan>) {
   return {
+    workspaceRoot: values.workspaceRoot,
     projectId: "repo-a",
     plansRoot: path.join(values.workspaceRoot, "ops", "repo-a", "plans"),
     planId: values.plan.id,
@@ -157,18 +158,21 @@ test("Report generation derives completed from every mapped backlog item and rec
   assert.deepEqual(report.backlog, [
     {
       id: "REP-001",
+      project: "repo-a",
       status: "done",
       revision: report.backlog[0]?.revision,
       uri: "project-ops:backlog/items/REP-001.md",
     },
     {
       id: "REP-002",
+      project: "repo-a",
       status: "done",
       revision: report.backlog[1]?.revision,
       uri: "project-ops:backlog/items/REP-002.md",
     },
   ]);
-  assert.deepEqual(report.verification, ["npm test"]);
+  assert.equal(report.verification[0], "npm test");
+  assert.ok(report.verification.some((value) => value.includes("Task repo-a:REP-001")));
   rmSync(values.workspaceRoot, { recursive: true, force: true });
 });
 
