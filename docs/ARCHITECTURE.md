@@ -514,9 +514,9 @@ Origin、JSON、body 上限与错误 envelope。返回的 endpoints 优先保留
 `taskReferenceKey`。Backlog 裸 ID 在所属项目解释，限定 `project:ID` 显式定位项目；Plan 裸小写 key
 表示草案局部节点，既有任务必须使用限定引用。项目语法与 manifest 共用 `catalog/workspace.ts` 的
 `isProjectId`。parser 不进行 I/O、不验证注册或存在性；完整身份供去重、循环检测与链接使用。
-该基础已实现，其余消费者按下表逐步接入；入口当前可用性仍以对应章节和 CLI 为准。
+各消费者共用引用身份与应用层校验，职责如下。
 
-| 消费者 | 接入要求 |
+| 消费者 | 当前职责 |
 |---|---|
 | `backlog/item.ts`、`backlog/add.ts`、`application/backlogApi.ts`、`useCases/backlogAdd.ts`、`useCases/backlogUpdate.ts` | 保持 Markdown string[] 读写；共享应用层按 manifest 解析目标，创建/替换/移除依赖，revision、自依赖、同身份重复和可达跨项目循环校验；外部只读 |
 | `plan/plan.ts`、`useCases/planMaterialize.ts`、`application/planRevision.ts` | 区分局部拓扑和既有引用；物化保留限定引用，mapping 只拥有本项目新项；修订复用受控同步及输入保护 |
@@ -534,7 +534,7 @@ Origin、JSON、body 上限与错误 envelope。返回的 endpoints 优先保留
 变更节点可达的链，以完整项目身份检测重复、自依赖和环，外部任务保持只读。
 直接查询返回解析成功项、当前满足原因和逐引用 diagnostics；反向扫描保留可读结果并以 complete=false 暴露局部损坏。
 
-应用层需要共享一次直接依赖事实查询：manifest 路由到目标 Backlog 与 executions，返回身份、条目、
+应用层共享直接依赖事实查询：manifest 路由到目标 Backlog 与 executions，返回身份、条目、
 满足条件及可定位诊断。循环校验单独遍历变更节点可达图，反向查询显式遍历已登记项目；二者不混入
 普通 next 的直接前置查询。运行与 Report 在消费时重新验证冻结依据，外部变化不隐式刷新执行输入。
 详细生命周期、取消/不可读处理、无迁移联合语法和安全边界见 PRODUCT_SPEC 的“跨项目任务依赖契约”。
@@ -546,3 +546,5 @@ Origin、JSON、body 上限与错误 envelope。返回的 endpoints 优先保留
 并行本地节点继续等待 landed；外部引用只加入已满足前置集合，不生成外部节点。
 `readPlanPrerequisites` 为 execution projection、Plan complete 和 Report 发布提供非 mapping 前置，
 Report 仅把它们作为 verification 说明，不扩大交付任务集合。
+
+验收使用 `tests/browser/three-project-delivery.spec.ts` 贯通设施 → 服务 → 产品的 CLI 创建、依赖编辑、混合 Plan 物化、刷新解锁及跨项目返回。`backlog-dependencies`、`plan-dependencies`、`dependency-evidence`、`cross-project-readiness` 与两类 run 测试分别覆盖 revision/循环、引用保留、接受/landing 和冻结证据失效；同项目既有测试继续作为回归门禁。全部 fixture 位于隔离临时 workspace，测试结束清理，不写真实项目。

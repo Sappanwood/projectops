@@ -415,7 +415,7 @@ IPC 路径过长、权限问题或版本不兼容会明确报错，不自动改�
 请改用 `pops dev stop <project>` 或 `pops dev restart <project>`。首版没有网页 manager stop、配置编辑器或实时终端。
 
 
-### 跨项目 Backlog 依赖
+### 跨项目任务与 Plan 依赖
 
 Backlog 创建的 `--depends-on` 支持 `project:ID`；`backlog update --depends-on <完整集合>`
 配合 `--expected-revision` 替换依赖，空字符串清空。引用仅连接当前 workspace 内已登记项目的 task，
@@ -425,3 +425,12 @@ Backlog 创建的 `--depends-on` 支持 `project:ID`；`backlog update --depends
 `plan next` 与 Workbench projection 实时解析跨项目直接前置；依赖详情 API 同时返回“依赖谁／谁依赖我”与不完整诊断。
 串行和并行 run 冻结外部完成依据，每次派发与完成前重验，仍只调度本项目任务。Plan 可先物化，
 run 创建须等待前置满足；依据变化后按显式暂停/恢复或终止后重建处理。Plan/Report 的交付范围只计本项目 mapping。
+
+Plan 草案的 `depends_on` 可同时包含局部 key 和既有任务限定引用，例如
+`["client", "mochi:MOC-001", "ccp:CCP-001"]`。先在各项目创建 task，再在产品项目创建、校验、批准和物化 Plan；
+CLI 完整草案与步骤见 [混合依赖示例](docs/AGENT_CONTRACT.md#混合依赖草案示例)。两项消费任务可引用同一设施 task，设施成果只有一份状态。
+
+Web 从 `/#/projects/<project>/backlog/<item>` 的“编辑依赖”选择项目/task 并保存；
+从 `/#/projects/<project>/plans/<plan>` 的“修订计划”选择 Plan 内或既有依赖，再预览和确认。
+任务详情显示直接前置、满足原因与反向影响，Plan 只统计自己的 mapping；点击外部任务后可返回来源，刷新后继续保留入口。
+上游满足后使用 Refresh 重查 ready，只有 succeeded 的 attempt 不足以解锁，有执行记录时还需要有效接受和适用的 landed 证据。

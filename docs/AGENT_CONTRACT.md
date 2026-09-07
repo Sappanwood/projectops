@@ -133,7 +133,7 @@ pops backlog update projectops "$item_id" --status in_progress --expected-revisi
 
 `show` 的顶层 `revision` 用于下一次写入。完成实际工作并验证后，重新 show，使用最新 revision 将状态更新
 为 `done`。发生冲突时读取最新内容、判断原意是否仍成立，再决定是否提交；不得去掉 revision 强制重试。
-CLI 的 revision 参数可选，Agent 写入必须携带。状态支持 `todo|in_progress|done`；update 也支持单独的标题/正文编辑，不能与状态混合提交。已有执行记录的任务必须通过 execution accept 完成，不能直接 update done。
+CLI 的 revision 参数可选，Agent 写入必须携带。状态支持 `todo|in_progress|done|blocked|cancelled`；update 也支持单独的标题/正文编辑，不能与状态混合提交。已有执行记录的任务必须通过 execution accept 完成，不能直接 update done。
 更新后的状态从 `result.status` 读取，更新前状态从 `before.status` 读取；成功收据没有 `after` 字段。
 创建可用 `--item-type task|epic`、`--parent-id <ID>`、`--depends-on <reference1,reference2>`。
 引用支持同项目 ID 或显式 `project:ID`，例如 `MOC-001,ccp:CCP-001`；同项目限定与裸 ID 是同一身份，重复项拒绝。
@@ -218,6 +218,33 @@ approve 要求非空 note，仅支持 draft → approved，再次批准会报错
 外部任务可以为 todo；create/validate/approve 及首次 materialize 校验引用存在、task 身份与可达依赖图，不检查执行就绪。局部 key 转换为本项目 ID，限定引用原样保留；外部任务不复制、不写入、不加入 mapping 或本 Plan 完成率。
 修订 preview 与 confirm 均重新校验待写任务覆盖后的依赖图，保留 revision、独立编辑及执行历史保护。重复完整 materialize（含 done Plan）保持 no-op，不随外部任务变化改写既有记录。
 失败后先 show Plan 和 list Backlog 核对现状；Alpha 不承诺跨进程事务或崩溃恢复。
+
+### 混合依赖草案示例
+
+以下草案用于已存在 `ccp:CCP-001` 和 `mochi:MOC-001` 的隔离 workspace；任务 ID 必须从实际 Backlog 收据核对并替换。以 `mochi-write` 为 Plan 所属项目创建后，`client` 与 `integration` 进入该项目 mapping，上游仍由各自项目维护。
+
+```json
+{
+  "title": "Cloud integration",
+  "goal": "验证设施、服务与产品的依赖链",
+  "items": [
+    {"key":"client","title":"实现客户端","item_type":"task","priority":"P1","body":"完成客户端接入"},
+    {"key":"integration","title":"联调验收","item_type":"task","priority":"P1","body":"完成 staging 联调","depends_on":["client","mochi:MOC-001","ccp:CCP-001"]}
+  ]
+}
+```
+
+```bash
+pops plan create mochi-write --input plan-draft.json --json
+pops plan validate mochi-write "$plan_id" --json
+pops plan approve mochi-write "$plan_id" --review-note "$approval_note" --json
+pops plan materialize mochi-write "$plan_id" --json
+pops plan next mochi-write "$plan_id" --json
+```
+
+`plan_id` 仍读取 create 收据，不根据示例标题猜测。未满足前置时 integration 在 blocked 中；分别完成 client 与外部直接前置后重查，才进入 ready。done 以真实工作及适用验收为依据；此示例不授权真实项目完成任务或部署。
+
+Web 路径为 `/#/projects/<project>/backlog/<item>` 和 `/#/projects/<project>/plans/<plan>`。Backlog 详情 → 编辑依赖 → 选择项目和 task → 添加/移除 → 保存依赖；Plan 详情 → 修订计划 → 选择待编辑任务及 Plan 内/既有任务 → 预览修订 → 确认应用。刷新查看满足状态和反向影响，点击跨项目引用后通过“返回来源”或“返回来源页面”返回；浏览器刷新保留返回入口。
 
 ## Plan：查询下一步任务
 
