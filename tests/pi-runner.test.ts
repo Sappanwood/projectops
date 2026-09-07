@@ -123,3 +123,68 @@ test("Pi stop clears queued work before abort, and failure never becomes success
   assert.equal(result.outcome, "failed");
   assert.doesNotMatch(result.summary, /private credential/);
 });
+
+test("Pi records only marked tool results and fails when evidence cannot be saved", async () => {
+  for (const scenario of ["passed", "failed", "unmarked", "missing", "write-failed"] as const) {
+    let listener!: (event: unknown) => void;
+    const checks: { command: string; outcome: string; evidence: string }[] = [];
+    const session: PiSession = {
+      sessionId: "verification",
+      messages: [
+        {
+          role: "assistant",
+          stopReason: "stop",
+          content: [{ type: "text", text: "All tests passed" }],
+        },
+      ],
+      subscribe(fn) {
+        listener = fn;
+        return () => {};
+      },
+      async prompt(input) {
+        assert.match(input, /projectops-verify/);
+        listener({
+          type: "tool_execution_start",
+          toolName: "bash",
+          toolCallId: "t",
+          args: { command: scenario === "unmarked" ? "pwd" : "# projectops-verify\nnpm test" },
+        });
+        if (scenario !== "missing")
+          listener({
+            type: "tool_execution_end",
+            toolName: "bash",
+            toolCallId: "t",
+            isError: scenario === "failed",
+            result: { content: [{ type: "text", text: "actual tool output" }] },
+          });
+      },
+      async steer() {},
+      clearQueue() {},
+      async abort() {},
+      dispose() {},
+    };
+    const attempt = {
+      id: "exe-fixture",
+      input: { item: { id: "PRO-064", title: "Task", body: "Acceptance" }, instructions: "" },
+    } as ExecutionAttempt;
+    const result = await createPiRunner(async () => session).start(attempt, {
+      repo: "/tmp/repo",
+      workspaceDir: "/tmp",
+      emit() {},
+      recordVerification(check) {
+        if (scenario === "write-failed") throw Error("unavailable");
+        checks.push(check);
+      },
+    }).completion;
+    assert.equal(
+      result.outcome,
+      ["missing", "write-failed"].includes(scenario) ? "failed" : "succeeded",
+    );
+    assert.equal(checks.length, ["passed", "failed"].includes(scenario) ? 1 : 0);
+    if (checks[0]) {
+      assert.equal(checks[0].outcome, scenario);
+      assert.match(checks[0].evidence, /actual tool output/);
+      assert.doesNotMatch(checks[0].evidence, /All tests passed/);
+    }
+  }
+});

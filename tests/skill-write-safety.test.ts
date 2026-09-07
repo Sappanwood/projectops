@@ -91,3 +91,28 @@ test("another installer lock is reported without changing installed files", () =
   assert.equal(readFileSync(path.join(target, "SKILL.md"), "utf8"), before);
   assert.equal(readdirSync(path.join(root, ".agents/skills/.projectops-workflow.lock")).length, 0);
 });
+
+for (const code of ["EPERM", "EACCES"]) {
+  test(`installer lock permission failure preserves its category (${code})`, () => {
+    const { root, run, target } = fixture();
+    const before = readFileSync(path.join(target, "SKILL.md"), "utf8");
+    const injector = path.join(root, "permission.mjs");
+    writeFileSync(
+      injector,
+      `import fs from 'node:fs'; import { syncBuiltinESMExports } from 'node:module';
+const mkdir = fs.mkdirSync;
+fs.mkdirSync = function(file, ...args) {
+  if (String(file).endsWith('/.projectops-workflow.lock')) throw Object.assign(new Error('denied'), {code: '${code}'});
+  return mkdir(file, ...args);
+}; syncBuiltinESMExports();`,
+    );
+    const result = run(["skill", "update"], injector);
+    assert.equal(result.code, 1);
+    assert.match(result.receipt.skill.problems[0], new RegExp(code));
+    assert.doesNotMatch(result.receipt.skill.problems[0], /busy|removing/);
+    assert.deepEqual(result.receipt.skill.backups, []);
+    assert.deepEqual(result.receipt.skill.changed, []);
+    assert.equal(readFileSync(path.join(target, "SKILL.md"), "utf8"), before);
+    assert.equal(run(["skill", "update"]).code, 0);
+  });
+}

@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { isDeepStrictEqual } from "node:util";
 import { computePlanRevision } from "./planRevision.js";
 import { readPlan } from "../plan/planFs.js";
 import { showBacklogItem } from "./backlogApi.js";
@@ -288,7 +289,17 @@ export function decideExecution(
           "EXECUTION_CONFLICT",
           "Code changed since verification; verify again.",
         );
-      if (shown.data.item.revision !== a.input.item.revision)
+      const currentItem = shown.data.item;
+      const startedItem = a.input.item;
+      const progressing = startedItem.status === "todo" && currentItem.status === "in_progress";
+      if (
+        (currentItem.status !== startedItem.status && !progressing) ||
+        !["todo", "in_progress", "blocked"].includes(currentItem.status) ||
+        !isDeepStrictEqual(
+          { ...currentItem, revision: "", updated: "", status: startedItem.status },
+          { ...startedItem, revision: "", updated: "" },
+        )
+      )
         throw new ExecutionError(
           "EXECUTION_CONFLICT",
           "Task input changed; create a new attempt for the current task.",

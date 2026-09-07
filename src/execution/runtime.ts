@@ -16,13 +16,26 @@ import {
   type ApplicationResult,
 } from "../application/result.js";
 import { activeStates, type ExecutionAttempt, type ExecutionEvent } from "./attempt.js";
-import { context, executionRepo, ExecutionError, saveProgress } from "./store.js";
+import {
+  context,
+  executionRepo,
+  ExecutionError,
+  saveProgress,
+  evidence,
+  evidenceDigest,
+} from "./store.js";
+import { captureSnapshot } from "./snapshot.js";
 import { isModelRef, type AvailableModel, type ModelRef } from "./models.js";
 export type RunnerResult = {
   outcome: "succeeded" | "failed" | "stopped";
   summary: string;
 };
 export type RunnerContext = {
+  recordVerification?(check: {
+    command: string;
+    outcome: "passed" | "failed";
+    evidence: string;
+  }): void;
   recordModel?(model: ModelRef): void;
   repo: string;
   workspaceDir: string;
@@ -136,6 +149,29 @@ export class ExecutionRuntime {
       const handle = this.runner.start(structuredClone(a), {
         repo: target.data,
         workspaceDir: resolved.data.workspace,
+        recordVerification: (check) => {
+          const current = showExecution({ ...q, attemptId: a.id });
+          if (!current.ok) throw new Error("Cannot read verification attempt.");
+          const saved = mutateExecution(
+            { ...q, attemptId: a.id, expectedRevision: current.data.attempt.revision },
+            (attempt, c) => {
+              if (attempt.state !== "running" || !check.command.trim() || !check.evidence.trim())
+                throw new ExecutionError(
+                  "EXECUTION_INVALID",
+                  "Runner verification requires active work and actual output.",
+                );
+              attempt.verifications.push({
+                command: check.command,
+                outcome: check.outcome,
+                at: new Date().toISOString(),
+                snapshot: captureSnapshot(executionRepo(c, attempt)),
+                evidence_ref: evidence(c.root, a.id, check.evidence),
+                evidence_digest: evidenceDigest(check.evidence),
+              });
+            },
+          );
+          if (!saved.ok) throw new Error("Cannot persist runner verification.");
+        },
         recordModel: (model) => {
           const current = showExecution({ ...q, attemptId: a.id });
           if (!current.ok || !isModelRef(model)) throw new Error("Invalid model record.");

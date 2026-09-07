@@ -238,6 +238,8 @@ attempt 的 `input.model` 保存启动模型，`progress.model` 保存 Pi sessio
 
 验证记录包含命令、通过/失败、代码快照和保存在 executions root 的长期证据。验收时核对当前代码与验证快照，
 并要求当前快照下各命令最新结果都通过、证据仍完整、任务输入未变且没有后继尝试；旧尝试不能越过正在进行的重试完成任务。
+正常 todo → in_progress 推进不使执行输入失效；验收仍比较其余任务内容，拒绝标题、正文、依赖等变化及已完成/取消任务，保留代码与证据有效性检查。
+受管 Pi 可用 bash 首行 `# projectops-verify` 显式标记检查；实际工具结果、成功/失败与工具结束时的代码快照自动进入当前执行的验证记录。普通探索命令与最终摘要不自动成为证据；记录失败或缺失完成事件使执行失败，后续代码变化仍须重新验证。操作者核对检查覆盖范围并显式验收，工具输出若截断则按需要补齐完整日志。
 用户选择接受或继续修改，结论绑定具体尝试；接受才推进任务 done，普通状态更新不能绕过已有执行记录的验收。
 验收不执行 merge/push，也不意味着后续 DAG 的 landed。Report 可用稳定逻辑引用记录证据，仍遵守原有交付资格。
 
@@ -247,7 +249,7 @@ attempt 的 `input.model` 保存启动模型，`progress.model` 保存 Pi sessio
 
 
 Pi 任务按登记 Repo 执行，同项目已有其他 running/stop_requested/unknown 尝试时拒绝启动。进展是执行记录的可选 `progress` 字段，包含 session_id 与最近 200 条 at/type/text 事件，每条最多 8000 字符；完整历史由 Pi session 保存。
-页面轮询只重读数据，保留输入、焦点与选区；追加指示携带当前 revision，冲突或投递失败明确显示。工作完成以 Pi 完整 prompt settle 和最终 assistant stopReason 为依据，模型错误或中止不显示成功。工具事件只显示工具名和开始/结束，不复制参数与输出。
+页面轮询只重读数据，保留输入、焦点与选区；追加指示携带当前 revision，冲突或投递失败明确显示。工作完成以 Pi 完整 prompt settle 和最终 assistant stopReason 为依据，模型错误或中止不显示成功。进展中的工具事件只显示工具名和开始/结束；显式标记的验证命令及其实际结果另存为验证证据。
 
 验证结果提供“查看证据正文”。GET `/api/projects/<project>/executions/<attempt>/evidence?ref=<exact-ref>` 只接受该尝试的验证引用，核对静态 containment 与完整内容 SHA256 后返回最多 65,536 字符预览及 truncated 标记；缺失或篡改返回诊断，页面清除旧正文，不能以旧预览冒充当前有效证据。
 

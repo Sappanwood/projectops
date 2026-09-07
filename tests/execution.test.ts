@@ -22,6 +22,12 @@ import {
   listExecutions,
 } from "../src/application/executionApi.js";
 import { ExecutionRuntime, type Runner } from "../src/execution/runtime.js";
+import { createPiRunner } from "../src/execution/piRunner.js";
+import {
+  updateBacklogItemStatus,
+  updateBacklogItemContent,
+  createBacklogItem,
+} from "../src/application/backlogApi.js";
 function setup() {
   const workspaceDir = mkdtempSync(path.join(tmpdir(), "execution-"));
   const run = (args: string[]) =>
@@ -62,6 +68,145 @@ function data<T>(
   if (!r.ok) throw Error();
   return r.data;
 }
+test("acceptance permits todo to in_progress but still rejects changed task content", () => {
+  for (const change of ["status", "title", "body", "dependsOn"] as const) {
+    const q = setup();
+    let a = data(createExecution(q)).attempt;
+    const updated = data(
+      updateBacklogItemStatus({
+        ...q,
+        status: "in_progress",
+        expectedRevision: a.input.item.revision,
+      }),
+    );
+    if (change === "dependsOn") {
+      const other = data(
+        createBacklogItem({
+          workspaceDir: q.workspaceDir,
+          projectId: q.projectId,
+          draft: {
+            title: "Dependency",
+            category: "feature",
+            priority: "P1",
+            item_type: "task",
+            parent_id: null,
+            depends_on: [],
+            body: "Dependency",
+          },
+        }),
+      ).item;
+      data(
+        updateBacklogItemContent({
+          ...q,
+          dependsOn: [other.id],
+          expectedRevision: updated.revision,
+        }),
+      );
+    } else if (change !== "status")
+      data(
+        updateBacklogItemContent({ ...q, [change]: "changed", expectedRevision: updated.revision }),
+      );
+    a = data(
+      finishExecution({
+        ...q,
+        attemptId: a.id,
+        expectedRevision: a.revision,
+        outcome: "succeeded",
+        summary: "tests passed",
+      }),
+    ).attempt;
+    assert.equal(
+      decideExecution({
+        ...q,
+        attemptId: a.id,
+        expectedRevision: a.revision,
+        decision: "accepted",
+        note: "summary alone",
+      }).ok,
+      false,
+    );
+    a = data(
+      verifyExecution({
+        ...q,
+        attemptId: a.id,
+        expectedRevision: a.revision,
+        command: "check",
+        outcome: "passed",
+        evidence: "actual output",
+      }),
+    ).attempt;
+    const result = decideExecution({
+      ...q,
+      attemptId: a.id,
+      expectedRevision: a.revision,
+      decision: "accepted",
+      note: "reviewed",
+    });
+    assert.equal(result.ok, change === "status", JSON.stringify(result));
+  }
+});
+test("Pi explicitly marked verification persists tool output before later code changes", async () => {
+  const q = setup();
+  let emit!: (event: unknown) => void;
+  const runtime = new ExecutionRuntime(
+    createPiRunner(async () => ({
+      sessionId: "verification-fixture",
+      messages: [
+        { role: "assistant", stopReason: "stop", content: [{ type: "text", text: "passed" }] },
+      ],
+      subscribe(listener) {
+        emit = listener;
+        return () => {};
+      },
+      async prompt() {
+        const command = '# projectops-verify\nnode -e "console.log(42)"';
+        emit({
+          type: "tool_execution_start",
+          toolName: "bash",
+          toolCallId: "check",
+          args: { command },
+        });
+        const output = execFileSync(process.execPath, ["-e", "console.log(42)"], {
+          encoding: "utf8",
+        });
+        emit({
+          type: "tool_execution_end",
+          toolName: "bash",
+          toolCallId: "check",
+          isError: false,
+          result: { content: [{ type: "text", text: output }] },
+        });
+        writeFileSync(path.join(q.workspaceDir, "repo", "code.txt"), "changed after verification");
+      },
+      async steer() {},
+      clearQueue() {},
+      async abort() {},
+      dispose() {},
+    })),
+  );
+  const started = data(runtime.start(q)).attempt;
+  await new Promise((r) => setImmediate(r));
+  const ended = data(showExecution({ ...q, attemptId: started.id })).attempt;
+  assert.equal(ended.state, "succeeded");
+  assert.equal(ended.verifications.length, 1);
+  const check = ended.verifications[0]!;
+  assert.equal(check.outcome, "passed");
+  assert.match(
+    readFileSync(path.join(q.workspaceDir, "ops/repo/executions", check.evidence_ref), "utf8"),
+    /42/,
+  );
+  assert.notEqual(check.snapshot.digest, ended.snapshot?.digest);
+  assert.equal(
+    decideExecution({
+      ...q,
+      attemptId: ended.id,
+      expectedRevision: ended.revision,
+      decision: "accepted",
+      note: "stale check",
+    }).ok,
+    false,
+  );
+});
 test("execution freezes input, retains retry history, verifies and explicitly accepts current snapshot", () => {
   const q = setup();
   const first = data(createExecution(q)).attempt;

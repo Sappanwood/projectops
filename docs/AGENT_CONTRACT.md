@@ -73,7 +73,7 @@ JSON.parse。Report/Retrospective 的部分失败返回 `{ "ok": false, "error":
 若最终记录尚未写入，现场会被视为非受管内容并保护，不能靠反复 init 或递归删除恢复。
 
 安装器使用 `.agents/skills/.projectops-workflow.lock` 空目录排他；失败正常释放。进程中断可能留下锁，
-必须先确认没有安装器运行，再只移除该空锁目录并重新 status。所有安装祖先和分发目标拒绝 symlink/非普通对象；
+必须先确认没有安装器运行，再只移除该空锁目录并重新 status。建锁失败仅在 EEXIST 时提示锁占用；EPERM/EACCES 保留权限错误类别，检查 .agents/skills 的写入权限，不以权限失败为由清理锁。所有安装祖先和分发目标拒绝 symlink/非普通对象；
 路径诊断须由用户修正后重试，不沿 `.agents` 或 skills symlink 写入外部位置。支持边界为受信任本地 Linux workspace、
 Node.js 22+、无 native helper；不承诺恶意 ancestor swap、跨文件事务、崩溃自动恢复或 Windows/macOS 等价保证。
 
@@ -429,7 +429,7 @@ list 的 `data.attempts` 为尝试列表；create/show/finish/verify/accept/rewo
 `data.diagnostics` 表示证据不可读或变化等问题。task revision 与 attempt revision 是不同值。
 
 执行状态、验证结果与验收结论分别记录。accept 要求执行 succeeded、当前代码快照下每个已记录命令的最新结果通过、
-证据 SHA256 未变、任务输入 revision 未变、没有后继尝试；否则拒绝。accepted 才将任务设为 done。
+证据 SHA256 未变、任务内容未变、没有后继尝试；否则拒绝。任务状态保持不变或仅从 todo 推进到 in_progress 时，验收比较除 revision/updated 和该状态推进之外的完整任务内容；标题、正文、依赖及其他内容变化仍拒绝，done/cancelled 不接受旧尝试。accepted 才将任务设为 done。
 没有执行记录的普通手工任务仍按原 status update 工作流推进。
 失败、中止或要求继续保留历史；新尝试明确引用前次尝试并读取当前输入，禁止覆盖历史：
 
@@ -471,6 +471,8 @@ models 为空时应在本地 Pi 完成认证后刷新，读取失败返回不含
 浏览器的切换只影响新启动的独立任务和新创建的 run；Pi 实际使用的模型独立保存在 progress.model。
 `POST /api/projects/<project>/executions/<attempt>/steer` 接收 `expected_revision` 与非空 `message`；只允许当前 running 且有活跃 handle 的尝试。
 `progress.events` 保存有界进展，`progress.session_id` 关联 runtime 内 Pi session。页面自动刷新，CLI show 同样可核对；进展不是验证证据，成功结束仍须 execution verify 和显式 accept。
+受管 Pi 验证由 Agent 选择真实检查并运行 bash：command 首行必须为 `# projectops-verify`，下一行为实际命令。runner 按 toolCallId 配对工具开始/结束事件，用实际 result 与 isError 保存验证证据，runtime 在工具结束时捕获代码快照并写入当前 attempt；不从 summary 推断通过。普通 bash 不自动登记。成功工具结果表示命令成功，不证明验收范围充分；Agent 必须保留失败退出码，不能用 echo 或隐藏错误替代检查。证据保存失败或缺失完成事件使执行失败。后续代码变化使旧检查失效，须重跑受影响命令；操作者核对命令、输出、覆盖范围后显式 accept，不必为已有有效证据重复执行。外部 Agent 继续使用 finish → verify → accept，不能使用此标记替代 CLI 证据登记。工具返回的截断信息保留在证据中；不足以判断时，补充完整日志后再验收，不把临时 fullOutputPath 当作持久化全文。
+
 实际开发遵守任务前置；同项目其他活动或 unknown 尝试会阻止新的单任务 Pi 工作。请先确认旧工作，再决定停止、重试或继续。
 
 纯进展事件写入保留当前控制 revision；停止、追加指示和生命周期变更仍更新 revision 并校验 CAS，持续输出不会使控制操作持续冲突。

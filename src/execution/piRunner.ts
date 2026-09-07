@@ -29,6 +29,8 @@ export function createPiRunner(factory: SessionFactory = openPiSession): Runner 
       let stopped = false;
       let session: PiSession | undefined;
       let unsubscribe: (() => void) | undefined;
+      const verificationCommands = new Map<string, string>();
+      let verificationFailed = false;
       const ready = factory(attempt, context);
       const completion = (async (): Promise<RunnerResult> => {
         try {
@@ -44,8 +46,48 @@ export function createPiRunner(factory: SessionFactory = openPiSession): Runner 
             const event = raw as {
               type?: string;
               toolName?: string;
+              toolCallId?: string;
+              args?: { command?: string };
+              result?: unknown;
+              isError?: boolean;
               assistantMessageEvent?: { type: string; delta?: string };
             };
+            if (
+              event.type === "tool_execution_start" &&
+              event.toolName === "bash" &&
+              event.toolCallId &&
+              event.args?.command?.startsWith("# projectops-verify\n")
+            )
+              verificationCommands.set(event.toolCallId, event.args.command);
+            if (
+              event.type === "tool_execution_end" &&
+              event.toolName === "bash" &&
+              event.toolCallId
+            ) {
+              const command = verificationCommands.get(event.toolCallId);
+              if (command) {
+                verificationCommands.delete(event.toolCallId);
+                try {
+                  if (
+                    !context.recordVerification ||
+                    typeof event.isError !== "boolean" ||
+                    event.result === undefined
+                  )
+                    throw new Error("Verification result is unavailable.");
+                  context.recordVerification({
+                    command,
+                    outcome: event.isError ? "failed" : "passed",
+                    evidence: JSON.stringify({
+                      command,
+                      isError: event.isError,
+                      result: event.result,
+                    }),
+                  });
+                } catch {
+                  verificationFailed = true;
+                }
+              }
+            }
             if (
               event.type === "message_update" &&
               event.assistantMessageEvent?.type === "text_delta"
@@ -59,7 +101,7 @@ export function createPiRunner(factory: SessionFactory = openPiSession): Runner 
           });
           if (stopped) return { outcome: "stopped", summary: "Pi 已在开始前停止。" };
           await session.prompt(
-            `完成以下 ProjectOps 任务。遵守已加载的 AGENTS.md 与任务边界。不要修改任务状态、执行记录或自行验收，不提交或发布 Git 改动。不要读取、输出或写入凭据。结束时说明改动和实际验证结果。\n\n${attempt.input.item.id}: ${attempt.input.item.title}\n\n${attempt.input.item.body}\n\n补充指示：\n${attempt.input.instructions}`,
+            `完成以下 ProjectOps 任务。遵守已加载的 AGENTS.md 与任务边界。不要修改任务状态、执行记录或自行验收，不提交或发布 Git 改动。不要读取、输出或写入凭据。实际验收测试使用 bash，并在 command 首行写 # projectops-verify（下一行才是实际命令）；runner 会保存实际工具结果和当时的代码快照。只标记真实验证命令，保留失败退出码，不以 echo、隐藏错误或最终摘要替代测试。后续代码变化后重跑受影响检查。结束时说明改动和实际验证结果，仍需操作者显式验收。\n\n${attempt.input.item.id}: ${attempt.input.item.title}\n\n${attempt.input.item.body}\n\n补充指示：\n${attempt.input.instructions}`,
           );
           const last = [...session.messages]
             .reverse()
@@ -68,6 +110,12 @@ export function createPiRunner(factory: SessionFactory = openPiSession): Runner 
             | undefined;
           if (stopped || last?.stopReason === "aborted")
             return { outcome: "stopped", summary: "Pi 已确认停止。" };
+          if (verificationFailed || verificationCommands.size)
+            return {
+              outcome: "failed",
+              summary:
+                "验证工具结果缺失或证据保存失败；请核对执行记录后补充验证，不能以摘要替代证据。",
+            };
           if (last?.stopReason !== "stop")
             return {
               outcome: "failed",

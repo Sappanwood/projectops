@@ -378,13 +378,14 @@ Plan 的 `readPagesView.ts` 输出执行工作区 host；`planRunUi.ts` 与 `par
 `execution/attempt.ts` 定义 Attempt；`execution/store.ts` 经 manifest 定位 executions root，执行文件采用 no-clobber 创建，
 后续变更检查 revision；证据文件存于该 root 的 evidence 子目录。`execution/snapshot.ts` 调用 Git 参数数组，
 捕获 HEAD、diff 和工作文件摘要，不通过 shell 执行；证据和快照作为工作事实保存，不把临时日志作为唯一长期证据。
-`application/executionApi.ts` 提供 create/list/show/finish/verify/decide，共用 CLI 与 HTTP，无内部 CLI subprocess。
+`application/executionApi.ts` 提供 create/list/show/finish/verify/decide，共用 CLI 与 HTTP，无内部 CLI subprocess。验收允许冻结任务由 todo 正常推进到 in_progress，并忽略 revision/updated 的派生差异；其余完整内容仍比较，done/cancelled 与其他状态变化拒绝。
 
 `application/verificationChecks.ts` 供独立执行验收、串行 run 与并行 run 共用：按指定 snapshot digest 筛选验证，
 每个 command 只采用最后一条记录，再核对 passed 及持久化证据的可读性和内容摘要。调用方决定目标快照、
 空验证的诊断、attempt 是否最新以及状态、输入、baseline 和 checkout 条件；该模块不拥有验收或调度状态机。
 
 `execution/runtime.ts` 持有注入 Runner 返回的 completion/stop handle，管理重复启动、停止确认和启动后核对。
+RunnerContext.recordVerification 仅供当前 runtime handle 使用，在 running 状态保存命令、真实工具结果、证据摘要与即时 Git 快照；后续 finish 不重标旧验证的快照，accept 仍校验当前版本和完整证据。
 后端负责生命周期，浏览器轮询只读记录；runtime/external 来源分开，重启仅核对 runtime 所属活动工作。
 未知工作要求人工确认而不重新执行；默认服务没有 runner，仍可查看和验收外部记录。
 单本地服务 owner 是当前运行边界，不提供分布式 lease、多服务协调或自动 crash recovery。
@@ -405,6 +406,8 @@ Plan 的 `readPagesView.ts` 输出执行工作区 host；`planRunUi.ts` 与 `par
 默认选择通过禁用工具、extensions 和 skills 的内存 SDK session 解析，使用目标 Repo 设置，随即 dispose，不发送模型请求。
 `web/modelSelector.ts` 管理 header 展示与浏览器选择记忆；启动请求携带 model，服务端校验可用性后写入 attempt 输入或 run 快照。
 串行与并行 scheduler 从 run.model 派发，Pi runner 显式传入模型且不对失效选择回退；recordModel 回调将实际模型保存到 progress.model。
+
+Pi runner 对首行 `# projectops-verify` 的 bash 按 toolCallId 配对开始和完成事件，把实际 result/isError 交给 runtime.recordVerification，不读取摘要声明。未标记命令不登记，写入失败或未完成事件阻止 succeeded。保留工具返回的截断提示，不沿工具提供的临时路径自动读取其他文件；操作者按证据完整性补充日志。
 
 每次尝试建立独立 `.pops/runtime/pi/<attempt-id>/` session，逐级拒绝 symlink/非目录。执行记录只保存 session ID、模型/加载清单状态与有界进展；不把凭据或 Pi 全量 session 复制进 artifact。
 开始异步返回，runtime 持久化 emit 事件；HTTP steer 使用相同 revision 与请求保护，再调用 handle.steer。停止先 clearQueue 再 abort；完成 await prompt，不使用中间 agent_end 事件。最终 stopReason 区分错误和中止，SDK session 最后 dispose。
@@ -458,6 +461,7 @@ read-pages 提供计算得到的 Plan revision；Web 以已加载 revision 提�
 更新只覆盖完整受管内容；本地修改或损坏安装要求显式 replace 与现场 content_id。逐文件移入唯一备份目录并核验移走的内容，
 再以 `wx` 发布，避免普通编辑器或其他安装器竞争时静默覆盖。新文件竞争失败保留对方目标；移走后发现漂移则尝试
 hard-link no-clobber 恢复，失败仍保留备份与对方目标。记录最后写入；部分完成不是事务，收据公开 changed/backups 与恢复步骤。
+建锁错误区分 EEXIST 占用与 EPERM/EACCES 权限失败；未取得锁的失败不释放或清理对方锁，权限诊断不建议删除锁。
 旧版多余文件、无关内容和备份不自动删除；中断遗留锁需确认无活动安装器后人工移除空目录。
 安全边界分别为静态 containment、正常并发 no-clobber；不要求同用户恶意 ancestor-swap resistance。
 维持受信任本地 Linux、Node.js 22+、无 native helper，不扩展其他平台或自动 crash recovery。

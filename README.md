@@ -307,11 +307,13 @@ Plan 修订采用草案 JSON 输入，先查看变更与受影响任务，再确
 执行操作的完整参数和返回值见 [Agent 操作契约](docs/AGENT_CONTRACT.md#执行记录与验收)。
 执行记录需要已登记的 Git Repo；普通项目登记、Backlog 和文档能力仍不要求 Git。
 
+执行收据可能包含完整代码快照，超过工具输出预算时会被截断。将完整 JSON 保存到本次任务的私有临时文件，检查命令退出码和 JSON 成功字段后，仅提取 `data.attempt.id`、`data.attempt.revision` 等所需字段。若写操作的返回已被截断，先用 `execution show` 以同样方式核对持久化状态，不因解析失败重复提交 `finish`、`verify` 或 `accept`。收据文件可能含代码和执行上下文，不提交到 Git；后续写入使用读回的最新 revision。
+
 
 ### Pi 单任务工作
 
 启用 `--pi` 后，从任务详情填写指示并开始工作。页面自动刷新文本/工具进展，支持追加指示、请求停止、刷新重连和失败后重试。
-追加指示在当前工具轮结束后生效；停止会清空 Pi 队列并等待中止确认。工作结束后查看 diff，再通过 execution verify 记录实际验证，显式接受或要求继续。
+追加指示在当前工具轮结束后生效；停止会清空 Pi 队列并等待中止确认。受管 Pi 用 bash 首行 `# projectops-verify` 标记真实检查，runner 自动保存实际工具结果及当时代码快照。工作结束后查看 diff 与验证证据，缺失或失效时补充 execution verify，再显式接受或要求继续；最终摘要不替代证据。
 
 模型与凭据沿用本机 Pi settings/auth/environment，凭据留在服务端。加载当前 Repo 与祖先的 AGENTS.md、Pi 全局与项目 skills；禁用 extensions、prompt templates 和 themes，工具限定 read/bash/edit/write。
 这不是操作系统 sandbox，适用于受信任本地 workspace。Pi session 保存在 workspace 的 `.pops/runtime/pi/<attempt-id>/`；执行记录保留 session ID 和最近 200 条进展，不复制完整会话。

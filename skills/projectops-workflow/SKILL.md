@@ -21,7 +21,7 @@ description: 使用 ProjectOps pops CLI 推进项目任务、计划、执行验�
 
 1. **确定范围**：list/show 现有任务与计划，读取正文、依赖和 revision。单项任务不制造 Plan；多项计划先 create → show → validate，取得对具体范围的批准后 approve → materialize → show 核对 mapping。已有批准沿用，不重复要求确认。
 2. **选下一项**：用 `plan next` 获取建议，结合实际前置条件决定；空 next 不是完成证明。每次写入使用对应对象最新 revision，task、attempt、Plan、run 的 revision 不可互换。
-3. **执行与验证**：读取契约“执行记录与验收”。外部 Agent 先 create execution 记录，再完成实际工作，以 finish 记录结果。真实运行验证命令并保存输出，然后 verify 引入证据；CLI 不运行 `--command` 字符串。代码或任务输入变化后重新检查证据是否仍有效。
+3. **执行与验证**：读取契约“执行记录与验收”。外部 Agent 先 create execution 记录，再完成实际工作，以 finish 记录结果。真实运行验证命令并保存输出，然后 verify 引入证据；CLI 不运行 `--command` 字符串。受管 Pi 按契约以 bash 首行 `# projectops-verify` 标记真实检查，由 runner 保存工具结果与当时代码快照，不自行调用 finish/verify/accept；普通命令和最终摘要不算验证证据。代码或任务输入变化后重新检查证据是否仍有效。
 4. **验收**：将执行成功、验证通过、验收结论分别记录。确认符合任务验收且在授权范围内，再 accept；已有 execution 不直接改 Backlog done。未通过时保留历史并 rework/retry，不覆盖失败记录。
 5. **结案**：重新核对所有映射任务、run 与证据，使用最新 Plan revision 执行 complete。Report 记录实际验证和文档同步；未完成只能依据用户对具体 partial 范围的明确接受生成 partial。无授权不填虚构接受说明，也不为生成报告改状态。
 

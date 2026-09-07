@@ -190,9 +190,14 @@ export function installSkill(
     try {
       mkdirSync(lock);
       locked = true;
-    } catch {
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== "EEXIST")
+        throw Error(
+          `Cannot create skill installer lock (${code ?? "unknown"}): ${error instanceof Error ? error.message : String(error)}. Check write permissions for .agents/skills; no lock ownership was acquired.`,
+        );
       throw Error(
-        "Skill installer is busy or its lock remains after interruption. Confirm no installer is running before removing the empty .agents/skills/.projectops-workflow.lock directory.",
+        "Skill installer lock already exists (EEXIST). Confirm no installer is running before removing the empty .agents/skills/.projectops-workflow.lock directory.",
       );
     }
     const before = inspect(root, bundle);
