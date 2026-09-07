@@ -5,6 +5,7 @@ import {
   editPlanDependency,
   renderPlanDependencyEditor,
 } from "./planDependenciesUi.js";
+import { mappingTarget } from "./planIdentityView.js";
 import { escapeHtml as e } from "./render.js";
 import type { AppState } from "./types.js";
 
@@ -110,14 +111,15 @@ export function createFoundationUi(
           for (const [taskKey, itemId] of Object.entries(plan.materialization.mapping)) {
             const host = card.querySelector<HTMLElement>(`[data-plan-relations="${taskKey}"]`);
             if (!host) continue;
-            const relationKey = `${state.selectedProjectId}/${itemId}`;
+            const target = mappingTarget(state.selectedProjectId!, itemId);
+            const relationKey = `${target.project}/${target.id}`;
             const value = relations.get(relationKey);
             if (value === undefined) {
               relations.set(relationKey, "正在读取依赖关系…");
               const generation = relationGeneration;
               void api
                 .request<DependencyRelations>(
-                  `${projectPath()}/backlog/${encodeURIComponent(itemId)}/dependencies`,
+                  `/api/projects/${encodeURIComponent(target.project)}/backlog/${encodeURIComponent(target.id)}/dependencies`,
                 )
                 .then((result) => {
                   if (destroyed || generation !== relationGeneration) return;
@@ -144,11 +146,12 @@ export function createFoundationUi(
         }
         const eligible =
           plan?.status === "approved" &&
+          plan.materialization?.state !== "partial" &&
           plan.execution.completion_percent === 100 &&
           !plan.execution.items.some((item) => item.status === "unreadable");
         const completionUi = `<h3>计划完成</h3>${button("complete-plan", "标为完成", !eligible || completion?.busy === true)}${eligible ? "" : '<p class="muted">批准并生成任务后，所有 task 完成即可标记。</p>'}${notice(completion?.message ?? "")}`;
         const editor = plans.get(key);
-        slot.innerHTML = `${completionUi}<h3>计划修订</h3>${editor ? `${renderPlanDependencyEditor(editor.body, editor.dependencyKey ?? "", editor.dependencyProject ?? state.selectedProjectId!, state.workspace?.projects ?? [], editor.candidates ?? [], editor.busy)}<label>计划 JSON 草案<textarea class="form-input" rows="16" data-plan-draft="${e(id)}" ${editor.busy ? "disabled" : ""}>${e(editor.body)}</textarea></label><p>修改后先预览差异，再确认应用。已开始的任务受保护。</p>${button("preview-plan", "预览修订", editor.busy)} ${button("reload-plan", "重读版本并保留计划草案", editor.busy)}${editor.preview ? `<h4>修订差异与受影响任务</h4><pre>${e(JSON.stringify({ changes: editor.preview.changes, affected_items: editor.preview.affected_items }, null, 2))}</pre>${button("confirm-plan", "确认应用修订", editor.busy || !editor.preview.confirmation_token)}` : ""}${notice(editor.message)}` : button("edit-plan", "修订计划")}`;
+        slot.innerHTML = `${completionUi}<h3>计划修订</h3>${editor ? `${renderPlanDependencyEditor(editor.body, editor.dependencyKey ?? "", editor.dependencyProject ?? state.selectedProjectId!, state.workspace?.projects ?? [], editor.candidates ?? [], editor.busy)}<label>计划 JSON 草案<textarea class="form-input" rows="16" data-plan-draft="${e(id)}" ${editor.busy ? "disabled" : ""}>${e(editor.body)}</textarea></label><p>item.project 可指定已注册目标项目；省略时默认 Plan 所属项目。已物化条目的目标项目不可迁移。修改后先预览差异，再确认应用。已开始的任务受保护。</p>${button("preview-plan", "预览修订", editor.busy)} ${button("reload-plan", "重读版本并保留计划草案", editor.busy)}${editor.preview ? `<h4>修订差异与受影响任务</h4><pre>${e(JSON.stringify({ changes: editor.preview.changes, affected_items: editor.preview.affected_items }, null, 2))}</pre>${button("confirm-plan", "确认应用修订", editor.busy || !editor.preview.confirmation_token)}` : ""}${notice(editor.message)}` : button("edit-plan", "修订计划", plan?.materialization?.state === "partial")}`;
       }
     if (focusAttribute && focusValue !== null) {
       const scope = focusPlan

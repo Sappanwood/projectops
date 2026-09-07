@@ -1,17 +1,17 @@
-import { renderModelSelector } from "./modelSelector.js";
-import { formatRoute } from "./router.js";
-import { isReadPage, renderReadPages } from "./readPagesView.js";
+import { type BacklogViewState, emptyBacklogState } from "./backlogController.js";
+import { renderBacklogPanel } from "./backlogView.js";
 import { renderDocs, renderResearch } from "./docsView.js";
+import { renderModelSelector } from "./modelSelector.js";
+import { isReadPage, renderReadPages } from "./readPagesView.js";
+import { formatRoute } from "./router.js";
 import type {
   AppState,
-  ViewType,
   RouteState,
+  ViewType,
   WorkbenchBacklogSummary,
   WorkbenchDiagnostic,
   WorkbenchProjectOverview,
 } from "./types.js";
-import { renderBacklogPanel } from "./backlogView.js";
-import { emptyBacklogState, type BacklogViewState } from "./backlogController.js";
 
 export function escapeHtml(text: string): string {
   return text
@@ -29,7 +29,7 @@ export function renderApp(state: AppState): string {
       ${renderDiagnostics(state.workspace?.diagnostics ?? [], "Workspace Diagnostics")}
       ${renderProjectNav(state)}
       <main id="workbench-content" class="workbench-main" tabindex="-1">
-        ${state.route.returnTo ? `<p><a class="btn btn-secondary" href="${escapeHtml(state.route.returnTo)}">${state.route.returnTo === formatRoute({ projectId: state.selectedProjectId, view: "overview" }) || state.route.returnTo.endsWith("/overview") ? "返回 Overview" : "返回来源页面"}</a></p>` : ""}
+        ${state.route.returnTo ? `<p><a class="btn btn-secondary" href="${escapeHtml(state.route.returnTo)}">${state.route.returnTo === formatRoute({ projectId: state.selectedProjectId, view: "overview" }) || state.route.returnTo.endsWith("/overview") ? "返回 Overview" : /\/plans\/[^/?]+$/.test(state.route.returnTo) ? "返回原 Plan" : "返回来源页面"}</a></p>` : ""}
         ${renderContent(state)}
       </main>
     </div>

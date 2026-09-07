@@ -1,7 +1,8 @@
-import type { ApiClient } from "./apiClient.js";
-import type { AppState } from "./types.js";
 import type { ParallelRun } from "../planRun/parallelRun.js";
+import type { ApiClient } from "./apiClient.js";
+import { planRunRestriction } from "./planIdentityView.js";
 import { escapeHtml as e } from "./render.js";
+import type { AppState } from "./types.js";
 
 type Panel = {
   runs: ParallelRun[];
@@ -90,6 +91,10 @@ export function createParallelRunUi(
       const permission =
         state.readPages?.plans.find((entry) => entry.id === plan)?.execution_policy
           ?.max_parallel === 2;
+      const restriction = planRunRestriction(
+        state.readPages?.plans.find((entry) => entry.id === plan),
+        project,
+      );
       const value = panel(project, plan);
       let slot = card.querySelector<HTMLElement>("[data-parallel-panel]");
       if (!slot) {
@@ -132,7 +137,7 @@ export function createParallelRunUi(
 
       const terminal = run && ["completed", "stopped"].includes(run.state);
       slot.dataset.active = String(active.length > 0);
-      slot.innerHTML = `<h4>有界并行执行</h4><p>${permission ? "计划已显式允许并行，最大容量为 2。" : "计划尚未显式允许并行；请先修订并批准并行许可。"} 每个任务使用独立 checkout，前置任务验收并落地后才解锁依赖。</p>${button("refresh", "刷新并行执行", value.busy)} ${button("create", "创建有界并行执行", value.busy || !permission || state.readPages?.plans.find((entry) => entry.id === plan)?.status === "done")}
+      slot.innerHTML = `${restriction ? `<p class="reading-notice">${e(restriction)}</p>` : ""}<h4>有界并行执行</h4><p>${permission ? "计划已显式允许并行，最大容量为 2。" : "计划尚未显式允许并行；请先修订并批准并行许可。"} 每个任务使用独立 checkout，前置任务验收并落地后才解锁依赖。</p>${button("refresh", "刷新并行执行", value.busy)} ${button("create", "创建有界并行执行", value.busy || !!restriction || !permission || state.readPages?.plans.find((entry) => entry.id === plan)?.status === "done")}
         ${
           active.length
             ? `<div class="run-current"><h5>当前并行运行</h5><ul>${active
@@ -170,12 +175,12 @@ export function createParallelRunUi(
             )
             .join("")}</ol>
           ${run.diagnostics.map((message) => `<p role="alert">${e(message)}</p>`).join("")}
-          ${run.state === "ready" ? button("advance", "启动并行任务", value.busy) : ""}
+          ${run.state === "ready" ? button("advance", "启动并行任务", value.busy || !!restriction) : ""}
           ${
             !terminal
               ? `${button("pause", "暂停并行派发", value.busy || run.state === "paused")}<p>暂停后已运行的任务仍可结束。请进入任务页检查、停止或验收单个任务。</p>
           <label>并行恢复或终止说明<textarea class="form-input" data-parallel-field="note">${e(value.note)}</textarea></label><label>人工核对后的集成 HEAD（仅漂移时填写）<input class="form-input" data-parallel-field="head" value="${e(value.head)}"></label>
-          ${run.state === "paused" ? button("resume", "确认恢复并行派发", value.busy || !value.note.trim()) : ""}
+          ${run.state === "paused" ? button("resume", "确认恢复并行派发", value.busy || !!restriction || !value.note.trim()) : ""}
           ${button("close-stopped", "终止并行执行", value.busy || !value.note.trim() || run.nodes.some((node) => ["running", "unknown", "landing"].includes(node.state)))}`
               : ""
           }
@@ -315,7 +320,14 @@ export function createParallelRunUi(
       const resume = target
         .closest("[data-parallel-panel]")
         ?.querySelector<HTMLButtonElement>('[data-parallel-action="resume"]');
-      if (resume) resume.disabled = value.busy || !value.note.trim();
+      if (resume)
+        resume.disabled =
+          value.busy ||
+          !!planRunRestriction(
+            getState().readPages?.plans.find((entry) => entry.id === plan),
+            project,
+          ) ||
+          !value.note.trim();
       const close = target
         .closest("[data-parallel-panel]")
         ?.querySelector<HTMLButtonElement>('[data-parallel-action="close-stopped"]');

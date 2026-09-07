@@ -1,8 +1,9 @@
-import type { ApiClient } from "./apiClient.js";
-import type { AppState } from "./types.js";
-import type { PlanRun } from "../planRun/planRun.js";
 import type { PlanRunDetail } from "../application/planRunApi.js";
+import type { PlanRun } from "../planRun/planRun.js";
+import type { ApiClient } from "./apiClient.js";
+import { planRunRestriction } from "./planIdentityView.js";
 import { escapeHtml as e } from "./render.js";
+import type { AppState } from "./types.js";
 
 type Panel = {
   runs: PlanRun[];
@@ -84,6 +85,10 @@ export function createPlanRunUi(container: HTMLElement, api: ApiClient, getState
     for (const card of container.querySelectorAll<HTMLElement>("[data-plan-id]")) {
       const plan = card.dataset.planId!,
         project = state.selectedProjectId;
+      const restriction = planRunRestriction(
+        state.readPages?.plans.find((entry) => entry.id === plan),
+        project,
+      );
       const value = panel(project, plan);
       let slot = card.querySelector<HTMLElement>("[data-plan-run-panel]");
       if (!slot) {
@@ -120,9 +125,9 @@ export function createPlanRunUi(container: HTMLElement, api: ApiClient, getState
       const history = value.runs.filter((entry) => ["completed", "stopped"].includes(entry.state));
 
       slot.dataset.active = String(active.length > 0);
-      slot.innerHTML = `<h4>串行执行</h4><p>每次执行冻结计划与任务输入。串行任务逐个运行，前置任务经人工验收后才继续。</p>${button("refresh", "刷新计划执行", value.busy)}
+      slot.innerHTML = `${restriction ? `<p class="reading-notice">${e(restriction)}</p>` : ""}<h4>串行执行</h4><p>每次执行冻结计划与任务输入。串行任务逐个运行，前置任务经人工验收后才继续。</p>${button("refresh", "刷新计划执行", value.busy)}
         <details data-run-details="reuse"><summary>复用已验收任务</summary><p>如需复用已完成任务或外部依赖，逐行填写任务 ID、尝试 ID 和复用说明，以 Tab 分隔。</p><label>复用记录<textarea class="form-input" data-plan-run-field="reuse">${e(value.reuse)}</textarea></label></details>
-        <label>本次计划工作指示<textarea class="form-input" data-plan-run-field="instructions">${e(value.instructions)}</textarea></label>${button("create", "创建串行执行", value.busy || state.readPages?.plans.find((entry) => entry.id === plan)?.status === "done")}
+        <label>本次计划工作指示<textarea class="form-input" data-plan-run-field="instructions">${e(value.instructions)}</textarea></label>${button("create", "创建串行执行", value.busy || !!restriction || state.readPages?.plans.find((entry) => entry.id === plan)?.status === "done")}
         ${
           active.length
             ? `<div class="run-current"><h5>当前串行运行</h5><ul>${active
@@ -148,12 +153,12 @@ export function createPlanRunUi(container: HTMLElement, api: ApiClient, getState
           <details data-run-details="snapshot"><summary>查看本次冻结计划</summary><pre>${e(JSON.stringify(run.plan_snapshot, null, 2))}</pre></details>
           <ol class="run-nodes">${run.nodes.map((node) => `<li><a href="#/projects/${encodeURIComponent(project)}/backlog/${encodeURIComponent(node.item_id)}?plan=${encodeURIComponent(plan)}">${e(node.item_id)} — ${e(node.input.title)}</a><p>${e(labels[node.state] ?? node.state)} · 依赖：${e(node.depends_on.join(", ") || "无")}</p><p>尝试：${e(node.attempt_ids.join(", ") || "尚未启动")}</p>${node.reuse_note ? `<p>复用说明：${e(node.reuse_note)}</p>` : ""}</li>`).join("")}</ol>
           ${run.diagnostics.map((message) => `<p role="alert">${e(message)}</p>`).join("")}
-          ${run.state === "ready" ? button("advance", "启动计划执行", value.busy) : ""}
+          ${run.state === "ready" ? button("advance", "启动计划执行", value.busy || !!restriction) : ""}
           ${
             !["completed", "stopped"].includes(run.state)
               ? `${button("pause", "暂停后续任务", value.busy || run.state === "paused")}${button("stop-current", "停止当前任务", value.busy || !run.nodes.some((node) => node.state === "running"))}
           <label>恢复说明<textarea class="form-input" data-plan-run-field="note">${e(value.note)}</textarea></label><label>人工核对后的基线 digest（仅代码漂移时填写）<input class="form-input" data-plan-run-field="baseline" value="${e(value.baseline)}"></label>
-          ${run.state === "paused" ? `${button("resume", "确认恢复或重试失败任务", value.busy || !value.note.trim())}<p>先核对当前工作已结束；状态未知须进入任务页确认中断。恢复保留所有历史尝试。</p>` : ""}`
+          ${run.state === "paused" ? `${button("resume", "确认恢复或重试失败任务", value.busy || !!restriction || !value.note.trim())}<p>先核对当前工作已结束；状态未知须进入任务页确认中断。恢复保留所有历史尝试。</p>` : ""}`
               : ""
           }
           ${!["completed", "stopped"].includes(run.state) ? button("close-stopped", "终止计划执行", value.busy || !value.note.trim() || run.nodes.some((node) => ["running", "unknown"].includes(node.state))) : ""}<p>本次基线：<code>${e(run.baseline.digest)}</code></p>
@@ -293,7 +298,14 @@ export function createPlanRunUi(container: HTMLElement, api: ApiClient, getState
       const resume = target
         .closest("[data-plan-run-panel]")
         ?.querySelector<HTMLButtonElement>('[data-plan-run-action="resume"]');
-      if (resume) resume.disabled = value.busy || !value.note.trim();
+      if (resume)
+        resume.disabled =
+          value.busy ||
+          !!planRunRestriction(
+            getState().readPages?.plans.find((entry) => entry.id === plan),
+            project,
+          ) ||
+          !value.note.trim();
       const close = target
         .closest("[data-plan-run-panel]")
         ?.querySelector<HTMLButtonElement>('[data-plan-run-action="close-stopped"]');

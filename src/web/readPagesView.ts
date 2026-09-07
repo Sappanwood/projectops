@@ -5,6 +5,7 @@ import type { Report } from "../report/report.js";
 import type { RetrospectiveRecord } from "../retrospective/retrospective.js";
 import { documentLink } from "./docsView.js";
 import { renderReadingBody } from "./markdown.js";
+import { mappingTarget } from "./planIdentityView.js";
 import { escapeHtml as e, renderDiagnostics } from "./render.js";
 import { formatRoute } from "./router.js";
 import type { RouteState } from "./types.js";
@@ -118,7 +119,8 @@ function renderPlan(plan: WorkbenchPlan, projectId: string): string {
       )
       .join("")}</nav>
     <div class="plan-intro" id="${e(plan.id)}--section-goal"><p class="eyebrow">计划目标</p>${plan.goal.length > 220 ? `<details class="goal-toggle" data-reading-key="goal-${e(plan.id)}"><summary><span class="show-source">展开完整目标</span><span class="show-reading">收起目标</span></summary></details>` : ""}<p class="plan-goal">${e(plan.goal)}</p></div>
-    ${renderExecution(plan.execution, projectId, plan.id)}
+    ${mapping?.state === "partial" ? `<p class="reading-notice" role="status">部分物化：已创建 ${Object.keys(mapping.mapping).length}/${plan.items.length} 项。核对已创建任务后，通过 CLI <code>pops plan materialize ${e(projectId)} ${e(plan.id)}</code> 补齐；恢复前不可修订、完成或自动运行。</p>` : ""}
+    ${renderExecution(plan.execution, projectId, plan.id, mapping?.mapping)}
     <section aria-label="既有任务依赖"><h3>既有任务依赖 (${externalRefs.length})</h3><p class="form-help">仅 Plan 内任务计入完成率，既有依赖不生成或复制任务。</p>${externalRefs.length ? `<ul>${externalRefs.map((ref) => `<li>${dependency(ref)}</li>`).join("")}</ul>` : "<p>无既有任务依赖</p>"}</section>
     <section class="plan-workspace" id="${e(plan.id)}--section-work" aria-label="执行工作区"><header><h3>执行工作区</h3><p class="form-help">选择运行方式，查看当前执行与需要处理的任务。串行与并行记录分别保留。</p></header><div data-plan-run-host></div></section>
     ${renderNextTasks(plan.next_tasks, projectId, plan.id)}
@@ -134,13 +136,13 @@ function renderPlan(plan: WorkbenchPlan, projectId: string): string {
                 i,
               ) => `<details class="plan-task" id="${e(taskId(item.key))}" data-reading-key="${e(taskId(item.key))}" ${i === 0 ? "open" : ""}>
       <summary><span class="task-number">${i + 1}</span><span class="task-heading">${e(item.title)}</span><span class="badge badge-priority">${e(item.priority)}</span></summary>
-      <div class="plan-task-content"><div class="item-meta"><span>${item.item_type === "epic" ? "Epic" : "任务"}</span><code>${e(item.key)}</code>${item.parent ? `<span>所属：${e(titleFor(item.parent))}</span>` : ""}</div>
+      <div class="plan-task-content"><div class="item-meta"><span>${item.item_type === "epic" ? "Epic" : "任务"}</span><code>${e(item.key)}</code><span>目标项目：${e(item.project ?? projectId)}${item.project ? "" : "（默认 Plan 所属项目）"}</span>${item.parent ? `<span>所属：${e(titleFor(item.parent))}</span>` : ""}</div>
       <p class="dependency-line" aria-label="Dependencies">${item.depends_on.length ? item.depends_on.map(dependency).join("、") : "无前置依赖"}</p><p>Plan 内下游：${
         plan.items
           .filter((entry) => entry.depends_on.includes(item.key))
           .map((entry) => e(entry.title))
           .join("、") || "无"
-      }</p>${mapping ? `<section data-plan-relations="${e(item.key)}" aria-label="${e(item.title)}的依赖关系"></section>` : ""}
+      }</p>${mapping?.mapping[item.key] ? `<section data-plan-relations="${e(item.key)}" aria-label="${e(item.title)}的依赖关系"></section>` : ""}
       ${renderReadingBody(item.body, `body-${taskId(item.key)}`)}</div></details>`,
             )
             .join("")
@@ -150,14 +152,22 @@ function renderPlan(plan: WorkbenchPlan, projectId: string): string {
       ${
         mapping
           ? `<h4>Materialization mapping</h4><dl>${Object.entries(mapping.mapping)
-              .map(([key, id]) => field(key, id))
+              .map(([key, value]) => {
+                const target = mappingTarget(projectId, value);
+                return `<dt>${e(key)}</dt><dd>${taskLink(projectId, plan.id, target.id, titleFor(key), target.project)}</dd>`;
+              })
               .join("")}</dl>`
           : '<p class="muted">尚未生成 Backlog 条目。</p>'
       }
     </details></details>`;
 }
-function renderExecution(execution: PlanExecution, projectId: string, planId: string): string {
-  if (!execution.materialized)
+function renderExecution(
+  execution: PlanExecution,
+  projectId: string,
+  planId: string,
+  mapping?: Record<string, string>,
+): string {
+  if (!execution.materialized && !mapping)
     return `<section class="plan-execution" id="${e(planId)}--section-progress" aria-label="执行进度"><h3>执行进度</h3><p>未开始执行 · 尚未生成 Backlog 条目。</p></section>`;
   const { counts } = execution;
   const labels = {
@@ -172,15 +182,21 @@ function renderExecution(execution: PlanExecution, projectId: string, planId: st
     ${
       counts.total === 0
         ? "<p>无可执行任务</p>"
-        : `<div class="execution-heading"><strong>${counts.done}/${counts.total} 已完成</strong><span>${execution.completion_percent}%</span></div>
+        : `<div class="execution-heading"><strong>${counts.done}/${counts.total} 已完成</strong><span>${execution.completion_percent === null ? "物化未完成" : `${execution.completion_percent}%`}</span></div>
     <progress aria-label="任务完成进度" value="${counts.done}" max="${counts.total}"></progress>
     <p class="execution-counts">待开始 ${counts.todo} · 进行中 ${counts.in_progress} · 已完成 ${counts.done} · 无法读取 ${counts.unreadable}${counts.blocked ? ` · 受阻 ${counts.blocked}` : ""}${counts.cancelled ? ` · 已取消 ${counts.cancelled}` : ""}</p>`
     }
-    <ul class="execution-items">${execution.items.map((item) => `<li><span>${taskLink(projectId, planId, item.id, item.title)}${item.item_type === "epic" ? "<small> Epic · 不计入完成率</small>" : ""}</span><span class="badge badge-${e(item.status)}">${labels[item.status]}</span>${item.diagnostic ? `<p class="error-message">${e(item.diagnostic.message)}</p>` : ""}</li>`).join("")}</ul>
+    <ul class="execution-items">${execution.items.map((item) => `<li><span>${mapping && !mapping[item.key] ? `${e(item.project ?? projectId)} · ${e(item.title)}（尚未创建）` : taskLink(projectId, planId, item.id, item.title, item.project)}${item.item_type === "epic" ? "<small> Epic · 不计入完成率</small>" : ""}</span><span class="badge badge-${e(item.status)}">${labels[item.status]}</span>${item.diagnostic ? `<p class="error-message">${e(item.diagnostic.message)}</p>` : ""}</li>`).join("")}</ul>
     </section>`;
 }
-function taskLink(projectId: string, planId: string, id: string, title: string): string {
-  return `<a href="${e(formatRoute({ projectId, view: "backlog", itemId: id, planId }))}">${e(id)} — ${e(title)}</a>`;
+function taskLink(
+  owner: string,
+  planId: string,
+  id: string,
+  title: string,
+  projectId = owner,
+): string {
+  return `<a href="${e(formatRoute({ projectId, view: "backlog", itemId: id, ...(projectId === owner ? { planId } : { returnTo: formatRoute({ projectId: owner, view: "plans", planId }) }) }))}">${e(`${projectId}:${id}`)} — ${e(title)}</a>`;
 }
 function renderNextTasks(next: PlanNextSummary, projectId: string, planId: string): string {
   const groups = [
@@ -188,7 +204,7 @@ function renderNextTasks(next: PlanNextSummary, projectId: string, planId: strin
     ["可开始任务", next.ready],
     ["受阻任务", next.blocked],
   ] as const;
-  return `<section class="plan-next"><h3>下一步任务</h3><div class="plan-next-groups">${groups.map(([label, items]) => `<section aria-label="${label}"><h4>${label} (${items.length})</h4>${items.length === 0 ? '<p class="muted">暂无任务</p>' : `<ul>${items.map((item) => `<li>${taskLink(projectId, planId, item.id, item.title)} <span class="badge badge-priority">${e(item.priority)}</span>${"reasons" in item ? `<ul class="dependency-reasons">${item.reasons.map((reason) => `<li>依赖 ${e(reason.id)}：${e(reason.message)}</li>`).join("")}</ul>` : ""}</li>`).join("")}</ul>`}</section>`).join("")}</div>${next.diagnostics.map((d) => `<p class="reading-notice">${e(d.id)}：${e(d.message)}</p>`).join("")}</section>`;
+  return `<section class="plan-next"><h3>下一步任务</h3><div class="plan-next-groups">${groups.map(([label, items]) => `<section aria-label="${label}"><h4>${label} (${items.length})</h4>${items.length === 0 ? '<p class="muted">暂无任务</p>' : `<ul>${items.map((item) => `<li>${taskLink(projectId, planId, item.id, item.title, item.project)} <span class="badge badge-priority">${e(item.priority)}</span>${"reasons" in item ? `<ul class="dependency-reasons">${item.reasons.map((reason) => `<li>依赖 ${e(reason.id)}：${e(reason.message)}</li>`).join("")}</ul>` : ""}</li>`).join("")}</ul>`}</section>`).join("")}</div>${next.diagnostics.map((d) => `<p class="reading-notice">${e(d.id)}：${e(d.message)}</p>`).join("")}</section>`;
 }
 function renderDeliveryReports(plan: WorkbenchPlan, projectId: string): string {
   const reports = plan.delivery_reports;
@@ -249,7 +265,7 @@ function renderReport(report: Report, route: RouteState): string {
     <p>关联计划：${linked(report.plan, report.plan.replace("project-ops:plans/", "").replace(/\.json$/, ""), origin)}</p>
     ${renderReadingBody(report.body, `report-body-${report.id}`, { resolveLink: (url) => referenceLink(url, origin) })}
     <section class="evidence-section">${strings("Verification · 验证证据", report.verification)}${strings("Deviations · 偏离", report.deviations)}${strings("Workarounds · 处理方式", report.workarounds)}</section>
-    <h4>Backlog references</h4>${report.backlog.length === 0 ? empty("backlog results") : `<ul>${report.backlog.map((item) => `<li>${linked(`project-ops:backlog/items/${item.id}.md`, item.id, origin)} <span class="badge">${e(item.status)}</span></li>`).join("")}</ul>`}
+    <h4>Backlog references</h4>${report.backlog.length === 0 ? empty("backlog results") : `<ul>${report.backlog.map((item) => `<li>${linked(`project-ops:backlog/items/${item.id}.md`, `${item.project ?? report.project}:${item.id}`, origin, item.project ?? report.project)} <span class="badge">${e(item.status)}</span></li>`).join("")}</ul>`}
     <h4>Repo docs</h4><ul>${report.repo_docs.map((doc) => `<li>${linked(doc, doc, origin)}</li>`).join("")}</ul>
     <details class="technical-details" data-reading-key="report-records-${e(report.id)}"><summary>报告记录与技术信息</summary>
     <dl>${field("Outcome", report.outcome)}${field("Project", report.project)}${field("Created at", report.created_at)}${field("Plan reference", report.plan)}</dl>
