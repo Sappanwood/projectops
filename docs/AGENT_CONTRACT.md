@@ -472,3 +472,9 @@ status 失联时先读取 ledger 并人工检查命令、cwd、启动时间、�
 `ledger.next`，同样先确认 owner 已停止后单独删除。然后显式 start。端口空闲不能单独证明旧进程全部退出。
 版本不兼容先核对正在受管的服务，再使用相容 CLI 显式 manager stop；不能用新版本自动接管。
 CLI 超时或响应失联不表示操作回滚，先查询 status，避免盲目重复操作。
+
+Workbench 的项目 Overview 可控制同一独立 manager。`GET /api/projects/:id/dev` 只读；`POST` 的 JSON body
+仅允许 `{"action":"start"|"stop"|"restart"}`，不接受 workspace、socket、argv、cwd 或 env。响应沿用 application
+`ok/data` envelope；data 含 `configured`、`hosts_workbench`、`status`（DevStatus）及 `problems`，服务失败事实在
+`status.ok/state/issue` 中，不能将成功 HTTP envelope 误读为启动成功。请求边界/连接错误使用 `ok:false/error`。
+网页不提供 manager stop；承载当前 Workbench 的登记端口禁止 Web/API stop/restart，改用 CLI。

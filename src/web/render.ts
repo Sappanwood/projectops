@@ -388,7 +388,7 @@ function renderOverviewTab(overview: WorkbenchProjectOverview): string {
     overview.backlog.mode === "active"
       ? bCounts.todo + bCounts.in_progress
       : Object.values(bCounts).reduce((sum, count) => sum + count, 0);
-  return `<div class="overview-grid">
+  return `<div data-dev-host></div><div class="overview-grid">
     <section class="overview-card" aria-labelledby="card-plans-title">
       <div class="card-header"><h3 id="card-plans-title">Plans (${overview.plans.length})</h3></div>
       ${overviewPreview(overview, "plans", Math.min(5, overview.plans.length), overview.plans.length)}

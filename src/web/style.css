@@ -1607,3 +1607,25 @@
     width: 100%;
   }
 }
+
+.dev-services {
+  margin-bottom: 1.25rem;
+}
+.dev-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.dev-endpoints {
+  padding-left: 1.25rem;
+}
+.dev-endpoints li {
+  margin-block: 0.75rem;
+  overflow-wrap: anywhere;
+}
+.dev-services pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 16rem;
+  overflow: auto;
+}

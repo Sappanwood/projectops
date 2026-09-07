@@ -1,3 +1,4 @@
+import { handleDevRoute } from "./devRoutes.js";
 import { DEFAULT_PARALLEL_COMMANDS } from "../planRun/commands.js";
 import { handleParallelRunRoute } from "./parallelRunRoutes.js";
 import { listParallelRuns, ParallelRunRuntime } from "../application/parallelRunApi.js";
@@ -209,6 +210,23 @@ async function handleRequest(
   try {
     const url = parseRequestUrl(request, context.origin);
     const segments = decodePathSegments(url.pathname);
+
+    if (
+      await handleDevRoute(segments, request.method, context.workspaceDir, context.origin, {
+        method: (expected) => requireMethod(request, expected),
+        noQuery: () => requireNoQuery(url),
+        body: async (keys) => {
+          requireAllowedOrigin(request, context.origin);
+          requireJsonContentType(request);
+          return readJsonRecord(request, keys);
+        },
+        invalid: (message) => {
+          throw new HttpError(400, "INVALID_REQUEST", message);
+        },
+        send: (result) => sendApplicationResult(response, result),
+      })
+    )
+      return;
 
     if (matches(segments, ["api", "models"])) {
       requireMethod(request, "GET");

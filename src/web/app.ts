@@ -1,3 +1,4 @@
+import { createDevUi } from "./devUi.js";
 import { createParallelRunUi } from "./parallelRunUi.js";
 import { createPlanRunUi } from "./planRunUi.js";
 import { createExecutionUi } from "./executionUi.js";
@@ -79,6 +80,7 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
     },
   );
 
+  const devServices = createDevUi(container, apiClient, () => state);
   const parallelRuns = createParallelRunUi(container, apiClient, () => state);
   const planRuns = createPlanRunUi(container, apiClient, () => state);
   const executions = createExecutionUi(container, apiClient, () => state, refresh);
@@ -120,7 +122,16 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
       )
         ? `${state.selectedProjectId}:${state.backlog.selectedItemId}`
         : null;
+    const active = container.ownerDocument?.activeElement;
+    const devFocus =
+      active?.closest?.("[data-dev-host]") && renderedProject === state.selectedProjectId
+        ? active.id
+        : null;
+    devServices.saveReading();
     container.innerHTML = renderApp(state);
+    devServices.render();
+    if (devFocus)
+      container.querySelector<HTMLElement>(`#${devFocus}`)?.focus({ preventScroll: true });
     foundation.render();
     executions.render();
     planRuns.render();
@@ -688,6 +699,7 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
     destroy() {
       destroyed = true;
       backlog.destroy();
+      devServices.destroy();
       foundation.destroy();
       executions.destroy();
       planRuns.destroy();

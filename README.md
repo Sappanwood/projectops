@@ -407,3 +407,9 @@ CLI 返回后项目继续运行，关闭终端或重启 Workbench 不影响它�
 status 的 failed/unknown 包含诊断及每个进程最多 4096 字符的近期输出。manager 异常失联时不按遗留 PID 接管或 kill，
 status/stop/restart 返回 unknown；人工恢复步骤见 [Agent 契约](docs/AGENT_CONTRACT.md#独立开发服务生命周期)。
 IPC 路径过长、权限问题或版本不兼容会明确报错，不自动改用 TCP 或中断已有服务。
+
+项目 Overview 的“开发服务”区提供查询、启动、重启、停止及具名“打开成果”链接，并列出各进程状态和可展开诊断。
+网页与 CLI 共享独立 manager；浏览或轮询不启动 manager，首次点击启动才按需启动。关闭网页或重启 Workbench
+不会停止其他开发项目。未配置项目通过 manifest/CLI 配置流程登记；unknown 禁止盲重启，连接错误先查询状态。
+如果当前 workspace 的项目 endpoint 端口与实际 Workbench 监听端口一致，网页与 API 禁止停止/重启该项目，
+请改用 `pops dev stop <project>` 或 `pops dev restart <project>`。首版没有网页 manager stop、配置编辑器或实时终端。

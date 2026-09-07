@@ -293,3 +293,10 @@ CLI 从实际 manager 的 running 配置快照获取 ownership；unknown 提供�
 任一进程失败/自然退出清理本项目的兄弟与后代，其他项目继续。停止只发送信号给实际创建的进程组，
 不会 kill 外部端口占用者；manager stop 才停止全部受管项目。启动和停止有界，失败保留诊断与有界近期输出。
 manager 异常退出的遗留记录显示 unknown，不自动接管、恢复、重启或按旧 PID 清理；人工恢复契约见 AGENT_CONTRACT。
+
+Workbench 项目 Overview 提供紧凑开发服务区：项目与进程状态、具名端点、查询/启动/重启/停止及展开诊断。
+加载、未配置、manager 未运行、failed、unknown 和连接错误分别呈现；操作中禁止重复提交，查询失败保留已知状态。
+unknown 不提供启动/重启，恢复使用 CLI 人工核实流程。项目切换废弃旧响应，轮询保留焦点和展开状态。
+Workbench 仅为独立 manager 的客户端，不因页面关闭或自身重启停止项目；不提供网页 manager stop。
+按当前固定 workspace 的 manifest endpoint 与实际监听端口匹配识别承载网页的项目，Web/API 禁止其 stop/restart
+并指向 CLI；不承诺代理入口或未登记端点的自重启识别和自动重连。
