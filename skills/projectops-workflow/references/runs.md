@@ -8,6 +8,8 @@
 | 持续串行派发 | Workbench 同一 runtime 持有 handles；plan-run create 只冻结，不在 CLI 启动短命 Pi |
 | 有限并行 | Plan 显式 max_parallel: 2、节点 parallel 与 resources；未声明不推定许可。parallel-run create 只准备，不派发 |
 
+跨 owner mapping 的 Plan 只使用各任务项目的单任务 execution，由 owner 汇总交付；串行/并行 run 的创建、启动及恢复均拒绝。部分物化先按契约恢复，不启动 run。
+
 单任务、串行、并行共享同项目活动/unknown 排他边界。旧 run 未终止时不复制 Plan、新建 run 或删除记录绕过。
 运行许可也不等于验收许可；进展事件和 Agent 的成功摘要不是验证证据。
 

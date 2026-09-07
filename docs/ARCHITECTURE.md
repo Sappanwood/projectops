@@ -77,7 +77,7 @@ src/
     workbenchReadModel.ts workspace/project 跨领域只读 projection
     docsApi.ts            文档列表与单篇正文的共享 application API
     planDependencies.ts   Plan 混合引用转换、manifest 读取与待写任务覆盖图校验
-    planExecution.ts      Plan mapping 与同项目 Backlog 的实时执行进度 projection
+    planExecution.ts      Plan mapping 与各真实项目 Backlog 的实时执行进度 projection
     planComplete.ts       显式完成 Plan，共享 revision、任务及执行完成校验
     planNext.ts           Plan 查询与共享就绪任务分类、排序、依赖诊断
   server/
@@ -126,7 +126,7 @@ src/
     docsScaffold.ts       application：创建固定 Project Docs 文件
     docsCheck.ts          application：只读检查固定 Project Docs 文件
     reportContext.ts      application：解析已登记 project 的 typed reports root
-    reportGenerate.ts     application：从持久化 materialized Plan 与同项目 Backlog 生成 Report
+    reportGenerate.ts     application：从持久化 materialized Plan 与各映射项目 Backlog 生成 Report
     reportCreate.ts       application：`pops report create` 参数解析与 Report 生成入口
     reportList.ts         application：`pops report list` 摘要查询
     reportShow.ts         application：`pops report show` 完整查询
@@ -216,7 +216,7 @@ SIGTERM，2 秒未退出则 SIGKILL，4 秒仍未退出则报错；随后清理�
 - `INDEX.md` 是从 item 文件重建的可读 projection；add 和真实状态变更后同步刷新，no-op 不改写。
 - Plan：`plans/plan-<title-slug>.json`，schema 为 `plan/Plan@1`；包含标题、目标与带局部 key、parent/依赖的 item 草案，
   以及 `status: draft|approved|done`；批准 Plan 以单个 `approval` 对象记录 `approved_at` 和 `review_note`，materialize 后以
-  `materialization.mapping` 记录局部 key 到 Backlog ID 的映射以及 `materialized_at`。
+  `materialization.mapping` 记录局部 key 到 owner 裸 ID 或 `project:ID` 的映射以及 `materialized_at`。
   无 ASCII slug 的标题使用 Unicode code point 的 `u<hex>` token。create 验证 plans descriptor 为精确 schema type，
   并在写入前验证 plans root 的 canonical 路径仍在 workspace 内；随后使用 `wx` no-clobber 写入。list/show 读取同一
   artifact；`plan materialize` 直接调用 Backlog application helper，按拓扑顺序创建各目标 project 的条目，每项写入后保存 partial mapping，全部完成后移除 partial 标记。
@@ -231,7 +231,7 @@ SIGTERM，2 秒未退出则 SIGKILL，4 秒仍未退出则报错；随后清理�
 - Report：`reports/report-<slug>.md` 使用独立的 `report/Report@1` frontmatter，保存标题、project、`created_at`、outcome、Plan logical reference、
   Backlog 结果、验证证据、偏离、workaround 与 `repo_docs`（Repo-relative 文档路径，如 `README.md`），正文为 Markdown body。Report adapter 只接受 workspace 内的 reports root，拒绝缺失或非目录 root、
   非普通 target、schema 无效文件和已存在 target；写入使用 `wx` no-clobber，序列化不会注入机器绝对路径。
-- Report generation 先从 `plansRoot` 读取并校验指定的已批准、已 materialize Plan，再按 mapping 读取同一 project 的 Backlog 条目；Report 记录所有映射结果，`completed|partial` 只由 task 的实际状态和显式 partial 说明决定，生成失败不写入 Report。CLI 通过 `--verification` 记录验证证据，未完成 task 必须以非空 `--partial-acceptance` 显式接受 partial。
+- Report generation 先从 `plansRoot` 读取并校验指定的已批准、已 materialize Plan，再按完整 mapping 身份读取各真实项目的 Backlog 条目；Report 记录所有映射结果，`completed|partial` 结合 task 实际状态、有效接受、适用 landing 及已有 run/前置证据检查决定；未满足 completed 条件时须显式 partial 接受，生成失败不写入 Report。CLI 通过 `--verification` 记录验证证据，未完成 task 必须以非空 `--partial-acceptance` 显式接受 partial。
 - Retrospective store：`retrospectives/retrospective.json` 声明 `retrospective/Store@1`、记录 schema 与索引 schema；`inbox/`、`active/`、`archive/` 保存 `*.md` 权威记录，`index.json` 和 `INDEX.md` 是可重建派生索引。Retrospective@1 的 `project`、`task` provenance 可为显式 `null`，但不能缺失；triage metadata 使用 `disposition`、`owner_scope`、`categories`、`next_action`、`related_info`，archive metadata 使用 `action_disposition`、`actioned_at`、`backlog`、`resolution_note`，并保留已有的 `next_action`。Store adapter 只接受 manifest descriptor 指定且位于 workspace 内的静态目录，bootstrap 和记录创建均使用 no-clobber；不把 Retrospective 纳入 per-project artifact 状态机。capture/transition 的共享锁按 store 相对路径生成稳定 identity，存放在 workspace `.pops/runtime/retrospectives/`，不写入版本化 Retrospective root。
 - Retrospective capture 只保存调用方提供的证据并强制写入 `inbox/`；Markdown body 必须包含三个非空 section：`Hidden friction encountered`、`Workarounds used` 和 `Improvement candidates`。记录输出的 revision 是 Markdown 文件内容 sha256，列表按相对 path 稳定排序并支持 status/project/task 过滤。显式 ID 与自动 ID 都在共享锁内跨 `inbox/`、`active/`、`archive/` 检查唯一性，自动 suffix 从所有状态和已有重试记录中分配。读取列表将 malformed 记录转换为 diagnostics，避免单个文件破坏 read model；capture 在索引刷新失败时回滚本次文件和完整索引快照，并清理已创建后发生写入错误的部分文件。`triage` 只允许 `inbox → active|archive`，显式要求 `--to` 和非空 `--next-action`；`archive` 只允许 `active → archive`，保留记录已有的 `next_action`，其 `--backlog` 只接受 `project-ops:backlog/items/<PREFIX>-NNN.md`。两者在共享锁内校验 expected revision、静态 regular target 与 no-clobber 目标，失败回滚 source/target/index 快照，成功后重建派生索引。不把 Retrospective 纳入 per-project artifact 状态机。
 
@@ -291,12 +291,12 @@ Overview 回顾 projection 从现有正文派生纯文本 summary，不增加持
 现有文档路径约束保持不变，不为 Overview 枚举扩展文档或另建文件读取实现。
 
 `getWorkbenchReadPages` 返回的 `plans[]` 在 Plan 数据上附加 `execution`，持久化 Plan schema 不变。
-`readPlanExecution` 通过共享 `showBacklogItem` 逐项读取同项目 mapping；局部读取失败只影响该条目，
+`readPlanExecution` 通过共享 `showBacklogItem` 逐项按 mapping 的完整项目身份读取；局部读取失败只影响该条目，
 不使用全量 Backlog 列表失败结果覆盖其他有效任务。`execution` 包含 `materialized`、`counts`、
-`completion_percent` 和按 Plan 顺序的 `items`（key、id、title、item_type、status、可选 diagnostic）。
+`completion_percent` 和按 Plan 顺序的 `items`（key、project、id、title、item_type、status、可选 diagnostic）。
 counts 按 Plan task 统计 total、todo、in_progress、done、blocked、cancelled、unreadable；epic 仅展示。
 缺失、损坏、项目/类型不匹配和不可读取的目标使用计划标题回退及逐项诊断，不泄露本机路径。
-未物化或零 task 的完成百分比为 null；其余为 done/total 百分比向下取整。Web 只渲染该 projection，
+未物化、部分物化或零 task 的完成百分比为 null；其余为 done/total 百分比向下取整。Web 只渲染该 projection，
 Refresh 重建数据，不写 Plan/Backlog 或缓存进度。HTTP 测试验证只读、失败隔离及计数；浏览器测试验证 CLI 更新后的刷新与窄屏显示。
 
 ## Plan 就绪任务查询
@@ -523,7 +523,7 @@ Origin、JSON、body 上限与错误 envelope。返回的 endpoints 优先保留
 | 消费者 | 当前职责 |
 |---|---|
 | `backlog/item.ts`、`backlog/add.ts`、`application/backlogApi.ts`、`useCases/backlogAdd.ts`、`useCases/backlogUpdate.ts` | 保持 Markdown string[] 读写；共享应用层按 manifest 解析目标，创建/替换/移除依赖，revision、自依赖、同身份重复和可达跨项目循环校验；外部只读 |
-| `plan/plan.ts`、`useCases/planMaterialize.ts`、`application/planRevision.ts` | 区分局部拓扑和既有引用；物化保留限定引用，mapping 只拥有本项目新项；修订复用受控同步及输入保护 |
+| `plan/plan.ts`、`useCases/planMaterialize.ts`、`application/planRevision.ts` | 区分局部拓扑和既有引用；物化保留限定引用，mapping 拥有本 Plan 在各目标项目新建的项；修订复用受控同步及输入保护 |
 | `application/planNext.ts`、`application/planExecution.ts`、`application/workbenchReadModel.ts` | 共享完整引用解析与满足规则，直接前置当前状态/接受/landed 诊断；进度仅统计 mapping，自身无 ready 不等于 completed |
 | `application/planRunApi.ts`、`planRun/planRun.ts` | 串行快照中的依赖保持项目身份与满足证据；只创建自身节点，派发前复核外部事实并保留本地接受/reuse 规则 |
 | `application/parallelRunApi.ts`、`planRun/parallelRun.ts` | 外部前置不加入本 Repo DAG 节点；重验依赖与冻结证据，保持本地 landed 与资源门禁 |
@@ -565,9 +565,9 @@ Report 仅把它们作为 verification 说明，不扩大交付任务集合。
 局部节点及修订 pending 节点按真实项目构图。未显式指定项目的普通草案继续允许在 owner Backlog
 初始化前创建；物化写入前必须预检全部目标。普通修订拒绝 partial 和目标迁移。
 
-后续接入点及责任如下（本阶段仅建立身份基础）：
+当前消费者的实现职责如下：
 
-| 消费者 | 完整身份与 partial 的接入责任 |
+| 消费者 | 完整身份与 partial 的当前行为 |
 |---|---|
 | `useCases/planMaterialize.ts` | 按目标 store 写入、限定来源、逐项证据与恢复、完整 no-op |
 | `application/planExecution.ts`、`planNext.ts`、`dependencyReadiness.ts` | 映射项真实项目读取、完整身份去重、外部依赖不计进度 |
@@ -577,7 +577,7 @@ Report 仅把它们作为 verification 说明，不扩大交付任务集合。
 | 串行及并行 run API | 在任何运行副作用前拒绝跨 owner mapping 和 partial |
 | Workbench Plan、Backlog、Report 及导航 | 显示目标项目、真实项目链接、跨项目来源返回 |
 
-所有入口应通过 `planMappingReference(owner, value)` 与 `parsePlanSource(value, itemProject)`
+入口通过 `planMappingReference(owner, value)` 与 `parsePlanSource(value, itemProject)`
 取得完整身份，不通过字符串拼接或任务 ID 前缀推断项目。
 
 
@@ -589,3 +589,12 @@ Report 仅把它们作为 verification 说明，不扩大交付任务集合。
 `plan/materializationRecovery.ts` 用唯一 source 和项目、标题、类型、parent、依赖、正文核对已有条目，
 匹配时复用并重建索引，冲突时返回诊断。Plan 写失败而来源仍存在的重试沿用同一路径，不盲重建。
 这些检查遵循受信任本地 workspace 边界，不提供跨 store 事务或恶意并发防护。
+
+
+### 生命周期与隔离验收
+
+进度和 next 从完整项目身份读取 mapping，既有前置只参与 readiness；partial 保留已知项诊断，但完成率为 null 且不推荐任务。修订 preview 的 affected_items 包含 project/id/revision，confirm 在各 store 校验 revision 与执行历史；跨 store 中途失败报告已应用范围及人工恢复步骤，不宣称回滚。
+
+execution 的可选 `input.plan.project` 保存来源 owner，任务输入及 Repo 快照仍取实际任务项目。complete 与 Report 检查各项目的接受和适用 landing 证据；Report 存于 owner，backlog 保留 project、裸 ID 与相对该项目的 URI，并附 Task evidence。两类 run 在创建、启动、恢复入口拒绝非 owner mapping 和 partial，单项目路径保留。
+
+`tests/three-project-materialization.test.ts` 以 A/B/C 临时 workspace 覆盖 built CLI 创建、批准、向 A/B 物化、no-op、跨项目修订、依赖解锁、独立 execution 接受、owner Report 与 complete；C 的既有任务不写入也不进入 mapping 分母。已有 materialize/completion/run 与浏览器测试覆盖恢复、核心拒绝路径和真实项目导航。不使用真实其他项目或付费模型，现有 owner 相对 mapping/source 无需迁移。

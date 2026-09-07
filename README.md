@@ -279,9 +279,9 @@ capture 的显式和自动 ID 在三个状态目录中保持唯一；运行时�
 - docs scaffold 只写入已登记 project 的固定文档路径；目标为非普通文件或 docs 目录越界时失败，并在 JSON receipt 中返回 `created` 与 `skipped` 清单
 - docs check 不写入 project 文件；缺失、非普通文件或缺少 Markdown 一级标题时返回非零，并在 `--json` 结果中返回稳定的 `problems` 诊断数组
 - 只有校验通过的 draft Plan 才能通过 approve 记录一次批准，批准需要非空 review note
-- 只有 approved Plan 才能 materialize；Plan 会保存每个局部 key 到 Backlog ID 的 `materialization.mapping`，重复执行完整 materialize（含 done Plan）返回 `no_op`
+- 只有 approved Plan 才能 materialize；Plan 会保存每个局部 key 到完整任务身份的 `materialization.mapping`（owner 使用裸 ID，其他项目使用 `project:ID`），重复执行完整 materialize（含 done Plan）返回 `no_op`
 - backlog update 支持 `--expected-revision` 防止覆盖并发修改
-- Report create 从 materialized Plan 和同一 project 的 Backlog 读取实际状态；未完成 task 必须提供非空 `--partial-acceptance`，Report 文件不会覆盖既有文件
+- Report create 从 完整 materialized Plan 和各映射项目的 Backlog 读取实际状态；未完成 task 必须提供非空 `--partial-acceptance`，Report 文件不会覆盖既有文件
 
 
 ## 工作基础能力
@@ -289,7 +289,7 @@ capture 的显式和自动 ID 在三个状态目录中保持唯一；运行时�
 Backlog 详情提供“编辑任务内容”，修改标题和 Markdown 验收要求。冲突时保留草稿，显式重读最新版本后再提交。
 Plan 修订采用草案 JSON 输入，先查看变更与受影响任务，再确认该次预览。已物化计划保留 keys 和 mapping；
 只同步未开始且未独立编辑的任务。已开始、已完成或已有执行历史的任务受保护；物化后增删 key、改变类型或父级
-需另建后续计划，界面和 CLI 会说明原因。
+需另建后续计划，界面和 CLI 会说明原因。物化后的目标项目也不可迁移。
 
 任务详情可查看执行尝试、冻结输入、改动快照、验证和验收结论。失败后重试保留原尝试。
 验收要求执行成功、当前代码上的检查通过、证据完整且任务输入未变化；有执行历史的任务不能绕过验收直接标记 done。
@@ -417,6 +417,14 @@ IPC 路径过长、权限问题或版本不兼容会明确报错，不自动改�
 请改用 `pops dev stop <project>` 或 `pops dev restart <project>`。首版没有网页 manager stop、配置编辑器或实时终端。
 
 
+### Plan 跨项目物化
+
+一份 Plan 可在同一 workspace 向多个已登记且 Backlog 已初始化的项目创建任务。item 的 `project` 默认 Plan owner；局部依赖可跨项目，parent 只能同目标项目。mapping 保存 owner 裸 ID 或 `project:ID`，只统计该 Plan 新建项；物化后不能迁移目标。
+
+物化失败先核对 receipt、Plan 和各目标 Backlog；修复诊断后重试会复用已确认项并补齐，完整重试为 no-op。`state: partial` 期间不能修订、完成、发布 Report 或启动 run。跨项目映射完整后，在各任务实际项目执行和接受单任务 execution，再由 Plan owner 汇总 Report 和 complete；两类自动 run 均拒绝跨 owner mapping。Workbench 提供真实项目链接、返回 owner Plan 和 CLI 恢复提示。
+
+参数和恢复步骤见 [Agent 操作契约](docs/AGENT_CONTRACT.md#向多个项目创建任务)。
+
 ### 跨项目任务与 Plan 依赖
 
 Backlog 创建的 `--depends-on` 支持 `project:ID`；`backlog update --depends-on <完整集合>`
@@ -426,7 +434,7 @@ Backlog 创建的 `--depends-on` 支持 `project:ID`；`backlog update --depends
 
 `plan next` 与 Workbench projection 实时解析跨项目直接前置；依赖详情 API 同时返回“依赖谁／谁依赖我”与不完整诊断。
 串行和并行 run 冻结外部完成依据，每次派发与完成前重验，仍只调度本项目任务。Plan 可先物化，
-run 创建须等待前置满足；依据变化后按显式暂停/恢复或终止后重建处理。Plan/Report 的交付范围只计本项目 mapping。
+run 创建须等待前置满足；依据变化后按显式暂停/恢复或终止后重建处理。Plan/Report 的交付范围只计该 Plan mapping 中的新建项，包括跨项目项；既有前置不计入。
 
 Plan 草案的 `depends_on` 可同时包含局部 key 和既有任务限定引用，例如
 `["client", "mochi:MOC-001", "ccp:CCP-001"]`。先在各项目创建 task，再在产品项目创建、校验、批准和物化 Plan；

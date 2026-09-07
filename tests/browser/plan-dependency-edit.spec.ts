@@ -98,7 +98,7 @@ test("Plan dependency picker revises local and existing tasks and returns from c
     .click();
   await expect(page).toHaveURL(/projects\/empty\/backlog\/EMP-001/);
   await page.reload();
-  await page.getByRole("link", { name: "返回来源页面" }).click();
+  await page.getByRole("link", { name: "返回原 Plan" }).click();
   await expect(page).toHaveURL(/projects\/alpha\/plans\/plan-browser/);
   await expect(card).toContainText("既有依赖 1 项");
   await page.setViewportSize({ width: 1024, height: 900 });

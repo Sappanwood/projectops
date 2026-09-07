@@ -213,11 +213,25 @@ pops plan show projectops "$plan_id" --json
 ```
 
 approve 要求非空 note，仅支持 draft → approved，再次批准会报错。materialize 只接受 approved Plan，
-按父子关系与依赖顺序创建条目，返回 key → Backlog ID 的 `mapping`；Plan 保存 `materialization.mapping`。
-后续从 mapping 读取任务 ID，不预测编号。完整 materialize 的重复执行返回 `no_op: true`。
-外部任务可以为 todo；create/validate/approve 及首次 materialize 校验引用存在、task 身份与可达依赖图，不检查执行就绪。局部 key 转换为本项目 ID，限定引用原样保留；外部任务不复制、不写入、不加入 mapping 或本 Plan 完成率。
+按父子关系与依赖顺序创建条目，返回 key → owner 裸 ID 或 `project:ID` 的 `mapping`；Plan 保存 `materialization.mapping`。
+后续从 mapping 读取完整项目和任务 ID，不预测编号或按 prefix 推断项目。完整 materialize 的重复执行返回 `no_op: true`。
+外部任务可以为 todo；create/validate/approve 及首次 materialize 校验引用存在、task 身份与可达依赖图，不检查执行就绪。局部 key 转换为相对于目标任务项目的 ID 或限定引用，既有限定引用原样保留；外部任务不复制、不写入、不加入 mapping 或本 Plan 完成率。
 修订 preview 与 confirm 均重新校验待写任务覆盖后的依赖图，保留 revision、独立编辑及执行历史保护。重复完整 materialize（含 done Plan）保持 no-op，不随外部任务变化改写既有记录。
 失败后先 show Plan 和 list Backlog 核对现状；Alpha 不承诺跨进程事务或崩溃恢复。
+
+### 向多个项目创建任务
+
+Plan 始终归属于命令指定的 owner；每个 item 可设置 `project`，省略则使用 owner。目标必须在同一 manifest 登记且已有有效 Backlog store，materialize 不自动登记或初始化。局部 key 依赖可跨目标项目，`parent` 只能引用同目标项目的 epic。
+
+例如 owner 为 `app`，草案包含 `{"key":"prepare",...}` 和 `{"key":"service","project":"service","depends_on":["prepare","infra:INF-001"],...}`。物化结果中的 prepare 是 owner 裸 ID，service 为 `service:ID`；infra 的既有项仅作为前置，不新增、不进入 mapping 或进度分母。所有 ID 以实际收据为准。
+
+materialize receipt 包含 `state: complete|partial`、`mapping` 和带项目身份的 `items`。持久化 Plan 的完整记录省略 state；`materialization.state: partial` 表示创建未完成，不能与 Report 的显式 partial 接受混淆。失败时先 show Plan 与各目标 Backlog，依据 receipt、source 和内容核对已写条目；修复报告的写入问题后重试 materialize，复用已确认项并补齐余项。冲突或来源不唯一时先人工核对，不覆盖、删除或盲目重建；Plan 不可读时先恢复 Plan。完整重试为 no-op。
+
+partial 可显示已知进度，但完成百分比为 null、next 不推荐任务；禁止 revise、complete、Report 发布和两类 run。跨项目任务 source 为 `plan:<owner>:<plan-id>#<key>`，本地任务仍可用相对 `plan:<plan-id>#<key>`；按 source 定位 owner，不按任务项目猜 Plan。
+
+完整物化后，`plan next` 的任务含 `project` 与 `id`，在该项目创建单任务 execution。`input.plan.project` 可选，跨 owner 时记录原 Plan 项目；快照与验证使用任务真实 Repo。映射含任何非 owner 项时，两类自动 run 的创建、启动和恢复均拒绝。各任务分别接受后，由 owner 执行 report create / plan complete；Report 的 backlog 记录含真实 `project` 与裸 `id`，URI 相对于该 project，verification 中保留 `Task project:ID` 验收依据。
+
+Workbench 的草案 JSON 修订支持 item.project；物化后不能迁移归属。任务和报告条目链接进入真实项目，跨项目返回通过 `from` 保留 owner Plan；partial 页面提示用 CLI 核对恢复，不提供自动跨 Repo 调度。
 
 ### 混合依赖草案示例
 
@@ -387,7 +401,7 @@ pops plan revise projectops "$plan_id" --input revised-draft.json \
 ```
 
 `plan show` 返回顶层 Plan 和计算得到的 `revision`，输入草案仍为 title/goal/items。
-`plan revise` 返回 `{ok:true,data:{plan,revision,applied,confirmation_token,changes,affected_items}}`；
+CLI `plan revise` 返回顶层 `{ok:true,plan,revision,applied,confirmation_token,changes,affected_items}`；
 首次调用仅预览，不写文件。核对候选与受影响条目后，用完全相同输入、旧 revision 和返回 token 确认：
 
 ```bash
@@ -397,8 +411,9 @@ pops plan revise projectops "$plan_id" --input revised-draft.json \
 
 确认不是自动重试；冲突必须重新读取和预览。用户在当前会话已经明确授权的修订可以直接确认该具体预览。
 已物化计划只修改未开始、无执行历史且未独立编辑的任务；keys/mapping 保持不变。
-物化后新增/移除/改名 key、修改 item_type/parent 返回明确错误，另建后续计划，不手工改 mapping 或复制原任务。
+物化后新增/移除/改名 key、修改 item_type/parent/目标 project 返回明确错误，另建后续计划，不手工改 mapping 或复制原任务。
 已批准 Plan 的修订确认更新 approval note；执行记录中的旧输入快照保持不变。
+`affected_items` 保留每个任务的 project/id/revision。跨 store 修订按各自 revision 核对；中途失败诊断列出已应用项和人工恢复步骤，不做跨 store 事务回滚。先重读 Plan 与已应用任务、核对内容后按诊断恢复，不盲重放旧 token。
 Web 提供对应内容编辑和修订预览，revision 冲突保留草稿，用户显式重读版本后再决定提交。
 
 ## 执行记录与验收
@@ -553,7 +568,7 @@ Workbench 的项目 Overview 可控制同一独立 manager。`GET /api/projects/
 ### 跨项目前置与运行证据
 
 Plan 可以在上游未完成时创建、批准和物化；串行/并行 run 创建要求直接跨项目前置已满足。
-创建被拒绝后，由上游项目推进完成，再重新创建 run。两种运行只派发本项目 mapping；引用不授权跨 Repo 操作。
+创建被拒绝后，由上游项目推进完成，再重新创建 run。两种自动运行仅接受 mapping 全部属于 Plan owner 的计划；跨 owner mapping 的创建、启动及恢复均明确拒绝，改用各项目单任务 execution。引用不授权跨 Repo 操作。
 快照的串行 `cross_project_dependencies`、并行 `external_dependencies` 保存 reference、input、basis
 （done/accepted/landed）、attempt_id、snapshot_digest、verification_digest、landing_digest。
 每次派发、显式恢复和完成资格检查重新读取上游；状态重新打开、取消、输入改变或冻结依据改变会暂停/拒绝。

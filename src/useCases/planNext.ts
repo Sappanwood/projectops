@@ -22,7 +22,7 @@ export function planNext(args: readonly string[], io: CliIO, cwd: string): numbe
   else {
     const data = result.data;
     const row = (item: PlanNextTask) =>
-      `${item.id}  ${item.priority}  ${item.status}  ${item.title}`;
+      `${item.project}:${item.id}  ${item.priority}  ${item.status}  ${item.title}`;
     const lines = [
       `Plan: ${data.plan_id}`,
       `下一项: ${data.next ? row(data.next) : "无可开始任务"}`,

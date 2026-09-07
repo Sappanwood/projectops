@@ -110,7 +110,7 @@ test("three projects deliver a shared facility through mixed Plan dependencies a
   await expect(impact).toContainText(`mochi-write:${consumer.id}`);
   await expect(impact).toContainText(`mochi-write:${mapping.integration}`);
   await page.reload();
-  await page.getByRole("link", { name: "返回来源页面" }).click();
+  await page.getByRole("link", { name: "返回原 Plan" }).click();
   await expect(page).toHaveURL(new RegExp(`projects/mochi-write/plans/${plan.id}`));
 
   done("ccp", facility.id);

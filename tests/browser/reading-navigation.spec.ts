@@ -13,7 +13,7 @@ test("Report links navigate to Docs and Backlog and return to the report", async
   await page.reload();
   await page.getByRole("link", { name: "返回来源页面" }).click();
   await expect(report.locator(".markdown-content")).toBeVisible();
-  await report.getByRole("link", { name: "ALP-001", exact: true }).click();
+  await report.getByRole("link", { name: "alpha:ALP-001", exact: true }).click();
   await expect(page.getByRole("region", { name: "Backlog item detail" })).toContainText(
     "Browser task",
   );

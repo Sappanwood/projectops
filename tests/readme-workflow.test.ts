@@ -226,11 +226,15 @@ test("README workflow is executable for my-app and its MYA backlog", () => {
     assert.equal(report.ok, true);
     assert.equal(report.report.outcome, "completed");
     assert.equal(report.report.plan, "project-ops:plans/plan-release-workflow.json");
-    assert.deepEqual(report.report.verification, ["npm test"]);
+    assert.deepEqual(report.report.verification, [
+      "npm test",
+      "Task my-app:MYA-002; basis: done; attempt: none; snapshot: none; verification: none; landing: none",
+    ]);
     assert.deepEqual(report.report.repo_docs, ["README.md"]);
     assert.deepEqual(report.report.backlog, [
       {
         id: "MYA-002",
+        project: "my-app",
         status: "done",
         revision: report.report.backlog[0]?.revision,
         uri: "project-ops:backlog/items/MYA-002.md",

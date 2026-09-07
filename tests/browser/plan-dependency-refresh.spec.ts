@@ -121,7 +121,7 @@ test("returning from the external project refreshes Plan dependency relations", 
   await relation.getByRole("link", { name: /Shared upstream/ }).click();
   await page.getByRole("button", { name: "done", exact: true }).click();
   await expect(page.getByLabel("Status: done", { exact: true })).toBeVisible();
-  await page.getByRole("link", { name: "返回来源页面" }).click();
+  await page.getByRole("link", { name: "返回原 Plan" }).click();
   await expect(page.getByRole("region", { name: "可开始任务", exact: true })).toContainText(
     "Dependent UI",
   );

@@ -368,7 +368,12 @@ test("end-to-end smoke: Plan lifecycle, Backlog materialization and Delivery Rep
     assert.equal(createdReport.ok, true);
     assert.equal(createdReport.report.outcome, "completed");
     assert.equal(createdReport.report.plan, "project-ops:plans/plan-release-workflow.json");
-    assert.deepEqual(createdReport.report.verification, ["npm test", "npm run typecheck"]);
+    assert.deepEqual(createdReport.report.verification, [
+      "npm test",
+      "npm run typecheck",
+      "Task app:APP-002; basis: done; attempt: none; snapshot: none; verification: none; landing: none",
+      "Task app:APP-003; basis: done; attempt: none; snapshot: none; verification: none; landing: none",
+    ]);
     assert.deepEqual(
       createdReport.report.backlog.map(({ id, status, uri }) => ({ id, status, uri })),
       [

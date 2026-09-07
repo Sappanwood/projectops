@@ -27,12 +27,15 @@ description: 使用 ProjectOps pops CLI 推进项目任务、计划、执行验�
 
 常规命令及返回字段按契约对应章节读取，不另建一份 schema。创建结果不明确时先 list/show，避免重复创建。
 
-## 跨项目依赖
+## 跨项目物化与依赖
 
 - 先从当前 manifest 核对目标项目和实际 task ID。Backlog 使用 `project:ID`，Plan 混用局部 key 与限定既有引用；同项目既有任务也必须限定项目。按契约提交完整依赖集合，更新携带最新 revision，删除全部用空集合。
-- 引用只读连接上游，不复制、不修改或启动外部任务。Plan mapping 和交付范围只含本项目新建项；跨 Repo 操作需要相应授权。
+- 引用只读连接上游，不复制、不修改或启动外部任务。Plan mapping 和交付范围包含该 Plan 在各目标项目的新建项，既有前置不计入；跨 Repo 操作需要相应授权。
 - 上游未完成时可以建立引用并物化 Plan；用 `plan next` 和依赖详情核对阻塞，再在上游项目推进后刷新。缺失/不可读/取消或无有效接受及 landing 的前置不能视为完成。
-- 创建串行/并行 run 前确认跨项目前置满足；运行冻结完成依据，派发、恢复和结案重新验证。依据变化按契约暂停或终止后新建，不手改快照、不用新的 run 绕过诊断。
+- item 的 `project` 默认 Plan owner；跨项目创建前核对所有目标已登记且 Backlog 有效。从 receipt 读取 mapping（owner 裸 ID 或 `project:ID`）和条目项目，不预测 ID；物化后不能修订目标项目。
+- 物化失败先 show Plan 和各目标 Backlog，按 source 与 receipt 核对已创建事实，再修复诊断并重试 materialize；`state: partial` 禁止 revise、complete、Report 和 run，不能当作用户接受的 partial 交付。来源/内容冲突时先人工核对，不删除或盲目重建。
+- 跨 owner mapping 的计划在各任务真实项目创建、验证并接受单任务 execution，由 owner 汇总 complete/Report；两类自动 run 均拒绝创建、启动及恢复。
+- 全部 mapping 属于 owner 时，创建串行/并行 run 前确认跨项目前置满足；运行冻结完成依据，派发、恢复和结案重新验证。依据变化按契约暂停或终止后新建，不手改快照、不用新的 run 绕过诊断。
 
 ## 运行模式与恢复
 

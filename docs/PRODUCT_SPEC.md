@@ -57,7 +57,7 @@ Project Docs 提供四份标准文档直达入口，逐项显示可读性与检�
 - Workspace topology、Backlog、Plan、Report、Docs 和 Retrospective 使用独立 versioned schema。
 - 不建立覆盖所有 artifact 的通用 schema 或生命周期。
 - 跨领域关联使用稳定 logical URI，不把机器绝对路径写入 artifact。
-- Plan 使用 `plan/Plan@1` JSON artifact：包含稳定 ID、标题、目标及以局部 key 关联的 Backlog item 草案，并以 `status: draft|approved|done` 表示生命周期；草案 `parent` 引用局部 epic key，`depends_on` 可混用局部 task key 与同 workspace 既有 task 的 `project:ID` 限定引用。批准 Plan 额外包含一次 `approval` 记录（`approved_at` 与 `review_note`）；materialize 后增加 `materialization` 记录（`materialized_at` 与 `mapping`），保存局部 key 到 Backlog ID 的映射。
+- Plan 使用 `plan/Plan@1` JSON artifact：包含稳定 ID、标题、目标及以局部 key 关联的 Backlog item 草案，并以 `status: draft|approved|done` 表示生命周期；草案 `parent` 引用局部 epic key，`depends_on` 可混用局部 task key 与同 workspace 既有 task 的 `project:ID` 限定引用。批准 Plan 额外包含一次 `approval` 记录（`approved_at` 与 `review_note`）；materialize 后增加 `materialization` 记录（`materialized_at` 与 `mapping`），保存局部 key 到相对于 owner 的裸 ID 或 `project:ID` 的映射。
 - `pops plan materialize` 只接受通过 schema/依赖校验且 status 为 `approved` 的 Plan；先预检全部目标 store 与依赖，再按 parent/dependency 拓扑向各目标项目创建 epic/task，JSON 输出含项目身份的 mutation receipt。已有完整 mapping（含 `done` Plan）的重试为 `no_op`，不创建或改写条目。
 - Plan 完成采用显式 `approved → done`：CLI `pops plan complete` 和 Web“标为完成”共用 application 校验，必须携带当前 Plan revision。
   要求已物化、至少一个 task、全部映射可读且全部 task 为 done；epic 不要求 done。若有串行/并行执行记录，最新记录须通过现有完成与验收/落地证据校验。
@@ -85,7 +85,7 @@ Project Docs 提供四份标准文档直达入口，逐项显示可读性与检�
   verification、deviations、workarounds、repo docs 与 Markdown 正文。Report 正文默认渲染，支持源码切换；技术记录折叠，关联 Plan、Backlog 与 Repo 文档支持跳转和返回。
 - Plan 阅读页突出标题、计划状态与目标，长目标默认显示三行并可展开全文，提供带序号、标题和依赖的任务目录；点击目录定位并展开对应任务。
   任务正文独立展开，审批和 mapping 收入次级记录区；不展示不存在的审批字段。刷新保留展开状态。
-- Plan 的执行进度来自同项目 materialization mapping 对应的实时 Backlog；显示 task 总数、todo、in_progress、done 与无法读取数量。
+- Plan 的执行进度来自 materialization mapping 中各真实项目的实时 Backlog；显示 task 总数、todo、in_progress、done 与无法读取数量。
   epic 不计入完成率；缺失/损坏任务保留在分母，逐项显示 ID、计划标题回退与诊断，有效条目显示实时标题及状态。
   已有 blocked/cancelled 状态按原值显示和计数，均不算完成。未物化显示未开始执行；零 task 显示无可执行任务，二者完成百分比均为 null。
   完成百分比向下取整，只有全部 task done 才显示 100%。刷新重新读取 Backlog，计划状态与执行进度分开呈现，进度查询不自动修改 Plan 生命周期。
@@ -126,7 +126,7 @@ Project Docs 提供四份标准文档直达入口，逐项显示可读性与检�
 - `pops docs check` 只读检查同一固定文档集合：每个目标必须是普通文件并包含客观可识别的 Markdown 一级标题；缺失、非普通文件或缺少标题时返回非零，并在 `--json` 的 `problems` 数组中按固定路径顺序返回全部诊断。
 - docs check 不检查链接完整性、内容新鲜度、措辞质量或跨文档语义一致性。
 - Report 使用独立的 `report/Report@1` Markdown artifact，记录稳定 ID、标题、project、生成时间、`completed|partial` outcome、Plan logical reference、Backlog 状态结果、验证证据、偏离、workaround 和 Repo 文档 repo-relative logical references（例如 `README.md` 或 `docs/ARCHITECTURE.md`）；Report 文件只在已登记 project 的 reports root 内创建，并拒绝覆盖既有文件。
-- Report 生成只接受已持久化、已批准且已 materialize 的单份 Plan，并从同一 project 的 Backlog mapping 读取实际状态；只有所有 task 为 `done` 时生成 `completed`，未完成 task 必须经过显式且带非空说明的 partial 接受。
+- Report 生成只接受已持久化、已批准且已 materialize 的单份 Plan，并从各映射项目的 Backlog 读取实际状态，Report 保留 Plan owner 归属；只有所有 task 为 `done` 时生成 `completed`，未完成 task 必须经过显式且带非空说明的 partial 接受。
 - Report 文本允许 Unicode 文字中的斜杠分隔（如“文本/JSON”“编辑/审批”）；独立或有文本分隔符的机器绝对路径仍被拒绝。写入时移除正文末尾空白，保留内部空白；create 收据保留输入正文，show 不返回文件末尾换行。
 - Retrospective 使用独立的 `retrospective/Retrospective@1` Markdown 记录和 `retrospective/Store@1` store；记录至少包含 `id`、`created_at`、`project`、`task`、`trigger`、`status`、`harness`、`model` 与 Markdown 正文，其中 `project`、`task` 在 provenance 不可用时可显式为 `null`，但缺失字段仍无效。分类后可附带 `disposition`、`owner_scope`、`categories`、`next_action` 和 `related_info`；结案后可附带 `action_disposition`、`actioned_at`、`backlog` 和 `resolution_note`。每个 workspace 的 `.pops/workspace.json` 以顶层 `retrospectives` descriptor（`type: workflow/retrospectives@1`、相对 `root`）表达唯一 workspace-level root；`pops init` 创建该 store。权威记录分别位于 `inbox/`、`active/`、`archive/`，`index.json` 与 `INDEX.md` 可从 Markdown 重建。
 - `pops retrospective capture` 接受调用方提供的 trigger、harness、model（不可得时为 `null`）、可选 project/task 和 Markdown body，只在 `inbox/` 创建新记录；body 必须包含三个非空 Markdown section：`Hidden friction encountered`、`Workarounds used` 和 `Improvement candidates`。输出包含相对 path 与文件内容 sha256 revision。显式 ID 与自动 ID 在共享锁内跨三个状态目录保持唯一，自动 ID 的 suffix 覆盖 active/archive 和此前重试；`list` 支持 status/project/task 过滤并以稳定 path 顺序返回，`show` 返回完整 metadata、revision 和正文。malformed Markdown 在 list 的 diagnostics 中暴露；capture 失败不保留新文件或派生索引漂移。capture 不推断 provenance、不自动分类或执行生命周期流转。
@@ -173,7 +173,7 @@ id、title、priority、status，blocked 额外包含 reasons（依赖 id、code
 ## Plan 与 Backlog 页面联动
 
 Plan 详情中的“下一步任务”展示共享查询返回的进行中、可开始、受阻列表及依赖原因，排序与 `pops plan next` 一致。
-进度和推荐列表中的任务链接进入同项目 Backlog 详情，继续使用现有携带 revision 的状态更新；此导航不自动修改 Plan 或启动执行。
+进度和推荐列表中的任务链接进入任务真实项目的 Backlog 详情，继续使用现有携带 revision 的状态更新；此导航不自动修改 Plan 或启动执行。
 `#/projects/<project>/plans/<plan-id>` 定位并展开 Plan；
 `#/projects/<project>/backlog/<item-id>?plan=<plan-id>` 定位任务并保留同项目来源 Plan。
 “返回原 Plan”重读进度与推荐，清除旧 projection，展开并定位原计划；手动 Refresh 仍可用，无实时推送。
@@ -311,13 +311,13 @@ Workbench 仅为独立 manager 的客户端，不因页面关闭或自身重启�
 - Plan 保留 `plan/Plan@1` 与 `depends_on: string[]`。`prepare` 是该草案局部 key；`projectops:PRO-058`、`mochi:MOC-001` 是既有 task，引用本项目已有任务也必须限定项目。裸 Backlog ID 不是 Plan key。`parent` 仍仅为本 Plan epic 的局部 key，不支持跨项目父子关系。
 - 引用解析的纯函数只校验语法。应用层从当前 workspace manifest 精确路由，校验项目、store prefix、对象 project/id 与 task 类型；未知项目、缺失/不可读对象、损坏数据均给出包含引用身份的诊断。引用不创建、复制或改写上游任务。
 - 创建和依赖编辑校验自依赖、重复身份及从变更节点可达的任务依赖链；用完整身份检测跨项目环。可达对象不可读时拒绝写入，不要求扫描无关项目全部任务。修改以当前 revision 提交完整依赖集合，空集合表示移除全部；失败不改写目标。已有执行输入保护继续适用，引用编辑不绕过活动 run/attempt。
-- Plan create/validate/approve/materialize/revise 校验局部图及既有引用；物化与修订写入前重新校验。上游不必 done 才能建立引用或物化。局部 key 经 mapping 转成本项目 ID，限定引用保留原值。mapping 仅包含本 Plan 新建项，外部任务不进入本 Plan 所有权、进度分母或 completed 范围。完整 mapping 的重复物化保持 no-op；不借重试覆盖数据。
+- Plan create/validate/approve/materialize/revise 校验局部图及既有引用；物化与修订写入前重新校验。上游不必 done 才能建立引用或物化。局部 key 经 mapping 转为相对于目标任务项目的 ID 或限定引用，既有限定引用保留原值。mapping 仅包含本 Plan 新建项，外部任务不进入本 Plan 所有权、进度分母或 completed 范围。完整 mapping 的重复物化保持 no-op；不借重试覆盖数据。
 - 物化后的 Backlog 依赖是执行事实。Plan 修订使用现有 preview/confirm、revision 与受控同步：独立编辑或已有执行历史不能隐式覆盖；Plan 草案不是第二个可独立改写的执行依赖 authority。
 - 就绪判断检查直接前置的当前事实，不递归要求祖先全部 done。上游须为 done；todo/in_progress/blocked/cancelled 均不满足，重新打开后刷新必须重新阻塞。无受管 attempt 的任务以 done 为完成事实；有受管记录时必须具有对应当前输入与验证证据的有效接受，单独 succeeded 不满足；来自并行 run 的接受还必须 landed。取消不视为完成，读取失败不复用缓存解锁。已有本地串行验收与并行 landed 门禁继续保持。
-- Plan 允许先创建和物化；run 创建要求 mapping 外的直接前置（包括同项目既有任务）已满足，否则拒绝创建，待上游完成后可重新创建。运行仅调度自身 mapping，不启动外部 Repo。冻结快照记录完整引用、上游输入/状态与接受或落地依据；每次派发和 Report 资格检查重新读取。冻结后输入变化或依据失效时阻塞/暂停并解释原因，不自动改写快照或扩大执行范围。本项目既有 completed-task reuse note 与证据规则继续适用。
+- Plan 允许先创建和物化；run 创建要求 mapping 外的直接前置（包括同项目既有任务）已满足，否则拒绝创建，待上游完成后可重新创建。自动 run 只接受全部映射属于 Plan owner 的计划，运行仅调度自身 mapping，不启动外部 Repo。冻结快照记录完整引用、上游输入/状态与接受或落地依据；每次派发和 Report 资格检查重新读取。冻结后输入变化或依据失效时阻塞/暂停并解释原因，不自动改写快照或扩大执行范围。本项目既有 completed-task reuse note 与证据规则继续适用。
 - 正向关系列出直接前置及原因；反向关系只读扫描 manifest 已注册项目的 Backlog，使用完整身份匹配。局部损坏返回 diagnostics，并明确结果可能不完整。两种关系都是派生视图，不持久化第二份状态。
 
-当前不提供 workspace Plan、多项目新任务物化、跨 Repo 调度、全局队列或 Capability/Release 对象。存储格式仍为当前字符串数组联合语法，不新增旧版转换或兼容分支，不需要重写现有自身或其他真实项目数据。受支持边界为受信任本地 Linux workspace、Node.js 22+、无新增 native helper；使用 manifest 路由、静态 containment 与既有 revision/no-clobber，不增加恶意 ancestor-swap 或跨项目事务保证。
+当前支持同 workspace 内多项目新任务物化，不提供 workspace Plan、跨 Repo 自动调度、全局队列或 Capability/Release 对象。存储格式仍为当前字符串数组联合语法，不新增旧版转换或兼容分支，不需要重写现有自身或其他真实项目数据。受支持边界为受信任本地 Linux workspace、Node.js 22+、无新增 native helper；使用 manifest 路由、静态 containment 与既有 revision/no-clobber，不增加恶意 ancestor-swap 或跨项目事务保证。
 
 Web 任务详情提供按项目筛选的 task 选择器，展示标题、项目、ID 与状态；添加、移除后以 revision 保存。冲突或引用失效时保留草稿，重读版本后由用户核对再提交。直接前置显示实时满足状态及原因，反向查询显示依赖当前任务的各项目任务；读取不完整时显式显示诊断。
 
@@ -335,7 +335,7 @@ Plan 修订的依赖选择器区分 Plan 内 key 与既有 project:ID，编辑�
 无 `materialization` 表示尚未开始；有记录且 `state: partial` 表示尚未完成，mapping 保存已确认创建项；
 省略 state 表示完整物化，必须覆盖全部 item。partial 不能标为 done 或普通修订，先恢复物化。
 每个条目写入后立即保存 partial mapping；失败 receipt 返回已知 mapping、条目项目/ID 和 diagnostic。重试按唯一 source、项目与草案内容核对已写项，复用并补齐剩余项，同时重建索引；来源重复、内容冲突或 Plan revision 改变时停止，不覆盖或删除已有条目。若 Plan 记录写入失败，仍返回已知事实，后续从 Backlog source 核对恢复；Plan 本身不可读时须先人工核对恢复 Plan。完整 mapping 的重试为 no-op。
-生命周期阶段负责 complete、Report 与两类自动 run 的统一限制。
+partial 禁止 complete、Report 发布（含显式 partial 接受）、普通修订及两类自动 run；进度展示已知项，但完成百分比为 null，next 不推荐任务。完整物化后，各项目按现有单任务流程执行与接受；complete 和 Report 读取各真实项目的验收及适用 landing 证据。任一 mapping 项不属于 owner 时，串行和并行自动 run 的创建、启动及恢复均拒绝。全部映射属于 owner 的运行流程继续可用。
 
 Backlog 来源采用相对或限定语法：`plan:plan-id#key` 相对于任务所属项目，
 跨项目创建项使用 `plan:owner:plan-id#key`。解析结果始终包含 owner、Plan ID 与 item key，
