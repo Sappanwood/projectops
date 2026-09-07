@@ -91,7 +91,9 @@ src/
     router.ts             URL Hash 路由解析、格式化与状态恢复
     apiClient.ts          HTTP API 客户端与网络/格式错误收敛
     backlogController.ts Backlog 列表、详情、revision mutation 与异步响应隔离
-    backlogView.ts        Backlog 分组列表、详情、依赖提示和更新控件
+    backlogView.ts        Backlog 分组列表、详情和状态更新控件
+    dependencyUi.ts       Backlog 依赖编辑与共享正反向关系展示
+    planDependenciesUi.ts Plan local key / 既有引用选择及草案变更
     markdown.ts           各领域共用阅读子集与源码切换，HTML 转义、受限链接和标题回调
     docsView.ts           文档导航、正文、章节目录及相对链接解析
     state.ts              前端状态机核心与不可变状态转移
@@ -309,9 +311,11 @@ Workbench read-pages 在 `plans[].next_tasks` 中复用 `readPlanNext`，不新�
 
 ## Plan 详情导航
 
-前端 `RouteState` 使用可选 itemId/planId 描述 Backlog 详情和来源 Plan，`router.ts` 解析/生成同项目 hash 地址。
+前端 `RouteState` 使用可选 itemId/planId 描述 Backlog 详情和来源 Plan，`router.ts` 解析/生成项目限定 hash 地址；跨项目任务链接以 `returnTo` 保存来源 Plan 或任务。
 `AppState.selectedPlanId` 保留当前导航上下文；read-pages 用 `plans[].next_tasks` 渲染共享查询结果，
-通过真实链接进入现有 Backlog controller，返回链接仍指向同项目 Plan。
+通过真实链接进入所属项目的 Backlog controller，返回链接恢复来源项目及 Plan。
+`dependencyUi.ts` 读取 application 的实时正反向关系，保留读取不完整诊断；依赖草稿单独保存 revision，错误不清空草稿。
+`foundationUi.ts` 将 Plan 依赖选择写入现有 JSON 草案并沿用 revision preview/confirm；物化任务通过同一依赖 API 展示实际关系，成功修订后重新读取。
 `loadBacklogRoute` 在列表加载后按当前地址选择详情，导航计数及 controller generation 丢弃过期响应；
 项目/页面切换清理旧详情。返回 Plan 的 `loadReadPages` 先清除旧 projection，成功后展开、滚动定位并聚焦原 Plan。
 状态更新仍调用现有 Backlog API，不在 Plan 新建状态修改路径。隔离浏览器测试覆盖完整返回流程、

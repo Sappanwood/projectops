@@ -33,7 +33,7 @@ test("Backlog ignores a pending mutation response after switching projects and p
   );
   await controller.load("alpha");
   await controller.select(item.id);
-  assert.match(renderBacklogPanel(controller.getState()), /尚未完成或缺失的依赖：ALP-002/);
+  assert.match(renderBacklogPanel(controller.getState()), /依赖：ALP-002/);
   const update = controller.update("done");
   await controller.update("todo");
   assert.equal(mutations, 1);

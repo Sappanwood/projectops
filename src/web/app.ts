@@ -1,3 +1,4 @@
+import { createDependencyUi } from "./dependencyUi.js";
 import { createDevUi } from "./devUi.js";
 import { createParallelRunUi } from "./parallelRunUi.js";
 import { createPlanRunUi } from "./planRunUi.js";
@@ -85,6 +86,7 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
   const planRuns = createPlanRunUi(container, apiClient, () => state);
   const executions = createExecutionUi(container, apiClient, () => state, refresh);
   const foundation = createFoundationUi(container, apiClient, () => state, refresh);
+  const dependencies = createDependencyUi(container, apiClient, () => state, refresh);
 
   const readingDetails = new Map<string, boolean>();
   const readingPositions = new Map<string, number>();
@@ -123,6 +125,23 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
         ? `${state.selectedProjectId}:${state.backlog.selectedItemId}`
         : null;
     const active = container.ownerDocument?.activeElement;
+    const dependencyFocus =
+      active?.closest?.("[data-dependency-panel], [data-foundation-plan]") &&
+      renderedProject === state.selectedProjectId
+        ? {
+            attribute: [
+              "data-dependency-project",
+              "data-dependency-candidate",
+              "data-dependency-action",
+              "data-plan-dependency-field",
+              "data-plan-draft",
+              "data-foundation-action",
+            ].find((name) => active.hasAttribute(name)),
+            plan: (active.closest("[data-foundation-plan]") as HTMLElement | null)?.dataset
+              .foundationPlan,
+            element: active,
+          }
+        : null;
     const devFocus =
       active?.closest?.("[data-dev-host]") && renderedProject === state.selectedProjectId
         ? active.id
@@ -133,6 +152,18 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
     if (devFocus)
       container.querySelector<HTMLElement>(`#${devFocus}`)?.focus({ preventScroll: true });
     foundation.render();
+    dependencies.render();
+    if (dependencyFocus?.attribute) {
+      const name = dependencyFocus.attribute;
+      const value = dependencyFocus.element.getAttribute(name);
+      const next = Array.from(container.querySelectorAll<HTMLElement>(`[${name}]`)).find(
+        (element) =>
+          element.getAttribute(name) === value &&
+          (element.closest("[data-foundation-plan]") as HTMLElement | null)?.dataset
+            .foundationPlan === dependencyFocus.plan,
+      );
+      next?.focus({ preventScroll: true });
+    }
     executions.render();
     planRuns.render();
     parallelRuns.render();
@@ -701,6 +732,7 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
       backlog.destroy();
       devServices.destroy();
       foundation.destroy();
+      dependencies.destroy();
       executions.destroy();
       planRuns.destroy();
       parallelRuns.destroy();

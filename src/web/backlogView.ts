@@ -35,10 +35,6 @@ export function renderBacklogPanel(state: BacklogViewState): string {
     })
     .join("");
   const item = state.item;
-  const blocked =
-    item?.depends_on.filter(
-      (id) => state.items.find((entry) => entry.id === id)?.status !== "done",
-    ) ?? [];
   let detail = state.detailLoading ? '<p role="status">Loading item…</p>' : "";
   if (state.detailError)
     detail += `<p class="reading-notice" role="alert">${e(state.detailError.code ?? "ERROR")}: ${e(state.detailError.message)}</p>`;
@@ -57,7 +53,7 @@ export function renderBacklogPanel(state: BacklogViewState): string {
         .join(" ")}</div>
       <button class="btn btn-secondary" id="backlog-item-refresh" aria-label="Refresh item" ${state.saving ? "disabled" : ""}>刷新条目</button></div>
       ${item.depends_on.length ? `<p class="dependency-line">依赖：${item.depends_on.map(e).join(", ")}</p>` : ""}
-      ${blocked.length ? `<p class="reading-notice" role="status">尚未完成或缺失的依赖：${blocked.map(e).join(", ")}。请根据实际情况调整状态。</p>` : ""}</header>
+</header>
       ${renderReadingBody(item.body, `backlog-${item.id}`)}
       <details class="technical-details" data-reading-key="backlog-meta-${e(item.id)}"><summary>技术信息</summary><dl><dt>Revision</dt><dd><code>${e(item.revision)}</code></dd><dt>Status</dt><dd>Status: ${e(item.status)}</dd><dt>Dependencies</dt><dd>${item.depends_on.map(e).join(", ") || "None"}</dd></dl></details>`;
   } else if (state.selectedItemId !== null)

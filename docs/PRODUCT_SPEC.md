@@ -303,7 +303,7 @@ Workbench 仅为独立 manager 的客户端，不因页面关闭或自身重启�
 
 ## 跨项目任务依赖契约
 
-本节定义跨项目依赖切片的目标契约。当前已实现引用解析、Backlog CLI/application/HTTP 创建和 revision 保护的依赖集合编辑、Plan 混合引用写入/物化、共享就绪判断、正反向关系查询、受管运行与 Plan/Report 前置保护；Web 依赖编辑和跨项目导航由后续切片接入。
+本节定义跨项目依赖切片的目标契约。当前已实现引用解析、Backlog CLI/application/HTTP 创建和 revision 保护的依赖集合编辑、Plan 混合引用写入/物化、共享就绪判断、正反向关系查询、受管运行与 Plan/Report 前置保护，以及 Web 依赖编辑和跨项目导航。
 
 - Backlog 的 `depends_on: string[]` 使用当前联合语法：`PRO-058` 表示所属项目的任务，`mochi:MOC-001` 表示显式项目与任务。项目名遵循 manifest 的 project ID 规则，ID 遵循 Backlog 格式；不按 ID prefix 推断项目。解析后使用 `{project,item}` 身份，`project:item` 作为比较键；同项目裸 ID 与限定引用视为同一身份，混用重复项必须拒绝。
 - Plan 保留 `plan/Plan@1` 与 `depends_on: string[]`。`prepare` 是该草案局部 key；`projectops:PRO-058`、`mochi:MOC-001` 是既有 task，引用本项目已有任务也必须限定项目。裸 Backlog ID 不是 Plan key。`parent` 仍仅为本 Plan epic 的局部 key，不支持跨项目父子关系。
@@ -316,3 +316,7 @@ Workbench 仅为独立 manager 的客户端，不因页面关闭或自身重启�
 - 正向关系列出直接前置及原因；反向关系只读扫描 manifest 已注册项目的 Backlog，使用完整身份匹配。局部损坏返回 diagnostics，并明确结果可能不完整。两种关系都是派生视图，不持久化第二份状态。
 
 本轮不增加 workspace Plan、多项目新任务物化、跨 Repo 调度、全局队列或 Capability/Release 对象。存储格式仍为当前字符串数组联合语法，不新增旧版转换或兼容分支，不需要重写现有自身或其他真实项目数据。受支持边界为受信任本地 Linux workspace、Node.js 22+、无新增 native helper；使用 manifest 路由、静态 containment 与既有 revision/no-clobber，不增加恶意 ancestor-swap 或跨项目事务保证。
+
+Web 任务详情提供按项目筛选的 task 选择器，展示标题、项目、ID 与状态；添加、移除后以 revision 保存。冲突或引用失效时保留草稿，重读版本后由用户核对再提交。直接前置显示实时满足状态及原因，反向查询显示依赖当前任务的各项目任务；读取不完整时显式显示诊断。
+
+Plan 修订的依赖选择器区分 Plan 内 key 与既有 project:ID，编辑进入同一 JSON 草案并沿用 preview/confirm。任务正文显示局部草案关系，物化任务另读取实际 Backlog 正反向关系。既有引用数量独立列出，不进入本 Plan 自有任务进度。任务链接进入真实所属项目，并将来源 Plan 或任务编码在路由中；刷新和浏览器历史导航保留来源返回入口。

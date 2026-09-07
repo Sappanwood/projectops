@@ -1,12 +1,12 @@
-import { formatRoute } from "./router.js";
+import type { PlanExecution, WorkbenchPlan } from "../application/planExecution.js";
 import type { PlanNextSummary } from "../application/planNext.js";
 import type { WorkbenchReadPages } from "../application/workbenchReadModel.js";
-import { renderReadingBody } from "./markdown.js";
-import type { WorkbenchPlan, PlanExecution } from "../application/planExecution.js";
 import type { Report } from "../report/report.js";
 import type { RetrospectiveRecord } from "../retrospective/retrospective.js";
-import { escapeHtml as e, renderDiagnostics } from "./render.js";
 import { documentLink } from "./docsView.js";
+import { renderReadingBody } from "./markdown.js";
+import { escapeHtml as e, renderDiagnostics } from "./render.js";
+import { formatRoute } from "./router.js";
 import type { RouteState } from "./types.js";
 
 export type ReadPage = "plans" | "reports" | "docs" | "retrospectives";
@@ -94,10 +94,18 @@ function strings(title: string, values: string[]): string {
 }
 function renderPlan(plan: WorkbenchPlan, projectId: string): string {
   const mapping = plan.materialization;
+  const externalRefs = [
+    ...new Set(plan.items.flatMap((item) => item.depends_on.filter((ref) => ref.includes(":")))),
+  ];
+  const dependency = (ref: string) => {
+    if (!ref.includes(":")) return `Plan 内任务：${e(titleFor(ref))} (${e(ref)})`;
+    const [target, id] = ref.split(":");
+    return `既有任务：<a href="${e(formatRoute({ projectId: target!, view: "backlog", itemId: id!, returnTo: formatRoute({ projectId, view: "plans", planId: plan.id }) }))}">${e(ref)}</a>`;
+  };
   const taskId = (key: string) => `${plan.id}--${key}`;
   const titleFor = (key: string) => plan.items.find((item) => item.key === key)?.title ?? key;
   return `<details class="plan-card" data-plan-id="${e(plan.id)}" data-reading-key="${e(plan.id)}"><summary class="plan-summary">
-    <span class="plan-title">${e(plan.title)}</span><span class="plan-summary-meta"><span class="badge badge-${e(plan.status)}">${plan.status === "draft" ? "草案" : plan.status === "done" ? "已完成" : "已批准"}</span><span>${plan.items.length} 项任务</span></span></summary>
+    <span class="plan-title">${e(plan.title)}</span><span class="plan-summary-meta"><span class="badge badge-${e(plan.status)}">${plan.status === "draft" ? "草案" : plan.status === "done" ? "已完成" : "已批准"}</span><span>Plan 内 ${plan.items.filter((item) => item.item_type === "task").length} 项任务 · 既有依赖 ${externalRefs.length} 项</span></span></summary>
     <nav class="plan-section-nav" aria-label="计划区块">${[
       ["goal", "目标"],
       ["progress", "进度"],
@@ -111,6 +119,7 @@ function renderPlan(plan: WorkbenchPlan, projectId: string): string {
       .join("")}</nav>
     <div class="plan-intro" id="${e(plan.id)}--section-goal"><p class="eyebrow">计划目标</p>${plan.goal.length > 220 ? `<details class="goal-toggle" data-reading-key="goal-${e(plan.id)}"><summary><span class="show-source">展开完整目标</span><span class="show-reading">收起目标</span></summary></details>` : ""}<p class="plan-goal">${e(plan.goal)}</p></div>
     ${renderExecution(plan.execution, projectId, plan.id)}
+    <section aria-label="既有任务依赖"><h3>既有任务依赖 (${externalRefs.length})</h3><p class="form-help">仅 Plan 内任务计入完成率，既有依赖不生成或复制任务。</p>${externalRefs.length ? `<ul>${externalRefs.map((ref) => `<li>${dependency(ref)}</li>`).join("")}</ul>` : "<p>无既有任务依赖</p>"}</section>
     <section class="plan-workspace" id="${e(plan.id)}--section-work" aria-label="执行工作区"><header><h3>执行工作区</h3><p class="form-help">选择运行方式，查看当前执行与需要处理的任务。串行与并行记录分别保留。</p></header><div data-plan-run-host></div></section>
     ${renderNextTasks(plan.next_tasks, projectId, plan.id)}
     ${renderDeliveryReports(plan, projectId)}
@@ -126,7 +135,12 @@ function renderPlan(plan: WorkbenchPlan, projectId: string): string {
               ) => `<details class="plan-task" id="${e(taskId(item.key))}" data-reading-key="${e(taskId(item.key))}" ${i === 0 ? "open" : ""}>
       <summary><span class="task-number">${i + 1}</span><span class="task-heading">${e(item.title)}</span><span class="badge badge-priority">${e(item.priority)}</span></summary>
       <div class="plan-task-content"><div class="item-meta"><span>${item.item_type === "epic" ? "Epic" : "任务"}</span><code>${e(item.key)}</code>${item.parent ? `<span>所属：${e(titleFor(item.parent))}</span>` : ""}</div>
-      <p class="dependency-line" aria-label="Dependencies">${item.depends_on.length ? `依赖：${item.depends_on.map((key) => e(titleFor(key))).join("、")}` : "无前置依赖"}</p>
+      <p class="dependency-line" aria-label="Dependencies">${item.depends_on.length ? item.depends_on.map(dependency).join("、") : "无前置依赖"}</p><p>Plan 内下游：${
+        plan.items
+          .filter((entry) => entry.depends_on.includes(item.key))
+          .map((entry) => e(entry.title))
+          .join("、") || "无"
+      }</p>${mapping ? `<section data-plan-relations="${e(item.key)}" aria-label="${e(item.title)}的依赖关系"></section>` : ""}
       ${renderReadingBody(item.body, `body-${taskId(item.key)}`)}</div></details>`,
             )
             .join("")
