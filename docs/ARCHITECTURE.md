@@ -478,3 +478,17 @@ Pi 集成以安装的 0.85.0 类型声明及源码为准，并核对
 本能力独立于 Pi、Workbench 与 Workspace Control。当前配置读操作仅承诺受信任本地 Linux workspace 的静态 symlink
 containment；不抵抗恶意 ancestor swap，不使用 native helper。bind 预检释放 socket 后仍存在正常端口竞争窗口，
 实际启动还须由服务的 strict-port 行为报错，不能将预检成功解释为持有端口。
+
+
+`application/devControl.ts` 暴露 controlDevProject/checkManagedDevProject，CLI 和后续 Web adapter 共享
+`dev/client.ts` 的 Unix IPC。`dev/manager.ts` 是固定 canonical workspace 的独立 Node 入口，
+由显式 start 排他创建 lock.json 后 bootstrap；它不是业务 CLI subprocess，不加载 Pi/Workbench。
+IPC 验证协议版本、workspace 和启动 instance；固定动作只接受项目 ID，不接受命令、环境或 workspace 覆盖。
+每个项目 mutation 串行执行；不同项目拥有独立进程组。`dev/runtime.ts` 保存 child handles、pgid、
+配置快照、状态与有界日志；以 Linux `/proc` 检查非 zombie 组成员，leader exit 不等于后代退出。
+
+`.pops/runtime/dev` 的目录与固定文件拒绝静态 symlink，lock 使用 exclusive create 保证正常并发单 owner；
+socket 权限 0600，文件写入保持在固定 runtime 目录。ledger 用同目录排他临时文件加 rename 发布，
+只是最后 ownership 诊断，不是恢复 authority。manager TERM/INT 清理实际拥有的组；异常消失保留 unknown，
+不信任遗留 PID、不从端口空闲推断所有后代已退出。支持本地 Linux/Node.js 22+，不使用 native helper，
+不承诺 adversarial ancestor swap、跨平台等价或自动崩溃恢复。

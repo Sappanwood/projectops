@@ -284,5 +284,12 @@ argv 和显式 env 可用 `${HOST}` 等占位符引用；保留变量不能覆�
 `pops dev ports` 列出本 manifest 端点并校验配置；`pops dev check <project>` 额外用 loopback bind 探测占用。
 `project doctor` 纳入配置、Repo 内 cwd 的静态 realpath containment 和全 manifest 重复端口检查，不探测实时占用。
 端口号即使配置不同 loopback host 也不能重复。check 能通过运行层提供的精确 owned endpoint 区分已管理端点与外部占用；
-当前 CLI 尚未接入 manager，所有实际占用均视为外部占用。查询不启动服务、不写 manifest、不保留端口。
+CLI 从实际 manager 的 running 配置快照获取 ownership；unknown 提供人工核实诊断。查询不启动服务、不写 manifest、不保留端口。
 跨 Workspace Control 的未启动保留端口无法检测，真实服务登记前须核对工作区 authority。
+
+
+开发服务以项目为启动/停止/重启最小单位。独立 workspace manager 持有 detached 进程组和运行配置快照，
+不依赖 Pi 或 Workbench，CLI/终端退出后继续运行。所有端点 TCP 可达且所有进程存活后报告 running；
+任一进程失败/自然退出清理本项目的兄弟与后代，其他项目继续。停止只发送信号给实际创建的进程组，
+不会 kill 外部端口占用者；manager stop 才停止全部受管项目。启动和停止有界，失败保留诊断与有界近期输出。
+manager 异常退出的遗留记录显示 unknown，不自动接管、恢复、重启或按旧 PID 清理；人工恢复契约见 AGENT_CONTRACT。

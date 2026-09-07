@@ -385,5 +385,25 @@ pops project doctor --json
 
 command 使用 argv；变量只替换 HOST 与端点 PORT/ORIGIN，自动注入对应 env。命令须支持并启用自身 strict-port；
 不通过 shell 执行。cwd 必须静态解析到 Repo 内。doctor 检查全 manifest 重复分配，check 额外探测端口占用。
-查询不会启动项目；本阶段仅交付配置与预检。现有 Workspace Control 服务和端口 authority 保持原状，
+查询不会启动项目。现有 Workspace Control 服务和端口 authority 保持原状，
 登记真实端口前仍须核对工作区保留分配。
+
+
+### 独立开发服务管理
+
+```bash
+pops dev start my-app --json
+pops dev status my-app --json
+pops dev restart my-app --json
+pops dev stop my-app --json
+pops dev manager stop --json
+```
+
+首次显式 start（或已停止项目的 restart）按需启动独立 Node manager；不需要 Pi、Workbench 或 Workspace Control。
+CLI 返回后项目继续运行，关闭终端或重启 Workbench 不影响它。项目端点在 8 秒内全部 TCP 可达且进程仍存活才返回 running；
+这表示端点可打开，不保证业务健康。stop 只停止该项目；manager stop 停止该 workspace 的全部受管项目并退出 manager。
+没有开机自启。只支持受信任本地 Linux workspace；命令必须使用自身 strict-port 行为。
+
+status 的 failed/unknown 包含诊断及每个进程最多 4096 字符的近期输出。manager 异常失联时不按遗留 PID 接管或 kill，
+status/stop/restart 返回 unknown；人工恢复步骤见 [Agent 契约](docs/AGENT_CONTRACT.md#独立开发服务生命周期)。
+IPC 路径过长、权限问题或版本不兼容会明确报错，不自动改用 TCP 或中断已有服务。

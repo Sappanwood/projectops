@@ -448,7 +448,27 @@ pops project doctor --json
 
 ports 返回 `{ok,projects,ports,problems}`，projects 为解析后的配置（command/cwd/env），ports 为
 `{project,endpoint,host,port,origin}`。check 返回 `{ok,project,configuration,ports,problems}`，ports 额外包含
-`status: free|managed|external|error` 及可选 issue。共享接口接受运行层的 owned endpoint；当前 CLI 尚无 manager 接线，
-不会自行声称 managed。无 dev 或未知 project 的 check 返回失败诊断。全 manifest 配置冲突阻止 check 探测。
+`status: free|managed|external|error` 及可选 issue。CLI 通过实际 manager 的 running 配置快照提供 owned endpoint；unknown 会阻止 check 成功。无 dev 或未知 project 的 check 返回失败诊断。全 manifest 配置冲突阻止 check 探测。
 结构无效返回 `{ok:false,error:{code:"DEV_CONFIG_INVALID",message}}`；正常诊断放在 problems，失败均退出 1。
-默认文本输出相同端点与诊断。只支持 ports 与单项目 check，不支持 `--all`；查询不启动进程或写入文件。
+默认文本输出相同端点与诊断。不支持 `--all`；查询不启动进程或写入文件。
+
+
+## 独立开发服务生命周期
+
+`pops dev start/status/stop/restart <project> [--json]` 与 `pops dev manager stop [--json]` 调用同一 typed application/IPC。
+JSON 收据为 `{ok,project,state,manager,endpoints,processes,instance?,issue?,affected?}`；state 为
+`stopped|starting|running|stopping|failed|unknown`，manager 为 `running|stopped|unknown`。
+processes 仅含 name、pid（也是该进程组 ID）、state、最多 4096 字符 log，不返回进程 env 或完整配置；affected 仅用于 manager stop。
+错误返回 `{ok:false,error:{code:"DEV_RUNTIME_ERROR",message}}`，失败退出 1。默认文本显示项目、状态和诊断。
+
+start 可 bootstrap workspace 唯一 manager，restart 对 stopped 等价 start；status、check、stop 不拉起 manager。
+无 manager 返回 stopped，遗留 socket/lock 或活动 ledger 返回 unknown。启动有 8 秒端点就绪期限；停止每组先 TERM 等待
+1 秒，仍有活跃后代则 KILL 再等 1 秒；未确认清理成功的 unknown 禁止重启。IPC 单请求最多 4096 bytes，响应最多 1 MiB，
+请求总等待最多 15 秒。启动 manager 的等待最多 3 秒；并发 start 最多另等 2.5 秒当前 bootstrap，不自动抢旧锁。
+
+`.pops/runtime/dev/` 保存 socket、lock.json、ledger.json（last owner PID/instance/项目状态），不是业务 authority。
+status 失联时先读取 ledger 并人工检查命令、cwd、启动时间、进程组和后代；PID 可能复用，不能直接据此 kill。
+核实所有旧进程已停止后，只删除当前 workspace 的 `socket`、`lock.json`、`ledger.json`；若有中断写入留下的
+`ledger.next`，同样先确认 owner 已停止后单独删除。然后显式 start。端口空闲不能单独证明旧进程全部退出。
+版本不兼容先核对正在受管的服务，再使用相容 CLI 显式 manager stop；不能用新版本自动接管。
+CLI 超时或响应失联不表示操作回滚，先查询 status，避免盲目重复操作。

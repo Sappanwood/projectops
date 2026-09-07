@@ -38,3 +38,10 @@ description: 使用 ProjectOps pops CLI 推进项目任务、计划、执行验�
 ## 隔离演练
 
 验证此入口或演练恢复时，读取 [隔离验证](references/validation.md)。fixture 的批准、执行与验收只证明测试场景，不授权真实计划或真实运行。
+
+
+## 开发服务
+
+项目本体开发进程使用 `pops dev`，不创建 Pi execution 或 Plan run。先按 Agent 契约核对 dev 配置和工作区端口，
+check 后显式 start；status/check 不启动 manager。停止单项目用 dev stop，停止 workspace 全部受管服务才用
+`dev manager stop`。unknown、版本不兼容或 IPC 失联先按契约检查 ownership，不根据遗留 PID kill 或盲目重启。

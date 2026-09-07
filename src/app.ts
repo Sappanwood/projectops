@@ -52,6 +52,9 @@ Commands:
   project list [--json]   List registered projects
   project doctor [--json] Validate workspace topology
   dev ports [--json]      List configured development endpoints
+  dev start/status/stop/restart <project> [--json]
+                         Control independent project development services
+  dev manager stop [--json] Stop this workspace manager and its projects
   dev check <project> [--json]  Check configuration and port availability
   backlog init <project> [--id-prefix <PREFIX>] [--json]  Bootstrap a backlog store
     PREFIX: non-empty ASCII A-Z/0-9, no normalization; conflicts are rejected.
