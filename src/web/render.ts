@@ -29,7 +29,7 @@ export function renderApp(state: AppState): string {
       ${renderDiagnostics(state.workspace?.diagnostics ?? [], "Workspace Diagnostics")}
       ${renderProjectNav(state)}
       <main id="workbench-content" class="workbench-main" tabindex="-1">
-        ${state.route.returnTo ? `<p><a class="btn btn-secondary" href="${escapeHtml(state.route.returnTo)}">${state.route.returnTo === formatRoute({ projectId: state.selectedProjectId, view: "overview" }) || state.route.returnTo.endsWith("/overview") ? "返回 Overview" : /\/plans\/[^/?]+$/.test(state.route.returnTo) ? "返回原 Plan" : "返回来源页面"}</a></p>` : ""}
+        ${state.route.returnTo ? `<p><a class="btn btn-secondary" href="${escapeHtml(state.route.returnTo)}">${state.route.returnTo === formatRoute({ projectId: state.selectedProjectId, view: "overview" }) || state.route.returnTo.endsWith("/overview") ? "返回 Overview" : /\/plans\/[^/?]+(?:\?|$)/.test(state.route.returnTo) ? "返回原 Plan" : "返回来源页面"}</a></p>` : ""}
         ${renderContent(state)}
       </main>
     </div>
@@ -287,15 +287,17 @@ export function renderContent(state: AppState): string {
     if (state.currentView === "research")
       return `<div id="panel-research" role="tabpanel" aria-labelledby="tab-research">${renderResearch(state.research ?? { ...state.docs, list: null, document: null }, state.route)}</div>`;
     let content = '<p role="status">Loading read-only view…</p>';
-    if (state.readPagesError !== null)
-      content = `<p role="alert">${escapeHtml(state.readPagesError.message)}</p><button id="read-pages-retry" class="btn btn-secondary">Retry</button>`;
-    else if (state.readPages !== null)
+    if (state.readPages !== null)
       content = renderReadPages(state.currentView, state.readPages, state.retrospectiveFilters, {
         projectId: state.selectedProjectId,
         planId: state.selectedPlanId,
         reportId: state.selectedReportId,
         route: state.route,
       });
+    if (state.readPagesLoading && state.readPages)
+      content = `<p role="status">正在刷新，暂显示上次读取内容。</p>${content}`;
+    if (state.readPagesError !== null)
+      content = `<p role="alert">${escapeHtml(state.readPagesError.message)}${state.readPages ? " 当前显示上次读取内容，刷新未成功。" : ""}</p><button id="read-pages-retry" class="btn btn-secondary">Retry</button>${state.readPages ? content : ""}`;
     return `<div id="panel-${state.currentView}" role="tabpanel" aria-labelledby="tab-${state.currentView}">${content}</div>`;
   }
   if (state.projectOverview !== null) {
@@ -303,7 +305,7 @@ export function renderContent(state: AppState): string {
       state.currentView,
       state.projectOverview,
       state.backlog,
-      state.selectedPlanId,
+      state.route.returnTo ? null : state.selectedPlanId,
     );
   }
 

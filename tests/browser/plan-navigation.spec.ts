@@ -50,7 +50,7 @@ test("Plan task links update through Backlog and return to fresh progress and re
   const mapping = seed(workbench);
   const before = workbench.snapshot();
   const planBytes = before["ops/alpha/plans/plan-navigation.json"];
-  await page.goto(`${workbench.origin}/#/projects/alpha/plans/plan-navigation`);
+  await page.goto(`${workbench.origin}/#/projects/alpha/plans/plan-navigation?tab=execution`);
   const plan = page.locator('.plan-card[data-plan-id="plan-navigation"]');
   const ready = plan.getByRole("region", { name: "可开始任务" });
   const blocked = plan.getByRole("region", { name: "受阻任务" });
@@ -58,7 +58,9 @@ test("Plan task links update through Backlog and return to fresh progress and re
   await expect(blocked).toContainText(mapping.second);
   await expect(blocked).toContainText(`依赖 ${mapping.first}`);
   await ready.getByRole("link", { name: new RegExp(mapping.first) }).click();
-  await expect(page).toHaveURL(new RegExp(`/backlog/${mapping.first}\\?plan=plan-navigation$`));
+  await expect(page).toHaveURL(
+    new RegExp(`/backlog/${mapping.first}\\?plan=plan-navigation&from=`),
+  );
   const detail = page.getByRole("region", { name: "Backlog item detail" });
   await expect(detail).toContainText("First scope");
   const loaded = JSON.parse(workbench.cli(["backlog", "show", "alpha", mapping.first, "--json"]));
@@ -78,7 +80,7 @@ test("Plan task links update through Backlog and return to fresh progress and re
       .sort(),
   ).toEqual(["ops/alpha/backlog/INDEX.md", `ops/alpha/backlog/items/${mapping.first}.md`]);
   await page.getByRole("link", { name: "返回原 Plan" }).click();
-  await expect(page).toHaveURL(/\/plans\/plan-navigation$/);
+  await expect(page).toHaveURL(/\/plans\/plan-navigation\?tab=execution$/);
   await expect(plan.getByRole("region", { name: "执行进度" })).toContainText("1/2 已完成");
   await expect(ready).toContainText(mapping.second);
   await expect(ready).not.toContainText(mapping.first);
@@ -112,6 +114,7 @@ test("missing deep-linked Backlog target shows error and retains return Plan wit
   );
   await page.getByRole("link", { name: "返回原 Plan" }).click();
   const plan = page.locator('.plan-card[data-plan-id="plan-navigation"]');
+  await page.getByRole("tab", { name: "执行与结果", exact: true }).click();
   await expect(plan.getByRole("region", { name: "执行进度" })).toContainText("无法读取 1");
   await expect(plan.getByRole("region", { name: "可开始任务" })).toContainText(mapping.first);
   expect(workbench.snapshot()).toEqual(before);
@@ -121,9 +124,9 @@ test("missing deep-linked Backlog target shows error and retains return Plan wit
   await expect(
     page.getByRole("region", { name: "Backlog item detail" }).getByRole("alert"),
   ).toContainText("INVALID_ITEM_ID");
-  await expect(page.getByRole("tabpanel")).not.toContainText("First scope");
+  await expect(page.getByRole("tabpanel").first()).not.toContainText("First scope");
   await page.getByRole("link", { name: "返回原 Plan" }).click();
-  await expect(page.getByRole("tabpanel").getByRole("alert")).toContainText(
+  await expect(page.getByRole("tabpanel").first().getByRole("alert")).toContainText(
     "Plan 不存在或无法读取",
   );
 });
@@ -134,7 +137,7 @@ test("cross-project Plan shows real identities and returns to owner progress", a
 }) => {
   const mapping = seed(workbench, true);
   const remoteId = mapping.second.split(":")[1]!;
-  await page.goto(`${workbench.origin}/#/projects/alpha/plans/plan-navigation`);
+  await page.goto(`${workbench.origin}/#/projects/alpha/plans/plan-navigation?tab=execution`);
   const plan = page.locator('[data-plan-id="plan-navigation"]');
 
   await expect(plan).toContainText("目标项目：empty");
@@ -142,9 +145,11 @@ test("cross-project Plan shows real identities and returns to owner progress", a
   await expect(plan.getByRole("button", { name: "创建有界并行执行", exact: true })).toBeDisabled();
   await expect(plan).toContainText("请在各项目分别执行任务");
   const second = plan.locator('[data-plan-relations="second"]');
-  await plan.locator("#plan-navigation--second > summary").click();
+  await page.getByRole("tab", { name: "审阅计划", exact: true }).click();
+  await expect(plan.locator("#plan-navigation--second")).toHaveAttribute("open", "");
   await expect(second).toContainText(mapping.first);
   await expect(second).not.toContainText("INVALID_ITEM_ID");
+  await page.getByRole("tab", { name: "执行与结果", exact: true }).click();
   await plan
     .getByRole("region", { name: "执行进度" })
     .getByRole("link", { name: new RegExp(remoteId) })
@@ -154,9 +159,10 @@ test("cross-project Plan shows real identities and returns to owner progress", a
   await detail.getByRole("button", { name: "done", exact: true }).click();
   await expect(detail).toContainText("Status updated.");
   await page.getByRole("link", { name: "返回原 Plan" }).first().click();
-  await expect(page).toHaveURL(/projects\/alpha\/plans\/plan-navigation$/);
+  await expect(page).toHaveURL(/projects\/alpha\/plans\/plan-navigation\?tab=execution$/);
   await expect(plan.getByRole("region", { name: "执行进度" })).toContainText("1/2 已完成");
   await page.screenshot({ path: "/tmp/pro070-plan-after.png", fullPage: true });
+  await page.getByRole("tab", { name: "审阅计划", exact: true }).click();
   await plan.getByRole("button", { name: "修订计划", exact: true }).click();
   const editor = plan.getByRole("textbox", { name: "计划 JSON 草案" });
   await expect(editor).toContainText('"project": "empty"');
@@ -196,13 +202,15 @@ test("partial materialization exposes known links and CLI recovery without uncre
   planData.materialization.state = "partial";
   delete planData.materialization.mapping.second;
   writeFileSync(file, JSON.stringify(planData));
-  await page.goto(`${workbench.origin}/#/projects/alpha/plans/plan-navigation`);
+  await page.goto(`${workbench.origin}/#/projects/alpha/plans/plan-navigation?tab=execution`);
   const plan = page.locator('[data-plan-id="plan-navigation"]');
   await expect(plan).toContainText("部分物化：已创建 1/2 项");
   await expect(plan).toContainText("pops plan materialize alpha plan-navigation");
   await expect(plan).toContainText("Second navigation task（尚未创建）");
   await expect(plan.locator('a[href*="/backlog/second"]')).toHaveCount(0);
+  await page.getByRole("tab", { name: "审阅计划", exact: true }).click();
   await expect(plan.getByRole("button", { name: "修订计划", exact: true })).toBeDisabled();
+  await page.getByRole("tab", { name: "执行与结果", exact: true }).click();
   await expect(plan.getByRole("button", { name: "创建串行执行", exact: true })).toBeDisabled();
   await expect(plan.getByRole("button", { name: "创建有界并行执行", exact: true })).toBeDisabled();
   await page.screenshot({ path: "/tmp/pro070-partial.png", fullPage: true });

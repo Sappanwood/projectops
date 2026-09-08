@@ -1,14 +1,18 @@
+import type { ModelCatalog } from "../execution/models.js";
+import { type ApiClient, createApiClient } from "./apiClient.js";
+import { createBacklogController } from "./backlogController.js";
 import { createDependencyUi } from "./dependencyUi.js";
 import { createDevUi } from "./devUi.js";
-import { createParallelRunUi } from "./parallelRunUi.js";
-import { createPlanRunUi } from "./planRunUi.js";
+import { emptyDocsState } from "./docsView.js";
 import { createExecutionUi } from "./executionUi.js";
 import { createFoundationUi } from "./foundationUi.js";
+import { rememberModel } from "./modelSelector.js";
+import { createParallelRunUi } from "./parallelRunUi.js";
+import { createPlanReviewUi } from "./planReviewUi.js";
+import { createPlanRunUi } from "./planRunUi.js";
 import { isReadPage } from "./readPagesView.js";
-import { createApiClient, type ApiClient } from "./apiClient.js";
-import { createBacklogController } from "./backlogController.js";
 import { renderApp } from "./render.js";
-import { formatRoute, parseRoute, setupRouter, type Router } from "./router.js";
+import { formatRoute, parseRoute, type Router, setupRouter } from "./router.js";
 import {
   createInitialState,
   selectView,
@@ -21,9 +25,6 @@ import {
   setWorkspaceSuccess,
 } from "./state.js";
 import type { AppState, RouteState } from "./types.js";
-import { emptyDocsState } from "./docsView.js";
-import { rememberModel } from "./modelSelector.js";
-import type { ModelCatalog } from "../execution/models.js";
 
 export type WorkbenchAppOptions = {
   container: HTMLElement;
@@ -85,11 +86,45 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
   const parallelRuns = createParallelRunUi(container, apiClient, () => state);
   const planRuns = createPlanRunUi(container, apiClient, () => state);
   const executions = createExecutionUi(container, apiClient, () => state, refresh);
+  const planReview = createPlanReviewUi(container, () => state);
   const foundation = createFoundationUi(container, apiClient, () => state, refresh);
   const dependencies = createDependencyUi(container, apiClient, () => state, refresh);
 
   const readingDetails = new Map<string, boolean>();
   const readingPositions = new Map<string, number>();
+  const planPositions = new Map<string, { task: string; offset: number }>();
+  const readingFocus = new Map<
+    string,
+    { selector: string; start: number | null; end: number | null }
+  >();
+  function saveFocus() {
+    if (state.currentView !== "plans") return;
+    const active = container.ownerDocument?.activeElement as HTMLInputElement | null;
+    if (!active || !active.closest("[data-plan-id]")) return;
+    const attr = [
+      "data-plan-draft",
+      "data-plan-dependency-field",
+      "data-foundation-action",
+      "data-plan-copy",
+      "data-plan-run-field",
+      "data-parallel-field",
+    ].find((name) => active.hasAttribute(name));
+    const task = active.closest<HTMLElement>(".plan-task");
+    const selector = active.id
+      ? `#${CSS.escape(active.id)}`
+      : attr
+        ? `[${attr}="${CSS.escape(active.getAttribute(attr)!)}"]`
+        : active.tagName === "SUMMARY" && task
+          ? `#${CSS.escape(task.id)} > summary`
+          : null;
+    if (selector)
+      readingFocus.set(formatRoute(state.route), {
+        selector,
+        start: active.selectionStart,
+        end: active.selectionEnd,
+      });
+  }
+
   function saveReadingPosition(): void {
     if (
       typeof window === "undefined" ||
@@ -100,14 +135,48 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
       state.status !== "ready"
     )
       return;
-    readingPositions.set(formatRoute(state.route), window.scrollY);
+    const key = formatRoute(state.route);
+    readingPositions.set(key, window.scrollY);
+    if (state.currentView === "plans" && !state.route.planTab) {
+      const task = Array.from(container.querySelectorAll<HTMLElement>(".plan-task")).find(
+        (element) => element.getBoundingClientRect().bottom > 160,
+      );
+      if (task && task.getBoundingClientRect().top < innerHeight)
+        planPositions.set(key, { task: task.id, offset: task.getBoundingClientRect().top });
+      else planPositions.delete(key);
+    }
   }
   function restoreReadingPosition(): boolean {
     const position = readingPositions.get(formatRoute(state.route));
     if (typeof window === "undefined" || position === undefined) return false;
-    window.scrollTo({ top: position, behavior: "instant" });
+    const key = formatRoute(state.route);
+    const anchor = planPositions.get(key);
+    const task = anchor ? container.ownerDocument.getElementById(anchor.task) : null;
+    window.scrollTo({
+      top:
+        task && anchor
+          ? window.scrollY + task.getBoundingClientRect().top - anchor.offset
+          : position,
+      behavior: "instant",
+    });
+    if (anchor && !task && container.querySelector("[data-plan-id]")) {
+      const notice = container.querySelector("[data-plan-reading-notice]");
+      if (notice) notice.textContent = "原阅读任务已不存在，已返回计划中的有效位置。";
+    }
+    const focus = readingFocus.get(key);
+    const control = focus ? container.querySelector<HTMLInputElement>(focus.selector) : null;
+    if (control && !control.closest("[hidden]")) {
+      control.focus({ preventScroll: true });
+      if (
+        focus?.start != null &&
+        focus.end != null &&
+        ["TEXTAREA", "INPUT"].includes(control.tagName)
+      )
+        control.setSelectionRange(focus.start, focus.end);
+    }
     return true;
   }
+  const runScroll = new Map<string, number>();
   let renderedProject: string | null = null;
   let renderedDoneTarget: string | null = null;
   function render(): void {
@@ -116,6 +185,14 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
       "details[data-reading-key]",
     ) ?? []) {
       readingDetails.set(`${renderedProject}:${detail.dataset.readingKey}`, detail.open);
+    }
+    for (const list of container.querySelectorAll?.<HTMLElement>(".run-nodes") ?? []) {
+      const panel = list.closest<HTMLElement>("[data-plan-run-panel], [data-parallel-panel]");
+      if (panel)
+        runScroll.set(
+          `${renderedProject}/${panel.dataset.planRunPanel ?? panel.dataset.parallelPanel}/${panel.hasAttribute("data-parallel-panel")}/${panel.dataset.selectedRun}`,
+          list.scrollTop,
+        );
     }
     const selectedDone =
       state.currentView === "backlog" &&
@@ -152,6 +229,7 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
     if (devFocus)
       container.querySelector<HTMLElement>(`#${devFocus}`)?.focus({ preventScroll: true });
     foundation.render();
+    planReview.render();
     dependencies.render();
     if (dependencyFocus?.attribute) {
       const name = dependencyFocus.attribute;
@@ -168,6 +246,14 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
     planRuns.render();
     parallelRuns.render();
     renderedProject = state.selectedProjectId;
+    for (const list of container.querySelectorAll?.<HTMLElement>(".run-nodes") ?? []) {
+      const panel = list.closest<HTMLElement>("[data-plan-run-panel], [data-parallel-panel]");
+      if (panel)
+        list.scrollTop =
+          runScroll.get(
+            `${renderedProject}/${panel.dataset.planRunPanel ?? panel.dataset.parallelPanel}/${panel.hasAttribute("data-parallel-panel")}/${panel.dataset.selectedRun}`,
+          ) ?? 0;
+    }
     for (const detail of container.querySelectorAll?.<HTMLDetailsElement>(
       "details[data-reading-key]",
     ) ?? []) {
@@ -283,12 +369,12 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
           ? "reportId"
           : "retrospectiveId";
     for (const detail of container.querySelectorAll?.<HTMLDetailsElement>(
-      "details[data-plan-id], details[data-report-id], details[data-retrospective-id]",
+      "[data-plan-id], details[data-report-id], details[data-retrospective-id]",
     ) ?? []) {
       if (detail.dataset[attribute] !== id) continue;
-      detail.open = true;
+      if (detail.tagName === "DETAILS") detail.open = true;
       detail.scrollIntoView({ block: "start" });
-      detail.querySelector<HTMLElement>("summary")?.focus({ preventScroll: true });
+      detail.querySelector<HTMLElement>(".plan-title, summary")?.focus({ preventScroll: true });
     }
   }
 
@@ -303,7 +389,7 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
     }
     const requestId = currentRequestId;
     const readId = ++readRequestId;
-    state = { ...state, readPages: null, readPagesLoading: true, readPagesError: null };
+    state = { ...state, readPagesLoading: true, readPagesError: null };
     render();
     const result = await apiClient.getReadPages(projectId);
     if (
@@ -316,7 +402,7 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
     state = {
       ...state,
       readPagesLoading: false,
-      readPages: result.ok ? result.data : null,
+      readPages: result.ok ? result.data : state.readPages,
       readPagesError: result.ok ? null : result.error,
     };
     render();
@@ -400,6 +486,7 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
   async function refresh(): Promise<void> {
     if (state.refreshing) return;
     void loadModels();
+    saveFocus();
     saveReadingPosition();
     const requestId = ++currentRequestId;
     state = setRefreshing(state, true);
@@ -467,6 +554,7 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
       formatRoute(route) === formatRoute(state.route)
     )
       return;
+    saveFocus();
     saveReadingPosition();
     const previousRoute = state.route;
     state = { ...state, route };
@@ -476,6 +564,31 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
       selectedReportId: route.reportId ?? null,
     };
 
+    if (
+      route.view === "plans" &&
+      previousRoute.view === "plans" &&
+      route.projectId === previousRoute.projectId &&
+      route.planId === previousRoute.planId &&
+      state.readPages &&
+      route.planTab !== previousRoute.planTab
+    ) {
+      const tabNavigation = container.ownerDocument.activeElement?.closest(".plan-section-nav");
+      const execution = route.planTab === "execution";
+      for (const panel of container.querySelectorAll<HTMLElement>(".plan-card > [role=tabpanel]"))
+        panel.hidden = panel.id.endsWith("-execution") !== execution;
+      for (const tab of container.querySelectorAll<HTMLElement>(".plan-section-nav [role=tab]")) {
+        const selected = tab.id.endsWith("-execution") === execution;
+        tab.setAttribute("aria-selected", String(selected));
+        tab.tabIndex = selected ? 0 : -1;
+        if (selected) tab.focus({ preventScroll: true });
+      }
+      if (!restoreReadingPosition()) window.scrollTo({ top: 0, behavior: "instant" });
+      if (tabNavigation)
+        container
+          .querySelector<HTMLElement>('.plan-section-nav [aria-selected="true"]')
+          ?.focus({ preventScroll: true });
+      return;
+    }
     if (state.workspace === null || state.status === "loading") {
       if (state.status === "loading") {
         state = {
@@ -552,6 +665,8 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
       if ((isReadPage(route.view) || route.view === "research") && route.projectId !== null)
         void loadReadPages(route.projectId);
     } else {
+      if (route.view === "plans" && previousRoute.planId !== route.planId)
+        state = { ...state, readPages: null };
       render();
       if (route.view === "backlog" && route.projectId !== null) {
         backlog.reset();
@@ -607,6 +722,17 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
       return;
     }
 
+    const expand = target.closest<HTMLElement>("[data-plan-expand]");
+    if (expand) {
+      for (const task of container.querySelectorAll<HTMLDetailsElement>(".plan-task"))
+        task.open = expand.dataset.planExpand === "true";
+      return;
+    }
+    const toc = target.closest<HTMLElement>(".plan-toc-toggle");
+    if (toc) {
+      toc.setAttribute("aria-expanded", String(toc.getAttribute("aria-expanded") !== "true"));
+      return;
+    }
     const taskLink = target.closest<HTMLButtonElement>("[data-plan-target]");
     if (taskLink !== null) {
       const detail = container.ownerDocument.getElementById(
@@ -718,6 +844,27 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
   container.addEventListener("change", handleChange);
 
   // Initial load
+  function onPlanTabKey(event: KeyboardEvent) {
+    const target = event.target as HTMLElement;
+    if (!target.closest?.('.plan-section-nav [role="tab"]')) return;
+    const tabs = Array.from(
+      container.querySelectorAll<HTMLAnchorElement>('.plan-section-nav [role="tab"]'),
+    );
+    const current = tabs.indexOf(target as HTMLAnchorElement);
+    const index =
+      event.key === "Home"
+        ? 0
+        : event.key === "End"
+          ? tabs.length - 1
+          : ["ArrowLeft", "ArrowRight"].includes(event.key)
+            ? (current + 1) % tabs.length
+            : -1;
+    if (index < 0) return;
+    event.preventDefault();
+    tabs[index]?.focus();
+    tabs[index]?.click();
+  }
+  container.addEventListener("keydown", onPlanTabKey);
   const initialRoute = router.getCurrentRoute();
   void loadWorkspaceAndCurrentProject(initialRoute);
   void loadModels();
@@ -732,6 +879,7 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
       backlog.destroy();
       devServices.destroy();
       foundation.destroy();
+      planReview.destroy();
       dependencies.destroy();
       executions.destroy();
       planRuns.destroy();
@@ -739,6 +887,7 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
       container.removeEventListener("submit", handleSubmit);
       container.removeEventListener("click", handleClick);
       container.removeEventListener("change", handleChange);
+      container.removeEventListener("keydown", onPlanTabKey);
       router.cleanup();
       if (typeof window !== "undefined")
         window.removeEventListener("projectops-mermaid-ready", render);

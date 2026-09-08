@@ -2,10 +2,13 @@ import type { PlanRunDetail } from "../application/planRunApi.js";
 import type { PlanRun } from "../planRun/planRun.js";
 import type { ApiClient } from "./apiClient.js";
 import { planRunRestriction } from "./planIdentityView.js";
+import { renderRunNotice } from "./planRunNotice.js";
 import { escapeHtml as e } from "./render.js";
+import { formatRoute } from "./router.js";
 import type { AppState } from "./types.js";
 
 type Panel = {
+  loaded: boolean;
   runs: PlanRun[];
   selected: string;
   busy: boolean;
@@ -33,6 +36,7 @@ const button = (action: string, label: string, disabled = false) =>
 export function createPlanRunUi(container: HTMLElement, api: ApiClient, getState: () => AppState) {
   const panels = new Map<string, Panel>();
   let destroyed = false;
+  let projection: AppState["readPages"] = null;
   const key = (project: string, plan: string) => `${project}/${plan}`;
   const base = (project: string) => `/api/projects/${encodeURIComponent(project)}/plan-runs`;
   function panel(project: string, plan: string): Panel {
@@ -40,6 +44,7 @@ export function createPlanRunUi(container: HTMLElement, api: ApiClient, getState
     let value = panels.get(id);
     if (!value) {
       value = {
+        loaded: false,
         runs: [],
         selected: "",
         busy: false,
@@ -62,6 +67,7 @@ export function createPlanRunUi(container: HTMLElement, api: ApiClient, getState
       `${base(project)}?plan_id=${encodeURIComponent(plan)}`,
     );
     if (destroyed || request !== value.request) return;
+    value.loaded = true;
     if (result.ok) {
       value.runs = result.data.runs;
       if (!value.selected)
@@ -82,14 +88,29 @@ export function createPlanRunUi(container: HTMLElement, api: ApiClient, getState
       !state.selectedProjectId
     )
       return;
+    const refreshed = projection !== state.readPages;
+    projection = state.readPages;
     for (const card of container.querySelectorAll<HTMLElement>("[data-plan-id]")) {
       const plan = card.dataset.planId!,
         project = state.selectedProjectId;
+      if (!state.readPages?.plans.some((entry) => entry.id === plan)) continue;
       const restriction = planRunRestriction(
         state.readPages?.plans.find((entry) => entry.id === plan),
         project,
       );
       const value = panel(project, plan);
+      if (refreshed && value.loaded) {
+        value.message = "";
+        void load(project, plan, value);
+      }
+      renderRunNotice(
+        card.querySelector("[data-plan-run-notice]"),
+        "串行执行",
+        value.runs,
+        state.route,
+        value.loaded,
+        value.message,
+      );
       let slot = card.querySelector<HTMLElement>("[data-plan-run-panel]");
       if (!slot) {
         slot = container.ownerDocument.createElement("section");
@@ -151,7 +172,7 @@ export function createPlanRunUi(container: HTMLElement, api: ApiClient, getState
             ? `${["completed", "stopped"].includes(run.state) ? `<details data-run-details="record-${e(run.id)}" class="run-history"><summary>查看串行历史详情 · ${e(labels[run.state] ?? run.state)}</summary>` : ""}<article class="run-detail"><h4>${e(run.plan_snapshot.title)} · ${e(labels[run.state] ?? run.state)}</h4><p>执行 ID：${e(run.id)} · 冻结计划 revision：${e(run.plan_revision)} · 并发容量：${run.capacity}</p>
           ${run.model ? `<p>固定模型：${e(run.model.provider)}/${e(run.model.id)}</p>` : ""}
           <details data-run-details="snapshot"><summary>查看本次冻结计划</summary><pre>${e(JSON.stringify(run.plan_snapshot, null, 2))}</pre></details>
-          <ol class="run-nodes">${run.nodes.map((node) => `<li><a href="#/projects/${encodeURIComponent(project)}/backlog/${encodeURIComponent(node.item_id)}?plan=${encodeURIComponent(plan)}">${e(node.item_id)} — ${e(node.input.title)}</a><p>${e(labels[node.state] ?? node.state)} · 依赖：${e(node.depends_on.join(", ") || "无")}</p><p>尝试：${e(node.attempt_ids.join(", ") || "尚未启动")}</p>${node.reuse_note ? `<p>复用说明：${e(node.reuse_note)}</p>` : ""}</li>`).join("")}</ol>
+          <ol class="run-nodes">${run.nodes.map((node) => `<li><a href="#/projects/${encodeURIComponent(project)}/backlog/${encodeURIComponent(node.item_id)}?plan=${encodeURIComponent(plan)}&amp;from=${encodeURIComponent(formatRoute({ projectId: project, view: "plans", planId: plan, planTab: "execution" }))}">${e(node.item_id)} — ${e(node.input.title)}</a><p>${e(labels[node.state] ?? node.state)} · 依赖：${e(node.depends_on.join(", ") || "无")}</p><p>尝试：${e(node.attempt_ids.join(", ") || "尚未启动")}</p>${node.reuse_note ? `<p>复用说明：${e(node.reuse_note)}</p>` : ""}</li>`).join("")}</ol>
           ${run.diagnostics.map((message) => `<p role="alert">${e(message)}</p>`).join("")}
           ${run.state === "ready" ? button("advance", "启动计划执行", value.busy || !!restriction) : ""}
           ${
@@ -166,8 +187,10 @@ export function createPlanRunUi(container: HTMLElement, api: ApiClient, getState
             : ""
         }
         ${value.message ? `<p role="alert">${e(value.message)}</p>` : ""}`;
-      for (const detail of slot.querySelectorAll<HTMLDetailsElement>("details"))
+      for (const detail of slot.querySelectorAll<HTMLDetailsElement>("details")) {
+        detail.dataset.readingKey = `${plan}--runDetails-${value.selected}-${detail.dataset.runDetails}`;
         if (opened.has(detail.dataset.runDetails)) detail.open = true;
+      }
       const nodeList = slot.querySelector<HTMLElement>(".run-nodes");
       if (nodeList) nodeList.scrollTop = nodeScrollTop;
       if (focusAttribute) {

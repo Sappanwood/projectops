@@ -83,8 +83,8 @@ Project Docs 提供四份标准文档直达入口，逐项显示可读性与检�
   workspace Retrospective 记录；不接受 query 参数、文件路径或 mutation。Plan 可展开 goal、status、approval、
   materialization mapping 和带 parent/dependencies 的 item；Report 可展开 outcome、Plan/Backlog references、
   verification、deviations、workarounds、repo docs 与 Markdown 正文。Report 正文默认渲染，支持源码切换；技术记录折叠，关联 Plan、Backlog 与 Repo 文档支持跳转和返回。
-- Plan 阅读页突出标题、计划状态与目标，长目标默认显示三行并可展开全文，提供带序号、标题和依赖的任务目录；点击目录定位并展开对应任务。
-  任务正文独立展开，审批和 mapping 收入次级记录区；不展示不存在的审批字段。刷新保留展开状态。
+- Plan 列表按草案、已批准、已完成分组，草案优先，同组按 ID 排序。详情独立展示单份计划，默认“审阅计划” Tab，完整目标与默认展开的任务正文支持连续阅读；提供任务目录及全部展开/折叠，窄屏目录按需打开。
+  “执行与结果” Tab 使用 `?tab=execution` 直达，集中进度、运行控制、下一步、报告、完成操作与 mapping；审批记录在审阅页折叠。审阅页只保留紧凑活动运行/异常提醒及恢复入口，不展示执行空面板。
 - Plan 的执行进度来自 materialization mapping 中各真实项目的实时 Backlog；显示 task 总数、todo、in_progress、done 与无法读取数量。
   epic 不计入完成率；缺失/损坏任务保留在分母，逐项显示 ID、计划标题回退与诊断，有效条目显示实时标题及状态。
   已有 blocked/cancelled 状态按原值显示和计数，均不算完成。未物化显示未开始执行；零 task 显示无可执行任务，二者完成百分比均为 null。
@@ -134,7 +134,8 @@ Project Docs 提供四份标准文档直达入口，逐项显示可读性与检�
 
 ## Alpha 产品约束
 
-- 真实 dogfooding 仅接入 ProjectOps 自身，暂不接入其他项目；产品的多项目目标和隔离测试不受此限制。
+- 真实 dogfooding 包含 ProjectOps 自身及 Workspace 明确授权的项目；具体项目清单与路由由宿主 Workspace 指引维护。
+  自身 Repo 定位、过程数据和开发服务以 ProjectOps manifest 为活动 authority；旧系统仅保留历史 artifact 查询。
 - 新产生的自身 Backlog、Plan 等过程数据以 ProjectOps 为唯一 authority；Workspace Control 的既有条目
   无论是否完成均留在原系统，不属于迁移对象，不双写。
 - active item 指 dogfooding 产生且仍在使用的数据，不等同于某个 status。契约变化采用一次性脚本迁移
@@ -259,7 +260,7 @@ Pi 任务按登记 Repo 执行，同项目已有其他 running/stop_requested/un
 已批准、已物化的 Plan 可建立冻结执行快照并显式启动。调度按依赖、优先级和 ID 稳定选择一个 task，epic 不执行。上游的模型结束、验证通过与显式验收是不同状态；验收且成果基线一致后才派发下游。
 失败暂停整个 run；暂停不会自动中止当前任务，停止当前会请求中止并暂停派发。刷新重读持久状态；服务重启后未知工作须先核对停止，不能自动重派。
 旧 Plan 修订不会改写 run 快照，输入变更会暂停并显示原因；可确认旧工作停止后终止 run，再创建新范围，保留历史 attempt 的 retry_of。当前服务仅支持一个执行 owner。
-Plan 页面以目标、进度、执行工作区和任务正文组织阅读，提供区块定位。串行与并行分别展示当前活动运行与控制，终态历史列表和详情默认折叠；选择历史时，活动运行入口及 failed/unknown 提醒仍保持可见。节点依赖与尝试链接、原始快照、运行控制和人工说明均保留；Report 必须通过运行证据资格，未确认不能宣称完成。
+Plan 详情默认以完整目标、任务目录和展开的正文供人审阅；执行工作区位于“执行与结果” Tab。串行与并行分别展示当前活动运行与控制，终态历史列表和详情默认折叠；选择历史时，活动运行入口及 failed/unknown 提醒仍保持可见。节点依赖与尝试链接、原始快照、运行控制和人工说明均保留；Report 必须通过运行证据资格，未确认不能宣称完成。
 
 
 ## 有限并行执行与交付
@@ -340,3 +341,9 @@ partial 禁止 complete、Report 发布（含显式 partial 接受）、普通�
 Backlog 来源采用相对或限定语法：`plan:plan-id#key` 相对于任务所属项目，
 跨项目创建项使用 `plan:owner:plan-id#key`。解析结果始终包含 owner、Plan ID 与 item key，
 因此远端任务能定位原 Plan，不同项目同名 Plan 不会混淆。
+
+## Plan 外部 Agent 审阅交接
+
+审阅页提供“复制计划引用”和“复制任务上下文”：复制当前读取快照的 project、Plan ID、逻辑引用、revision 及 CLI 查询命令；任务上下文另带 task key、目标项目、计划目标、依赖与正文。剪贴板不可用时展示可选择文本供手动复制，不调用模型、不保存评论。
+
+“修订计划”位于审阅页顶部，按需打开现有 JSON 编辑和 preview/confirm。手动 Refresh 重读外部 Agent 或 CLI 修改；同一页面会话内保留本地草稿，发现 Plan revision 变化时提示并清除旧预览，显式重读后重新预览提交。Tab、任务展开与阅读位置在切换、刷新及任务/报告往返时保留，任务 key 可用时恢复相对位置。读取失败明确标记上次内容并保留重试入口。URL 保存 Plan 与执行 Tab，关闭页面或整页重新加载后的未提交草稿不持久化。跨页面自动更新、页内 Agent 会话和评论系统仍为独立后续能力。

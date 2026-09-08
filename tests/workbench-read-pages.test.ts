@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { runCli } from "../src/app.js";
-import { startWorkbenchServer } from "../src/server/workbenchServer.js";
-import { serializeReport, type Report } from "../src/report/report.js";
-import { serializeRetrospective } from "../src/retrospective/retrospective.js";
-import { renderReadPages } from "../src/web/readPagesView.js";
 import type { WorkbenchReadPages } from "../src/application/workbenchReadModel.js";
+import { type Report, serializeReport } from "../src/report/report.js";
+import { serializeRetrospective } from "../src/retrospective/retrospective.js";
+import { startWorkbenchServer } from "../src/server/workbenchServer.js";
+import { renderReadPages } from "../src/web/readPagesView.js";
 
 function setup() {
   const root = mkdtempSync(path.join(tmpdir(), "pops-read-pages-"));
@@ -119,7 +119,7 @@ test("four read-only pages expose full typed details through HTTP without writes
     assert.deepEqual(data.reports[0], report);
     assert.equal(data.retrospectives.length, 8);
     assert.equal(data.documents.length, 4);
-    const plans = renderReadPages("plans", data, { project: "alpha", status: "", task: "" });
+    const plans = renderPlanDetails(data);
     for (const text of [
       "Readable &lt;goal&gt;",
       "Accepted review",
@@ -185,7 +185,7 @@ test("each page presents empty data and domain diagnostics without hiding health
     for (const view of ["plans", "reports", "retrospectives"] as const)
       assert.match(
         renderReadPages(view, data, { project: "alpha", status: "", task: "" }),
-        /No .*found/,
+        /No .*found|暂无计划/,
       );
     assert.equal(data.documents.length, 4);
     assert.ok(data.documents.every((document) => document.issue === "document is missing"));
@@ -294,7 +294,7 @@ test("mounted Workbench loads read pages, submits filters and refreshes authorit
     assert.match(container.innerHTML, /Visible detail/);
     navigate({ projectId: "alpha", view: "plans" });
     await until(() => !app!.getState().readPagesLoading);
-    assert.match(container.innerHTML, /No plans found/);
+    assert.match(container.innerHTML, /暂无计划/);
     writeFileSync(
       path.join(ops, "plans/plan-new.json"),
       JSON.stringify({
@@ -307,6 +307,8 @@ test("mounted Workbench loads read pages, submits filters and refreshes authorit
       }),
     );
     await app.refresh();
+    navigate({ projectId: "alpha", view: "plans", planId: "plan-new" });
+    await until(() => !app!.getState().readPagesLoading);
     assert.match(container.innerHTML, /Fresh authority/);
     assert.deepEqual(app.getState().retrospectiveFilters, {
       project: "alpha",
@@ -508,7 +510,7 @@ test("Plan execution counts current mapped tasks, isolates unreadable targets an
     assert.equal(execution.items[0]!.title, "Actual todo");
     assert.equal(execution.items[3]!.diagnostic?.code, "ITEM_INVALID");
     assert.equal(execution.items[5]!.diagnostic?.code, "ITEM_NOT_FOUND");
-    const html = renderReadPages("plans", data, { project: "alpha", status: "", task: "" });
+    const html = renderPlanDetails(data);
     for (const text of ["1/5", "20%", "Actual running", "ALP-006", "无法读取", "已批准"])
       assert.ok(html.includes(text), text);
     assert.equal(JSON.stringify(data).includes(root), false);
@@ -558,7 +560,7 @@ test("unmaterialized and zero-task Plans have no misleading completion percentag
     }
     assert.equal(result.data.plans[0]!.execution.materialized, false);
     assert.equal(result.data.plans[1]!.execution.materialized, true);
-    const html = renderReadPages("plans", result.data, { project: "alpha", status: "", task: "" });
+    const html = renderPlanDetails(result.data);
     assert.match(html, /未开始执行/);
     assert.match(html, /无可执行任务/);
     assert.doesNotMatch(html, /100%|<progress/);
@@ -592,10 +594,7 @@ test("Plan delivery links retain every matching report, timestamp order and inde
     };
     let data = read();
     assert.equal(data.plans[0]!.delivery_reports.length, 0);
-    assert.match(
-      renderReadPages("plans", data, { project: "alpha", status: "", task: "" }),
-      /任务已完成，尚无交付报告/,
-    );
+    assert.match(renderPlanDetails(data), /任务已完成，尚无交付报告/);
     const base: Report = {
       schema: "report/Report@1",
       id: "report-a",
@@ -631,7 +630,7 @@ test("Plan delivery links retain every matching report, timestamp order and inde
       data.plans[0]!.delivery_reports.map((report) => report.id),
       ["report-c", "report-a", "report-b"],
     );
-    const html = renderReadPages("plans", data, { project: "alpha", status: "", task: "" });
+    const html = renderPlanDetails(data);
     for (const text of [
       "report-c",
       "partial",
@@ -655,3 +654,18 @@ test("Plan delivery links retain every matching report, timestamp order and inde
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+function renderPlanDetails(
+  data: import("../src/application/workbenchReadModel.js").WorkbenchReadPages,
+) {
+  return data.plans
+    .map((plan) =>
+      renderReadPages(
+        "plans",
+        data,
+        { project: "alpha", status: "", task: "" },
+        { projectId: "alpha", planId: plan.id },
+      ),
+    )
+    .join("\n");
+}

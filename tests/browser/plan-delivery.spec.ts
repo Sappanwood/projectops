@@ -43,7 +43,7 @@ test("Plan lifecycle shows no report, partial and completed snapshots with retur
   const { mapping } = JSON.parse(
     workbench.cli(["plan", "materialize", "alpha", "plan-final-delivery", "--json"]),
   );
-  await page.goto(`${workbench.origin}/#/projects/alpha/plans/plan-final-delivery`);
+  await page.goto(`${workbench.origin}/#/projects/alpha/plans/plan-final-delivery?tab=execution`);
   const plan = page.locator('.plan-card[data-plan-id="plan-final-delivery"]');
   const reports = plan.getByRole("region", { name: "交付报告" });
   await expect(reports).toContainText("尚无交付报告");
@@ -93,7 +93,7 @@ test("Plan lifecycle shows no report, partial and completed snapshots with retur
   await expect(plan.getByRole("region", { name: "执行进度" })).toContainText("2/2 已完成");
   await expect(reports.getByRole("link")).toHaveCount(2);
   await reports.getByRole("link", { name: /report-completed/ }).click();
-  await expect(page).toHaveURL(/\/reports\/report-completed\?plan=plan-final-delivery$/);
+  await expect(page).toHaveURL(/\/reports\/report-completed\?plan=plan-final-delivery&from=/);
   const report = page.locator('[data-report-id="report-completed"]');
   await expect(report).toBeVisible();
   await expect(report).toContainText("Fixture all tasks complete");

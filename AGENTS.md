@@ -53,7 +53,7 @@ Local Web Workbench 管理项目注册表、Backlog、Plan、Delivery Report、�
 
 ## 自身 dogfooding 与数据演进
 
-- Alpha dogfooding 只接入 `projectops` 自身，不接入其他真实项目；隔离测试 fixture 不受此限制。
+- 自身 dogfooding 与已获 Workspace 授权的真实项目使用 ProjectOps；新增真实项目的范围以 Workspace `AGENTS.md` 为准。
 - 新产生的自身开发 Backlog、Plan、Report 和 dogfooding 回顾由 ProjectOps 管理，同一条目只有一个 authority，不双写。
 - Workspace Control 的既有条目（包括仍未完成的条目）留在原系统处理，不导入、不迁移，也不复制为自身条目。
 - active item 指 dogfooding 过程中产生且仍在使用的条目，不是某个领域的固定 status 值；迁移前明确实际清单及必要引用。
@@ -66,18 +66,16 @@ Local Web Workbench 管理项目注册表、Backlog、Plan、Delivery Report、�
 
 ## Project Ops 路由
 
-开始任务前运行：
+自身数据 workspace 为 `/home/ling/workspace`，唯一活动路由 authority 为其 `.pops/workspace.json`。
+开始普通自身开发任务前，在该数据 workspace 运行：
 
 ```bash
-/home/ling/workspace/workspace-control/bin/workspace project resolve projectops \
-  --catalog /home/ling/workspace/workspace-control/catalog/workspace.json \
-  --json
+pops project list --json
+pops project doctor --json
 ```
 
-Workspace Control resolver 继续负责 Repo 定位与开发服务。本节是用户批准的自身 dogfooding 路由例外：
-新产生的自身过程 artifact 使用 ProjectOps manifest 路由，不使用 resolver 返回的 Workspace Control artifact roots。
-
-自身数据 workspace 为 `/home/ling/workspace`，authority 为其 `.pops/workspace.json`。
+从 manifest 的唯一 `projectops` 记录定位 Repo；Repo 定位、新过程 artifact 与开发服务均由 ProjectOps 管理。
+Workspace Control 的保留登记只负责旧 artifact 的历史查询，不是普通开发的入口。
 操作前从 [ProjectOps 工作流 skill](skills/projectops-workflow/SKILL.md) 进入，再按其路由读取
 [Agent 操作契约](docs/AGENT_CONTRACT.md) 的 list/doctor、初始化、CLI 与 revision 流程。
 artifact 路径由 ProjectOps manifest 解析，不自行拼接。
@@ -88,9 +86,11 @@ Agent 操作契约的“Workspace skill 安装与恢复”。开发维护 Repo �
 ADR、Research 使用 ProjectOps 登记的对应 typed roots；自身 dogfooding 回顾使用其 workspace-level Retrospective store。
 跨项目或全局工作流事项仍遵循 Workspace 路由。
 
-只有处理 Workspace Control 既有条目时，才使用 resolver 返回的 exact roots 与原有工具：
+只有显式处理 Workspace Control 既有条目时，才运行旧 resolver 并使用其 exact roots 与原有工具：
 
 ```bash
+/home/ling/workspace/workspace-control/bin/workspace project resolve projectops \
+  --catalog /home/ling/workspace/workspace-control/catalog/workspace.json --json
 backlog --store <resolved-artifacts.backlog.root> <command> --json
 ```
 
@@ -161,18 +161,20 @@ node dist/cli.js --version
 - 文档、文案和简单配置修改不要求运行完整测试。
 - 根据路由表检查 `README.md`、`docs/AGENT_CONTRACT.md`、`docs/PRODUCT_SPEC.md` 和 `docs/ARCHITECTURE.md` 是否需要同步。
 - 不以 coverage、理论 edge case、未声明平台或 production hardening 阻塞 Alpha 交付。
-- 自身 schema 或 HTTP 契约变更并更新真实数据后，核对 Catalog 长期服务的监听进程、Repo cwd、
+- 自身 schema 或 HTTP 契约变更并更新真实数据后，核对 ProjectOps 长期服务的监听进程、Repo cwd、
   启动命令及是否已加载本次构建。旧进程需重启时先核对活动/unknown 执行和 run，按既有控制流程处理，
-  不直接中断仍在运行的工作；仅停止已确认可停止的目标服务，再按 Catalog 启动。
+  不直接中断仍在运行的工作；仅对已确认可停止的目标服务运行 `pops dev restart projectops`。
   在实际分配端口检查首页、`/api/workspace` diagnostics 及受影响 API，记录结果。
   若服务暂不能重启或核验，交付中明确说明；build 和隔离 fixture 通过不能替代真实服务验收。
 
 
 ## 本工作区开发服务
 
-Workspace Control Catalog 已登记 `projectops` 单端口服务，Web/API 共用 `127.0.0.1:12500`。
-使用 `/home/ling/workspace/workspace-control/bin/workspace dev start projectops` 启动；
-命令会先构建，再以 `/home/ling/workspace` 为 ProjectOps 数据 workspace。
+ProjectOps manifest 已登记 `projectops` 单端口服务，Web/API 共用 `127.0.0.1:12500`。
+先在 Repo 完成 `npm run build` 和相关验证，再在数据 workspace 运行 `pops dev check projectops`、
+`pops dev start projectops`；更新运行版本使用 `pops dev restart projectops`。
+服务直接执行 `node dist/workbench.js`，不在 manager 的 8 秒就绪窗口中构建；CLI 退出后仍由独立 manager 持有。
 该开发服务通过 `--pi` 启用本地 Pi runner，header 可选择本地已认证模型；认证由同用户的本地 Pi 管理。
-该目录的 `.pops/workspace.json` 是 ProjectOps 自己的 manifest；不自动导入 Workspace Control Catalog。
-端口与启动命令的 authority 仍是 Workspace Control Catalog，调整时同步本节。
+端口与启动命令的唯一 authority 是 `.pops/workspace.json`；不自动导入 Workspace Control Catalog。
+停止或重启自身 Workbench 使用终端 CLI，网页/API 禁止自身 stop/restart。切换前核对所有项目的受管活动/unknown
+attempt 和未结束 run；不能仅检查 `projectops` 项目。恢复已验证构建的流程见 [README](README.md#自身开发服务与恢复)。

@@ -85,7 +85,10 @@ test("Plan dependency picker revises local and existing tasks and returns from c
   await expect(page.getByRole("button", { name: "确认应用修订" })).toBeEnabled();
   await page.getByRole("button", { name: "确认应用修订" }).click();
   await expect(card).toContainText("计划修订已保存");
-  await expect(card).toContainText("Plan 内 2 项任务 · 既有依赖 1 项");
+  await expect(card).toContainText("2 项任务 · 1 个项目");
+  await expect(card.getByRole("region", { name: "既有任务依赖", exact: true })).toContainText(
+    "既有任务依赖 (1)",
+  );
   mkdirSync("/tmp/projectops-cross-project-plan", { recursive: true });
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.screenshot({
@@ -100,7 +103,7 @@ test("Plan dependency picker revises local and existing tasks and returns from c
   await page.reload();
   await page.getByRole("link", { name: "返回原 Plan" }).click();
   await expect(page).toHaveURL(/projects\/alpha\/plans\/plan-browser/);
-  await expect(card).toContainText("既有依赖 1 项");
+  await expect(card).toContainText("既有任务依赖 (1)");
   await page.setViewportSize({ width: 1024, height: 900 });
   await page.screenshot({
     path: "/tmp/projectops-cross-project-plan/pro062-plan-medium.png",
@@ -125,7 +128,7 @@ test("Plan dependency picker revises local and existing tasks and returns from c
   );
   await page.reload();
   const uiTask = page.locator('[id="plan-browser--ui"]');
-  await uiTask.locator(":scope > summary").click();
+  await expect(uiTask).toHaveAttribute("open", "");
   await expect(uiTask.locator("[data-direct-dependencies]")).toContainText("Shared cloud API");
   await expect(uiTask.locator("[data-direct-dependencies]")).toContainText("尚未满足");
   await expect(page.locator('[id="plan-browser--api"] [data-dependent-tasks]')).toContainText(
@@ -161,6 +164,7 @@ test("Plan dependency picker revises local and existing tasks and returns from c
   await expect(uiTask.locator("[data-direct-dependencies]")).toContainText("已满足");
   await expect(uiTask.locator("[data-direct-dependencies]")).not.toContainText("尚未满足");
   await page.getByRole("button", { name: "Refresh workspace and project data" }).click();
+  await page.getByRole("tab", { name: "执行与结果" }).click();
   await expect(card.getByRole("region", { name: "可开始任务", exact: true })).toContainText(
     "Browser task",
   );

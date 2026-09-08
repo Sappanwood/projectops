@@ -1,10 +1,13 @@
 import type { ParallelRun } from "../planRun/parallelRun.js";
 import type { ApiClient } from "./apiClient.js";
 import { planRunRestriction } from "./planIdentityView.js";
+import { renderRunNotice } from "./planRunNotice.js";
 import { escapeHtml as e } from "./render.js";
+import { formatRoute } from "./router.js";
 import type { AppState } from "./types.js";
 
 type Panel = {
+  loaded: boolean;
   runs: ParallelRun[];
   selected: string;
   busy: boolean;
@@ -37,6 +40,7 @@ export function createParallelRunUi(
 ) {
   const panels = new Map<string, Panel>();
   let destroyed = false;
+  let projection: AppState["readPages"] = null;
   const key = (project: string, plan: string) => `${project}/${plan}`;
   const base = (project: string) => `/api/projects/${encodeURIComponent(project)}/parallel-runs`;
   function panel(project: string, plan: string): Panel {
@@ -44,6 +48,7 @@ export function createParallelRunUi(
     let value = panels.get(id);
     if (!value) {
       value = {
+        loaded: false,
         runs: [],
         selected: "",
         busy: false,
@@ -65,6 +70,7 @@ export function createParallelRunUi(
       `${base(project)}?plan_id=${encodeURIComponent(plan)}`,
     );
     if (destroyed || request !== value.request) return;
+    value.loaded = true;
     if (result.ok) {
       value.runs = result.data.runs.toSorted((a, b) => b.created_at.localeCompare(a.created_at));
       if (!value.selected)
@@ -85,9 +91,12 @@ export function createParallelRunUi(
       !state.selectedProjectId
     )
       return;
+    const refreshed = projection !== state.readPages;
+    projection = state.readPages;
     for (const card of container.querySelectorAll<HTMLElement>("[data-plan-id]")) {
       const plan = card.dataset.planId!,
         project = state.selectedProjectId;
+      if (!state.readPages?.plans.some((entry) => entry.id === plan)) continue;
       const permission =
         state.readPages?.plans.find((entry) => entry.id === plan)?.execution_policy
           ?.max_parallel === 2;
@@ -96,6 +105,18 @@ export function createParallelRunUi(
         project,
       );
       const value = panel(project, plan);
+      if (refreshed && value.loaded) {
+        value.message = "";
+        void load(project, plan, value);
+      }
+      renderRunNotice(
+        card.querySelector("[data-parallel-notice]"),
+        "并行执行",
+        value.runs,
+        state.route,
+        value.loaded,
+        value.message,
+      );
       let slot = card.querySelector<HTMLElement>("[data-parallel-panel]");
       if (!slot) {
         slot = container.ownerDocument.createElement("section");
@@ -167,7 +188,7 @@ export function createParallelRunUi(
             .map(
               (
                 node,
-              ) => `<li data-parallel-node="${e(node.key)}"><a href="#/projects/${encodeURIComponent(project)}/backlog/${encodeURIComponent(node.item_id)}?plan=${encodeURIComponent(plan)}">${e(node.item_id)} — ${e(node.input.title)}</a><p>${e(labels[node.state] ?? node.state)} · ${node.parallel ? "允许并行" : "独占运行"} · 资源：${e(node.resources.join(", ") || "无声明资源")} · 依赖：${e(node.depends_on.join(", ") || "无")}</p><p>尝试：${e(node.attempt_ids.join(", ") || "尚未启动")}</p><p>任务 checkout：<code>${e(node.workspace?.dir ?? "尚未创建")}</code></p>
+              ) => `<li data-parallel-node="${e(node.key)}"><a href="#/projects/${encodeURIComponent(project)}/backlog/${encodeURIComponent(node.item_id)}?plan=${encodeURIComponent(plan)}&amp;from=${encodeURIComponent(formatRoute({ projectId: project, view: "plans", planId: plan, planTab: "execution" }))}">${e(node.item_id)} — ${e(node.input.title)}</a><p>${e(labels[node.state] ?? node.state)} · ${node.parallel ? "允许并行" : "独占运行"} · 资源：${e(node.resources.join(", ") || "无声明资源")} · 依赖：${e(node.depends_on.join(", ") || "无")}</p><p>尝试：${e(node.attempt_ids.join(", ") || "尚未启动")}</p><p>任务 checkout：<code>${e(node.workspace?.dir ?? "尚未创建")}</code></p>
             ${node.landings.map((landing, index) => `<details data-parallel-details="landing-${e(node.key)}-${index}"><summary>落地结果 ${e(landing.outcome)} · ${e(landing.candidateCommit ?? "未生成提交")}</summary><p>候选 checkout：${e(landing.candidateDir)}</p><pre>${e(landing.evidence.slice(0, 65536))}</pre></details>`).join("")}
             ${node.workspace ? "<p>核对上述任务 checkout：有未提交改动时先在该目录 git commit，再用 pops execution verify 记录验证；到任务页人工验收后，返回此处落地。</p>" : ""}
             ${!terminal && (node.state === "awaiting_landing" || node.landings.some((landing) => landing.outcome !== "landed")) && !["landed", "running", "unknown", "landing", "pending"].includes(node.state) ? `<label>重新工作说明 ${e(node.input.title)}<textarea class="form-input" data-parallel-rework-note="${e(node.key)}">${e(value.rework[node.key] ?? "")}</textarea></label><button type="button" class="btn btn-secondary" data-parallel-rework="${e(node.key)}" ${value.busy || !value.rework[node.key]?.trim() ? "disabled" : ""}>要求修改并重新验收 ${e(node.input.title)}</button>` : ""}
@@ -188,8 +209,10 @@ export function createParallelRunUi(
             : ""
         }
         ${value.message ? `<p role="alert">${e(value.message)}</p>` : ""}`;
-      for (const detail of slot.querySelectorAll<HTMLDetailsElement>("details"))
+      for (const detail of slot.querySelectorAll<HTMLDetailsElement>("details")) {
+        detail.dataset.readingKey = `${plan}--parallelDetails-${value.selected}-${detail.dataset.parallelDetails}`;
         if (opened.has(detail.dataset.parallelDetails)) detail.open = true;
+      }
       const nodeList = slot.querySelector<HTMLElement>(".run-nodes");
       if (nodeList) nodeList.scrollTop = nodeScrollTop;
       if (focusAttribute) {

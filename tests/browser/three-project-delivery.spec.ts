@@ -93,9 +93,9 @@ test("three projects deliver a shared facility through mixed Plan dependencies a
 
   await page.goto(`${workbench.origin}/#/projects/mochi-write/plans/${plan.id}`);
   const card = page.locator(`[data-plan-id="${plan.id}"]`);
-  await expect(card).toContainText("Plan 内 2 项任务 · 既有依赖 2 项");
+  await expect(card).toContainText("2 项任务 · 1 个项目");
   const integration = page.locator(`[id="${plan.id}--integration"]`);
-  await integration.locator(":scope > summary").click();
+  await expect(integration).toHaveAttribute("open", "");
   await expect(integration.locator("[data-direct-dependencies]")).toContainText("尚未满足");
   await integration
     .locator("[data-direct-dependencies]")
@@ -126,9 +126,11 @@ test("three projects deliver a shared facility through mixed Plan dependencies a
   done("mochi", service.id);
   expect(next().ready.map((item: { id: string }) => item.id)).toEqual([mapping.integration]);
   await page.getByRole("button", { name: "Refresh workspace and project data" }).click();
+  await page.getByRole("tab", { name: "执行与结果", exact: true }).click();
   await expect(card.getByRole("region", { name: "可开始任务", exact: true })).toContainText(
     "Product integration",
   );
+  await page.getByRole("tab", { name: "审阅计划", exact: true }).click();
   await expect(integration.locator("[data-direct-dependencies]")).not.toContainText("尚未满足");
   expect(cli(["plan", "materialize", "mochi-write", plan.id]).no_op).toBe(true);
 });

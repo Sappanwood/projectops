@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseRoute, formatRoute } from "../src/web/router.js";
+import { formatRoute, parseRoute } from "../src/web/router.js";
 
 test("Plan and Backlog detail routes preserve same-project return context", () => {
   for (const [hash, route] of [
@@ -25,4 +25,12 @@ test("Plan and Backlog detail routes preserve same-project return context", () =
     assert.deepEqual(parseRoute(hash), route);
     assert.equal(formatRoute(route), hash);
   }
+});
+
+test("Plan tabs round-trip and preserve a return origin", () => {
+  const hash = "#/projects/alpha/plans/plan-navigation?tab=execution&from=%23%2Fprojects%2Falpha";
+  const route = parseRoute(hash);
+  assert.equal(route.planTab, "execution");
+  assert.equal(formatRoute(route), hash);
+  assert.equal(parseRoute("#/projects/alpha/plans/plan-navigation?tab=invalid").planTab, undefined);
 });

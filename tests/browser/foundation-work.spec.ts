@@ -30,7 +30,7 @@ test("task edits preserve conflicting input and Plan revisions require preview",
     "Clarified browser task",
   );
   await page.getByRole("tab", { name: /^Plans/ }).click();
-  await page.locator('[data-plan-id="plan-browser"] > summary').click();
+  await page.getByRole("link", { name: /Browser plan/ }).click();
   await page.getByRole("button", { name: "修订计划" }).click();
   const input = page.getByLabel("计划 JSON 草案");
   await expect(input).toHaveValue(/Validate production UI/);

@@ -50,7 +50,12 @@ export function parseRoute(rawHash: string): RouteState {
       ...((view === "docs" || view === "research") && params.has("section")
         ? { section: params.get("section")! }
         : {}),
-      ...(view === "plans" && detail ? { planId: detail } : {}),
+      ...(view === "plans" && detail
+        ? {
+            planId: detail,
+            ...(params.get("tab") === "execution" ? { planTab: "execution" as const } : {}),
+          }
+        : {}),
       ...(view === "backlog" && detail ? { itemId: detail } : {}),
       ...(view === "reports" && detail ? { reportId: detail } : {}),
       ...((view === "backlog" || view === "reports") && plan ? { planId: plan } : {}),
@@ -102,7 +107,8 @@ function formatBaseRoute(route: RouteState): string {
     if (route.section !== undefined) params.set("section", route.section);
     return base + (params.size ? `?${params}` : "");
   }
-  if (route.view === "plans" && route.planId) return `${base}/${encodeURIComponent(route.planId)}`;
+  if (route.view === "plans" && route.planId)
+    return `${base}/${encodeURIComponent(route.planId)}${route.planTab === "execution" ? "?tab=execution" : ""}`;
   if (route.view === "backlog")
     return `${base}${route.itemId ? `/${encodeURIComponent(route.itemId)}` : ""}${route.planId ? `?plan=${encodeURIComponent(route.planId)}` : ""}`;
   if (route.view === "reports")

@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import path from "node:path";
-import { test, expect } from "./fixture.js";
+import { expect, test } from "./fixture.js";
 
 for (const width of [1440, 1024, 390]) {
   test(`Plan reading and run history stay usable at ${width}px`, async ({ workbench, page }) => {
@@ -129,7 +129,9 @@ for (const width of [1440, 1024, 390]) {
                 })),
               },
             ];
-      await page.goto(`${workbench.origin}/#/projects/alpha/plans/plan-layout-fixture`);
+      await page.goto(
+        `${workbench.origin}/#/projects/alpha/plans/plan-layout-fixture?tab=execution`,
+      );
       await page.reload();
       await expect(page.locator('[data-plan-id="plan-layout-fixture"]')).toBeVisible();
       const panel = page.locator(
@@ -162,8 +164,10 @@ for (const width of [1440, 1024, 390]) {
       {
         await expect(page.getByRole("region", { name: "执行工作区", exact: true })).toBeVisible();
         const card = page.locator('[data-plan-id="plan-layout-fixture"]');
-        await card.getByRole("button", { name: "执行与控制", exact: true }).click();
-        await expect(card.locator(".plan-workspace")).toBeFocused();
+        await expect(card.getByRole("tab", { name: "执行与结果", exact: true })).toHaveAttribute(
+          "aria-selected",
+          "true",
+        );
         if (process.env.PLAN_VISUAL)
           await card
             .locator(".plan-workspace")

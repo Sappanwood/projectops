@@ -54,7 +54,7 @@ test("Plan run waits for acceptance, preserves pause across reload and explicitl
       },
     },
   });
-  const route = `${server.origin}/#/projects/alpha/plans/plan-serial-browser`;
+  const route = `${server.origin}/#/projects/alpha/plans/plan-serial-browser?tab=execution`;
   try {
     await page.goto(route);
     const panel = page.getByRole("region", { name: "计划执行 plan-serial-browser" });

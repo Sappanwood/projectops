@@ -6,9 +6,8 @@ test("Plan progress refreshes CLI state and diagnoses unreadable tasks without w
   workbench,
   page,
 }) => {
-  await page.goto(`${workbench.origin}/#/projects/alpha/plans`);
+  await page.goto(`${workbench.origin}/#/projects/alpha/plans/plan-browser?tab=execution`);
   const plan = page.locator(".plan-card").filter({ hasText: "Browser plan" });
-  await plan.locator(":scope > summary").click();
   const progress = plan.getByRole("region", { name: "执行进度" });
   await expect(progress).toContainText("0/1 已完成");
   await expect(progress).toContainText("待开始 1");
@@ -30,7 +29,7 @@ test("Plan progress refreshes CLI state and diagnoses unreadable tasks without w
   await expect(progress).toContainText("1/1 已完成");
   await expect(progress).toContainText("100%");
   await expect(progress.getByRole("progressbar")).toHaveAttribute("value", "1");
-  await expect(plan.locator(":scope > summary")).toContainText("已批准");
+  await expect(plan.locator(".plan-summary")).toContainText("已批准");
   expect(workbench.snapshot()).toEqual(before);
   writeFileSync(path.join(workbench.root, "ops/alpha/backlog/items/ALP-001.md"), "broken");
   const broken = workbench.snapshot();

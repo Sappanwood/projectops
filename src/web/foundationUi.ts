@@ -25,6 +25,7 @@ type Preview = {
   affected_items: unknown[];
 };
 type PlanEditor = {
+  observed?: AppState["readPages"];
   body: string;
   revision: string;
   busy: boolean;
@@ -107,6 +108,13 @@ export function createFoundationUi(
         const key = `${state.selectedProjectId}/${id}`;
         const plan = state.readPages?.plans.find((entry) => entry.id === id);
         const completion = completions.get(key);
+        if (!plan) {
+          const draft = plans.get(key);
+          slot.innerHTML = draft
+            ? `<p role="status">计划不可读取，本地草稿已保留，可选择复制后恢复。</p><label>计划 JSON 草案<textarea class="form-input" rows="16" data-plan-draft="${e(id)}">${e(draft.body)}</textarea></label>`
+            : "";
+          continue;
+        }
         if (plan?.materialization)
           for (const [taskKey, itemId] of Object.entries(plan.materialization.mapping)) {
             const host = card.querySelector<HTMLElement>(`[data-plan-relations="${taskKey}"]`);
@@ -140,8 +148,10 @@ export function createFoundationUi(
                 : `<p role="status">${e(value ?? "正在读取依赖关系…")}</p>`) +
               `<button type="button" class="btn btn-secondary" data-foundation-action="refresh-relations">刷新依赖关系</button>`;
           }
+        const completionSlot = card.querySelector<HTMLElement>("[data-plan-completion]");
         if (plan?.status === "done") {
-          slot.innerHTML = '<p class="success-text">计划已完成</p>';
+          slot.innerHTML = "";
+          if (completionSlot) completionSlot.innerHTML = '<p class="success-text">计划已完成</p>';
           continue;
         }
         const eligible =
@@ -151,7 +161,15 @@ export function createFoundationUi(
           !plan.execution.items.some((item) => item.status === "unreadable");
         const completionUi = `<h3>计划完成</h3>${button("complete-plan", "标为完成", !eligible || completion?.busy === true)}${eligible ? "" : '<p class="muted">批准并生成任务后，所有 task 完成即可标记。</p>'}${notice(completion?.message ?? "")}`;
         const editor = plans.get(key);
-        slot.innerHTML = `${completionUi}<h3>计划修订</h3>${editor ? `${renderPlanDependencyEditor(editor.body, editor.dependencyKey ?? "", editor.dependencyProject ?? state.selectedProjectId!, state.workspace?.projects ?? [], editor.candidates ?? [], editor.busy)}<label>计划 JSON 草案<textarea class="form-input" rows="16" data-plan-draft="${e(id)}" ${editor.busy ? "disabled" : ""}>${e(editor.body)}</textarea></label><p>item.project 可指定已注册目标项目；省略时默认 Plan 所属项目。已物化条目的目标项目不可迁移。修改后先预览差异，再确认应用。已开始的任务受保护。</p>${button("preview-plan", "预览修订", editor.busy)} ${button("reload-plan", "重读版本并保留计划草案", editor.busy)}${editor.preview ? `<h4>修订差异与受影响任务</h4><pre>${e(JSON.stringify({ changes: editor.preview.changes, affected_items: editor.preview.affected_items }, null, 2))}</pre>${button("confirm-plan", "确认应用修订", editor.busy || !editor.preview.confirmation_token)}` : ""}${notice(editor.message)}` : button("edit-plan", "修订计划", plan?.materialization?.state === "partial")}`;
+        if (editor && state.readPages && editor.observed !== state.readPages) {
+          editor.observed = state.readPages;
+          if (editor.revision && plan?.revision !== editor.revision && !editor.busy) {
+            editor.preview = null;
+            editor.message = "计划版本已变化，本地草稿已保留。请重读版本并重新预览。";
+          }
+        }
+        if (completionSlot) completionSlot.innerHTML = completionUi;
+        slot.innerHTML = `${editor ? `${renderPlanDependencyEditor(editor.body, editor.dependencyKey ?? "", editor.dependencyProject ?? state.selectedProjectId!, state.workspace?.projects ?? [], editor.candidates ?? [], editor.busy)}<label>计划 JSON 草案<textarea class="form-input" rows="16" data-plan-draft="${e(id)}" ${editor.busy ? "disabled" : ""}>${e(editor.body)}</textarea></label><p>item.project 可指定已注册目标项目；省略时默认 Plan 所属项目。已物化条目的目标项目不可迁移。修改后先预览差异，再确认应用。已开始的任务受保护。</p>${button("preview-plan", "预览修订", editor.busy)} ${button("reload-plan", "重读版本并保留计划草案", editor.busy)}${editor.preview ? `<h4>修订差异与受影响任务</h4><pre>${e(JSON.stringify({ changes: editor.preview.changes, affected_items: editor.preview.affected_items }, null, 2))}</pre>${button("confirm-plan", "确认应用修订", editor.busy || !editor.preview.confirmation_token)}` : ""}${notice(editor.message)}` : button("edit-plan", "修订计划", plan?.materialization?.state === "partial")}`;
       }
     if (focusAttribute && focusValue !== null) {
       const scope = focusPlan
@@ -173,9 +191,9 @@ export function createFoundationUi(
       render();
       return;
     }
-    const planSlot = target.closest<HTMLElement>("[data-foundation-plan]");
+    const planSlot = target.closest<HTMLElement>("[data-foundation-plan], [data-plan-completion]");
     if (planSlot) {
-      const id = planSlot.dataset.foundationPlan!;
+      const id = (planSlot.dataset.foundationPlan ?? planSlot.dataset.planCompletion)!;
       const key = `${getState().selectedProjectId}/${id}`;
       const path = `${projectPath()}/plans/${encodeURIComponent(id)}`;
       if (action === "complete-plan") {
@@ -215,6 +233,7 @@ export function createFoundationUi(
         const result = await api.request<{ plan: unknown; revision: string }>(path);
         editor.busy = false;
         if (result.ok) {
+          editor.observed = getState().readPages;
           editor.revision = result.data.revision;
           if (!existing) editor.body = JSON.stringify(result.data.plan, null, 2);
           editor.preview = null;

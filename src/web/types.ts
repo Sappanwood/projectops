@@ -1,14 +1,14 @@
-import type { WorkbenchReadPages } from "../application/workbenchReadModel.js";
-import type { RetrospectiveFilters } from "./readPagesView.js";
 import type {
   WorkbenchBacklogSummary,
   WorkbenchDiagnostic,
   WorkbenchProjectOverview,
+  WorkbenchReadPages,
   WorkbenchWorkspaceOverview,
 } from "../application/workbenchReadModel.js";
 import type { WorkspaceProjectSummary } from "../application/workspaceApi.js";
 import type { BacklogViewState } from "./backlogController.js";
 import type { DocsState } from "./docsView.js";
+import type { RetrospectiveFilters } from "./readPagesView.js";
 
 export type ViewType =
   | "overview"
@@ -34,6 +34,7 @@ export function isValidView(view: string): view is ViewType {
 }
 
 export type RouteState = {
+  planTab?: "execution" | undefined;
   retrospectiveId?: string | undefined;
   retrospectiveFilters?: RetrospectiveFilters | undefined;
   returnTo?: string | undefined;

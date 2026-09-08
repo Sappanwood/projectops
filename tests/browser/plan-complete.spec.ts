@@ -1,6 +1,6 @@
 import { writeFileSync } from "node:fs";
 import path from "node:path";
-import { test, expect } from "./fixture.js";
+import { expect, test } from "./fixture.js";
 
 test("explicit Web completion handles stale revisions and persists across refresh and CLI reads", async ({
   workbench,
@@ -17,7 +17,7 @@ test("explicit Web completion handles stale revisions and persists across refres
   const id = "plan-complete-in-web";
   workbench.cli(["plan", "approve", "alpha", id, "--review-note", "Fixture reviewed"]);
   const { mapping } = JSON.parse(workbench.cli(["plan", "materialize", "alpha", id, "--json"]));
-  await page.goto(`${workbench.origin}/#/projects/alpha/plans/${id}`);
+  await page.goto(`${workbench.origin}/#/projects/alpha/plans/${id}?tab=execution`);
   const plan = page.locator(`[data-plan-id="${id}"]`);
   const complete = plan.getByRole("button", { name: "标为完成", exact: true });
   await expect(complete).toBeDisabled();

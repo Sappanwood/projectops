@@ -66,7 +66,8 @@ test("completed backlog group preserves navigation, explicit collapse and status
   await expect(page.locator('[data-backlog-item="ALP-001"]')).toBeVisible();
   await group.locator("summary").click();
   await page.getByRole("tab", { name: /^Plans/ }).click();
-  await page.locator(".plan-card > summary").click();
+  await page.getByRole("link", { name: /Browser plan/ }).click();
+  await page.getByRole("tab", { name: "执行与结果", exact: true }).click();
   await page.locator('a[href*="/backlog/ALP-001"]:visible').first().click();
   await expect(page.getByRole("region", { name: "Backlog item detail" })).toContainText(
     "Browser authority",

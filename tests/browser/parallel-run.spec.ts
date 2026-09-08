@@ -71,9 +71,9 @@ test("two independent tasks use isolated checkouts and explicit acceptance plus 
       },
     },
   });
-  const route = `${server.origin}/#/projects/alpha/plans/plan-parallel-browser`;
+  const route = `${server.origin}/#/projects/alpha/plans/plan-parallel-browser?tab=execution`;
   try {
-    await page.goto(`${server.origin}/#/projects/alpha/plans/plan-browser`);
+    await page.goto(`${server.origin}/#/projects/alpha/plans/plan-browser?tab=execution`);
     await expect(
       page
         .getByRole("region", { name: "并行执行 plan-browser" })

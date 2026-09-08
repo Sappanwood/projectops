@@ -88,8 +88,9 @@ test("Plan read view separates owned work and existing prerequisites with a retu
       diagnostics: [],
     },
     { project: "write", status: "", task: "" },
+    { projectId: "write", planId: "plan-deploy" },
   );
-  assert.match(html, /Plan 内 1 项任务 · 既有依赖 1 项/);
+  assert.match(html, /1 项任务 · 1 个项目/);
   assert.match(html, /既有依赖不生成或复制任务/);
   const route = formatRoute({
     projectId: "mochi",

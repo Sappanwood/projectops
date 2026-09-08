@@ -63,10 +63,10 @@ test("four read-only pages show details, empty states and malformed diagnostics"
   await page.goto(workbench.origin);
   await page.getByLabel("Select active project").selectOption("alpha");
   await page.getByRole("tab", { name: /^Plans/ }).click();
-  await page.locator("summary").filter({ hasText: "Browser plan" }).click();
-  await expect(page.getByRole("tabpanel")).toContainText("Validate production UI");
-  await expect(page.getByRole("tabpanel")).toContainText("Browser review approved");
-  await expect(page.getByRole("tabpanel")).toContainText("ALP-001");
+  await page.getByRole("link", { name: /Browser plan/ }).click();
+  await expect(page.getByRole("tabpanel").first()).toContainText("Validate production UI");
+  await expect(page.getByRole("tabpanel").first()).toContainText("Browser review approved");
+  await expect(page.getByRole("tabpanel").first()).toContainText("ALP-001");
   await page.getByRole("tab", { name: /^Reports/ }).click();
   await page.locator("summary").filter({ hasText: "Browser report" }).click();
   for (const text of [
@@ -76,7 +76,7 @@ test("four read-only pages show details, empty states and malformed diagnostics"
     "Isolated fixtures",
     "project-ops:plans/plan-browser.json",
   ]) {
-    await expect(page.getByRole("tabpanel")).toContainText(text);
+    await expect(page.getByRole("tabpanel").first()).toContainText(text);
   }
   await page.getByRole("tab", { name: /^Docs/ }).click();
   for (const document of [
@@ -85,17 +85,17 @@ test("four read-only pages show details, empty states and malformed diagnostics"
     "docs/PRODUCT_SPEC.md",
     "docs/ARCHITECTURE.md",
   ]) {
-    await expect(page.getByRole("tabpanel")).toContainText(document);
+    await expect(page.getByRole("tabpanel").first()).toContainText(document);
   }
   await expect(
-    page.getByRole("tabpanel").getByText("标准文档 · 检查通过", { exact: true }),
+    page.getByRole("tabpanel").first().getByText("标准文档 · 检查通过", { exact: true }),
   ).toHaveCount(4);
   await page.getByRole("tab", { name: /^Retrospectives/ }).click();
   await page.locator("summary").filter({ hasText: "browser" }).click();
-  await expect(page.getByRole("tabpanel")).toContainText("Browser retrospective body");
+  await expect(page.getByRole("tabpanel").first()).toContainText("Browser retrospective body");
   await page.getByLabel("Task", { exact: true }).fill("UNKNOWN-001");
   await page.getByRole("button", { name: "Apply filters" }).click();
-  await expect(page.getByRole("tabpanel")).toContainText("No inbox retrospectives found.");
+  await expect(page.getByRole("tabpanel").first()).toContainText("No inbox retrospectives found.");
   await page.getByLabel("Task", { exact: true }).fill("ALP-001");
   await page.getByRole("button", { name: "Apply filters" }).click();
   await expect(page.locator('[data-retrospective-id="browser"] > summary')).toContainText(
@@ -103,14 +103,14 @@ test("four read-only pages show details, empty states and malformed diagnostics"
   );
 
   await page.getByLabel("Select active project").selectOption("empty");
-  await expect(page.getByRole("tabpanel")).toContainText("No inbox retrospectives found.");
+  await expect(page.getByRole("tabpanel").first()).toContainText("No inbox retrospectives found.");
   for (const [tab, empty] of [
-    ["Plans", "No plans found."],
+    ["Plans", "暂无计划"],
     ["Reports", "No delivery reports found."],
     ["Docs", "文档不存在"],
   ]) {
     await page.getByRole("tab", { name: new RegExp(`^${tab}`) }).click();
-    await expect(page.getByRole("tabpanel")).toContainText(empty!);
+    await expect(page.getByRole("tabpanel").first()).toContainText(empty!);
   }
   expect(workbench.snapshot()).toEqual(before);
 
@@ -120,12 +120,14 @@ test("four read-only pages show details, empty states and malformed diagnostics"
   writeFileSync(path.join(workbench.root, "empty/README.md"), "Missing heading");
   const malformed = workbench.snapshot();
   await page.getByRole("button", { name: "Refresh workspace and project data" }).click();
-  await expect(page.getByRole("tabpanel")).toContainText("缺少一级 Markdown 标题；仍可阅读");
+  await expect(page.getByRole("tabpanel").first()).toContainText(
+    "缺少一级 Markdown 标题；仍可阅读",
+  );
   await expect(page.locator(".markdown-content")).toContainText("Missing heading");
   for (const tab of ["Plans", "Reports", "Retrospectives"]) {
     await page.getByRole("tab", { name: new RegExp(`^${tab}`) }).click();
-    await expect(page.getByRole("tabpanel")).toContainText("ARTIFACT_INVALID");
-    await expect(page.getByRole("tabpanel")).toContainText("broken");
+    await expect(page.getByRole("tabpanel").first()).toContainText("ARTIFACT_INVALID");
+    await expect(page.getByRole("tabpanel").first()).toContainText("broken");
   }
   expect(workbench.snapshot()).toEqual(malformed);
 });
@@ -182,13 +184,13 @@ test("Backlog reading mode and Plan task navigation work without changing author
   await expect(detail.locator("script")).toHaveCount(0);
   await page.getByRole("tab", { name: /^Plans/ }).click();
   const plan = page.locator(".plan-card").filter({ hasText: "Review four tasks" });
-  await plan.locator(":scope > summary").click();
-  await expect(plan.getByRole("navigation", { name: "任务目录" }).getByRole("button")).toHaveCount(
-    4,
-  );
+  await page.getByRole("link", { name: /Reading plan/ }).click();
+  await expect(
+    plan.getByRole("navigation", { name: "任务目录" }).locator(".plan-toc-button"),
+  ).toHaveCount(4);
   await plan.getByRole("button", { name: /Reading task 3 依赖/ }).click();
   await expect(plan.getByRole("heading", { name: "Acceptance 3" })).toBeVisible();
-  await expect(plan.getByRole("heading", { name: "Acceptance 2" })).toBeHidden();
+  await expect(plan.getByRole("heading", { name: "Acceptance 2" })).toBeVisible();
   await page.getByRole("button", { name: "Refresh workspace and project data" }).click();
   await expect(plan.getByRole("heading", { name: "Acceptance 3" })).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });

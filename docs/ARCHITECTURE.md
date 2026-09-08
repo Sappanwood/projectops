@@ -317,7 +317,7 @@ Workbench read-pages 在 `plans[].next_tasks` 中复用 `readPlanNext`，不新�
 `dependencyUi.ts` 读取 application 的实时正反向关系，保留读取不完整诊断；依赖草稿单独保存 revision，错误不清空草稿。
 `foundationUi.ts` 将 Plan 依赖选择写入现有 JSON 草案并沿用 revision preview/confirm；物化任务通过同一依赖 API 展示实际关系，成功修订后重新读取。
 `loadBacklogRoute` 在列表加载后按当前地址选择详情，导航计数及 controller generation 丢弃过期响应；
-项目/页面切换清理旧详情。返回 Plan 的 `loadReadPages` 先清除旧 projection，成功后展开、滚动定位并聚焦原 Plan。
+项目/页面切换清理旧详情。返回 Plan 时按来源 URL 恢复独立详情和 Tab；同页刷新保留上次内容并标明加载/失败，成功后更新 projection 并恢复阅读位置。切换 Plan 清除旧 projection，避免显示其他计划。
 状态更新仍调用现有 Backlog API，不在 Plan 新建状态修改路径。隔离浏览器测试覆盖完整返回流程、
 revision 请求、失效任务链接、跨项目切换和读取期间 authority 不变；共享查询测试核对 Web/CLI 数据等价。
 
@@ -512,6 +512,12 @@ Origin、JSON、body 上限与错误 envelope。返回的 endpoints 优先保留
 未登记或代理入口不在识别保证内。Workbench close 不调用 manager stop。
 `web/devUi.ts` 维护独立局部查询与操作状态，按项目代次隔离响应、串行提交，并以局部轮询保留焦点和诊断展开状态。
 
+自身开发服务以 ProjectOps manifest 的 dev descriptor 为唯一配置，manager 启动 Repo 的已构建
+`dist/workbench.js`；构建与验证在启动前完成，Workspace Control 不参与正常启动和 Repo 路由。
+终端 CLI 是自身 stop/restart 与恢复入口。可在明确停止受管服务后前台运行保存的已验证构建，
+修复后先结束恢复进程再回到 manager，始终保持数据 workspace 单一 Workbench owner。
+旧 Workspace Control artifact 保留原目录与原 schema，仅通过旧 resolver 查询，不接入本产品 read model。
+
 ## 跨项目依赖的身份与消费者
 
 `backlog/dependencyReference.ts` 提供纯 `TaskReference`、`parseTaskReference`、`parsePlanDependency` 和
@@ -598,3 +604,8 @@ Report 仅把它们作为 verification 说明，不扩大交付任务集合。
 execution 的可选 `input.plan.project` 保存来源 owner，任务输入及 Repo 快照仍取实际任务项目。complete 与 Report 检查各项目的接受和适用 landing 证据；Report 存于 owner，backlog 保留 project、裸 ID 与相对该项目的 URI，并附 Task evidence。两类 run 在创建、启动、恢复入口拒绝非 owner mapping 和 partial，单项目路径保留。
 
 `tests/three-project-materialization.test.ts` 以 A/B/C 临时 workspace 覆盖 built CLI 创建、批准、向 A/B 物化、no-op、跨项目修订、依赖解锁、独立 execution 接受、owner Report 与 complete；C 的既有任务不写入也不进入 mapping 分母。已有 materialize/completion/run 与浏览器测试覆盖恢复、核心拒绝路径和真实项目导航。不使用真实其他项目或付费模型，现有 owner 相对 mapping/source 无需迁移。
+
+
+### Plan 审阅视图
+
+`src/web/planView.ts` 负责草案优先列表、独立详情和审阅/执行面板，`router.ts` 以 `?tab=execution` 表示执行视图。`planReviewUi.ts` 从现有 `WorkbenchPlan` 快照复制内容及 revision，不新增 HTTP 或持久化领域。`foundationUi.ts` 保留 JSON 修订草稿并在读取版本变化后清除旧 preview；`app.ts` 保存页面会话内的阅读位置、任务定位和焦点。串行与并行模块继续负责各自运行事实，`planRunNotice.ts` 只投影紧凑提醒；运行资格和 mutation 仍使用原 application/domain。

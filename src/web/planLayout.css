@@ -147,3 +147,120 @@
 [data-plan-run-host] > [data-active="true"] {
   order: -1;
 }
+
+.plan-card [hidden] {
+  display: none;
+}
+.plan-card > .plan-summary {
+  cursor: default;
+  flex-wrap: wrap;
+}
+.plan-card .plan-title {
+  margin: 0;
+}
+.plan-section-nav [aria-selected="true"] {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-bg);
+}
+.plan-list-group {
+  margin-block: 1.5rem;
+}
+.plan-list-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.25rem;
+  margin-block: 0.6rem;
+  border: 1px solid var(--border-color);
+  border-radius: 0.75rem;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+.plan-list-row span {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+.plan-reading-actions,
+.plan-run-notices,
+[data-plan-completion],
+[role="tabpanel"] > section[aria-label="既有任务依赖"] {
+  padding: 0.75rem 1.5rem;
+}
+.plan-run-notices:has(> div:not(:empty)) {
+  border-bottom: 1px solid var(--border-color);
+}
+.plan-run-notices:not(:has(> div:not(:empty))) {
+  display: none;
+}
+.plan-toc-toggle {
+  display: none;
+}
+.plan-task {
+  scroll-margin-top: 10rem;
+}
+@media (max-width: 800px) {
+  .plan-list-row {
+    flex-direction: column;
+  }
+  .plan-toc-toggle {
+    display: inline-flex;
+  }
+  .plan-toc > h3,
+  .plan-toc:has([aria-expanded="false"]) > ol {
+    display: none;
+  }
+  .plan-summary-meta {
+    flex-wrap: wrap;
+  }
+}
+
+.plan-back {
+  align-self: flex-start;
+}
+.plan-review-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: start;
+  gap: 0.5rem;
+  padding: 0.5rem 1.5rem;
+}
+.plan-review-tools [data-foundation-plan] {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  flex: 1 1 12rem;
+}
+[data-plan-copy-result]:not(:empty),
+[data-plan-reading-notice]:not(:empty) {
+  margin: 0.5rem 1.5rem;
+}
+[data-plan-copy-result] textarea {
+  font-family: var(--font-mono);
+}
+.plan-reading-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.plan-card {
+  overflow: visible;
+}
+.plan-section-nav {
+  position: sticky;
+  top: 5.5rem;
+  z-index: 2;
+  background: var(--bg-secondary);
+}
+@media (max-width: 800px) {
+  .plan-section-nav {
+    top: 7rem;
+  }
+}
+@media (min-width: 801px) {
+  .plan-toc {
+    top: 10rem;
+    max-height: calc(100vh - 11rem);
+  }
+}

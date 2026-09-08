@@ -6,8 +6,8 @@ Workflow Retrospective。
 
 项目当前处于 Alpha 初始化阶段，以快速交付可运行的纵向工作流为主，不提供生产级安全、兼容性或完整边界保证。
 
-当前真实 dogfooding 仅接入 ProjectOps 自身：新开发任务与计划由本产品管理，Workspace Control 既有条目
-留在原系统，不导入或双写。schema 变化时仅对 dogfooding 产生且仍在使用的数据做一次性迁移，验证后删除
+ProjectOps 自身的新开发任务与计划由本产品管理，其他真实项目按 Workspace 授权接入；自身 Repo 路由和开发服务也已切换到 ProjectOps。
+Workspace Control 既有条目留在原系统作为历史，不导入或双写。schema 变化时仅对 dogfooding 产生且仍在使用的数据做一次性迁移，验证后删除
 迁移脚本，不保留运行时兼容分支。已完成或归档数据不要求持续迁移；旧版本不可读时应明确提示版本不支持。
 这是 Alpha 演进规则，具体操作与路由见 [AGENTS.md](AGENTS.md)。
 
@@ -58,13 +58,13 @@ npm run workbench -- --workspace "$HOME/my-workspace"
 并更新为 `todo`、`in_progress` 或 `done`。更新会刷新条目和项目摘要；revision 冲突时保留当前选择，
 先点击 `Refresh item` 读取最新内容，再重新提交。未完成或缺失的依赖会显示提示；与 CLI 一样，
 状态更新由用户显式决定，不自动推进依赖或强制改变状态。
-Plans 提供标题、状态、目标和任务目录；长目标默认摘要，可展开全文。点击目录定位并展开对应任务，正文按项阅读；刷新保留展开状态，
-审批与 materialization mapping 收入计划记录。执行进度单独显示 task 的完成比例、状态计数及映射条目的实时标题/状态；
+Plans 列表优先展示草案，单份详情默认“审阅计划”：完整目标、任务目录和默认展开的正文供连续阅读。顶部可复制计划引用或修订计划，任务可复制讨论上下文给 App 外 Agent；手动刷新查看外部修改并保留本地草稿和阅读位置。执行控制、进度、报告与技术记录集中到“执行与结果” Tab，
+审批记录在审阅页末尾折叠展示，materialization mapping 位于执行页。执行进度单独显示 task 的完成比例、状态计数及映射条目的实时标题/状态；
 epic 不计入完成率，缺失或损坏任务仍计入总数并显示诊断。未物化显示未开始执行，零 task 显示无可执行任务。
 CLI 更新 Backlog 后点击 Refresh 可查看新进度。Plan 同时展示进行中、可开始和受阻任务，
-排序与 `pops plan next` 一致，受阻项显示依赖 ID 和原因。点击任务进入 Backlog 详情，更新后点击“返回原 Plan”
-会重新加载进度与推荐，并展开原计划；详情地址支持刷新和直接打开。
-全部 task done 后，可在 Plan 详情点击“标为完成”，状态由 `approved` 变为 `done`（已完成）。
+排序与 `pops plan next` 一致，受阻项显示依赖 ID 和原因。点击任务进入 Backlog 详情，更新后点击返回链接
+会重新加载进度与推荐，并恢复原 Plan 的执行 Tab 与阅读位置；详情地址支持刷新和直接打开。
+全部 task done 后，可在 Plan 详情的“执行与结果” Tab 点击“标为完成”，状态由 `approved` 变为 `done`（已完成）。
 CLI 使用 `pops plan complete <project> <plan> --expected-revision <revision> --json`，revision 从 `plan show` 获取。
 操作还会校验现有执行记录的验收与落地证据；done 计划保留历史，新增范围另建计划。
 Plan 的交付报告区列出同项目关联报告，按生成时间降序排列，显示 outcome 与时间；点击报告可查看详情并返回原 Plan。
@@ -86,14 +86,19 @@ Overview 优先展示未完成计划和活动任务，分开显示计划状态�
 开发者也可以增加 `--static-dir <path>` 覆盖静态资源目录。可选 `--host` 只接受
 loopback 地址，`--port 0` 仅适合测试或一次性隔离运行。使用 `Ctrl-C` 或发送 `SIGTERM` 会关闭 listener。
 
-本开发工作区也已接入统一启动器：
+本开发工作区通过 ProjectOps 自身管理服务：
 
 ```bash
-/home/ling/workspace/workspace-control/bin/workspace dev start projectops
+cd /home/ling/workspace/projectops
+npm run build
+cd /home/ling/workspace
+pops dev check projectops --json
+pops dev start projectops --json
 ```
 
 此登记使用 `/home/ling/workspace` 中已初始化的 ProjectOps 数据，Web 与 API 共用
-`http://127.0.0.1:12500`；启动时先构建，`Ctrl-C` 关闭本次启动的进程。
+`http://127.0.0.1:12500`；启动直接加载已验证的 `dist/workbench.js`，退出 CLI 不停止服务。
+显式停止使用 `pops dev stop projectops`，重启使用 `pops dev restart projectops`；操作前核对活动执行。
 新初始化的 ProjectOps 项目列表为空，后续使用 `pops project add <子目录>` 显式登记，
 不会自动导入 Workspace Control Catalog 中的项目或过程数据。
 
@@ -323,7 +328,7 @@ Plan 修订采用草案 JSON 输入，先查看变更与受影响任务，再确
 
 ### 串行 Plan 执行
 
-在 Plan 详情的“计划执行”区域冻结当前已批准、已物化的计划。创建只保存快照，点击启动后容量为一，按显式依赖和优先级推进。
+在 Plan 详情“执行与结果” Tab 的“串行执行”区域冻结当前已批准、已物化的计划。创建只保存快照，点击启动后容量为一，按显式依赖和优先级推进。
 当前任务成功后仍等待验证和显式验收；下游只有在上游已验收且成果仍在当前 Repo 基线中时开始。
 暂停只停止后续派发，停止当前另发中止请求。失败暂停后填写核对说明再恢复；代码变化需提供检查后的当前 baseline digest。
 修改计划不会改写旧 run；停止旧工作、确认 unknown 并终止旧 run 后，才以新版本重新创建。已完成任务复用需要指定 accepted attempt 与人工说明。
@@ -387,8 +392,8 @@ pops project doctor --json
 
 command 使用 argv；变量只替换 HOST 与端点 PORT/ORIGIN，自动注入对应 env。命令须支持并启用自身 strict-port；
 不通过 shell 执行。cwd 必须静态解析到 Repo 内。doctor 检查全 manifest 重复分配，check 额外探测端口占用。
-查询不会启动项目。现有 Workspace Control 服务和端口 authority 保持原状，
-登记真实端口前仍须核对工作区保留分配。
+查询不会启动项目。已切换的项目使用 ProjectOps manifest，其余 Workspace Control 服务保持原 authority；
+登记真实端口前须同时核对两套系统的工作区保留分配。
 
 
 ### 独立开发服务管理
@@ -416,6 +421,37 @@ IPC 路径过长、权限问题或版本不兼容会明确报错，不自动改�
 如果当前 workspace 的项目 endpoint 端口与实际 Workbench 监听端口一致，网页与 API 禁止停止/重启该项目，
 请改用 `pops dev stop <project>` 或 `pops dev restart <project>`。首版没有网页 manager stop、配置编辑器或实时终端。
 
+
+### 自身开发服务与恢复
+
+本工作区的 ProjectOps 数据 workspace 是 `/home/ling/workspace`，服务配置为其 `.pops/workspace.json` 中的
+`projects.projectops.dev`。正常入口为 `pops dev start/status/stop/restart projectops`；12500 不再由 Workspace Control 启动。
+启动前在 Repo 构建并验证，服务使用当前 `dist/`，不隐式执行 build。停止或重启前核对所有已登记项目的
+受管 running/stop_requested/unknown execution 和未结束 Plan run；未确认停止的工作不能直接中断。
+
+PRO-072 切换保留的已验证构建位于数据 workspace 的 `.pops/runtime/cutover-PRO-072/recovery-build/`，
+原配置、迁移基线和校验清单位于同级切换目录。该构建包含独立 `dist/`、package manifest 和 lockfile，
+复用 Repo 的 `node_modules`，用于源码或 build 回归时恢复；它不覆盖依赖损坏或不兼容的数据 schema 变更。
+升级依赖或 schema 前仍须按实际变更保存相应恢复材料。
+
+即使当前源码不能构建，也可从终端查询和停止自身服务：
+
+```bash
+cd /home/ling/workspace
+node .pops/runtime/cutover-PRO-072/recovery-build/dist/cli.js dev status projectops --json
+node .pops/runtime/cutover-PRO-072/recovery-build/dist/cli.js dev stop projectops --json
+```
+
+确认旧服务及其进程组已停止、12500 已释放后，在同一终端前台启动保存的构建：
+
+```bash
+node .pops/runtime/cutover-PRO-072/recovery-build/dist/workbench.js --workspace /home/ling/workspace --port 12500 --pi
+```
+
+此时唯一 Workbench 进程由终端持有，manager 对该项目显示 stopped；不要同时执行 dev start。
+修复并验证 Repo 构建后，先以 `Ctrl-C` 结束前台恢复服务，再执行 `pops dev check projectops` 和
+`pops dev start projectops` 回到受管运行。manager 自身异常失联或版本不兼容时，按
+[Agent 契约](docs/AGENT_CONTRACT.md#独立开发服务生命周期) 核对 ownership，不能凭遗留 PID kill 或清理锁。
 
 ### Plan 跨项目物化
 

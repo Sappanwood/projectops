@@ -87,9 +87,11 @@ test("global refresh updates Plan relation state and ignores an older pending re
     await Promise.race([started, new Promise((resolve) => setTimeout(resolve, 1000))]);
     finishUpstream(workbench);
     await page.getByRole("button", { name: "Refresh workspace and project data" }).click();
+    await page.getByRole("tab", { name: "执行与结果", exact: true }).click();
     await expect(page.getByRole("region", { name: "可开始任务", exact: true })).toContainText(
       "Dependent UI",
     );
+    await page.getByRole("tab", { name: "审阅计划", exact: true }).click();
     await expect(relation).toContainText("已满足");
     await expect(relation).not.toContainText("尚未满足");
     const pendingResponse = page.waitForResponse((response) =>
@@ -122,9 +124,11 @@ test("returning from the external project refreshes Plan dependency relations", 
   await page.getByRole("button", { name: "done", exact: true }).click();
   await expect(page.getByLabel("Status: done", { exact: true })).toBeVisible();
   await page.getByRole("link", { name: "返回原 Plan" }).click();
+  await page.getByRole("tab", { name: "执行与结果", exact: true }).click();
   await expect(page.getByRole("region", { name: "可开始任务", exact: true })).toContainText(
     "Dependent UI",
   );
+  await page.getByRole("tab", { name: "审阅计划", exact: true }).click();
   await expect(relation).toContainText("已满足");
   await expect(relation).not.toContainText("尚未满足");
 });

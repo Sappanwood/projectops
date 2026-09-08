@@ -278,7 +278,7 @@ Workbench Plan 详情复用相同查询展示三类任务与依赖原因，可�
 
 ## Plan：显式标为完成
 
-所有映射 task 落地后，在 Web Plan 详情点击“标为完成”，或运行：
+所有映射 task 落地后，在 Web Plan 详情的“执行与结果” Tab 点击“标为完成”，或运行：
 
 ```bash
 pops plan show projectops "$plan_id" --json
@@ -360,7 +360,7 @@ Overview 文档面板提供四份标准文档的直接链接与逐项问题，�
 读取异常时显示诊断和已读取数量，不能把该数量当作完整 store 总数。
 
 Workbench 可浏览 Backlog 并在详情顶部修改状态；done 分组默认折叠并显示数量，进入已完成目标时展开，用户可再次收起。revision 位于技术信息中。各领域正文默认阅读排版，
-可切换 Markdown 源码；Plan 通过任务目录定位正文，审批与 mapping 位于计划记录中。Plan 另有实时执行进度，按 task 计数，epic 不计入完成率；
+可切换 Markdown 源码；Plan 列表优先展示草案，独立详情默认“审阅计划”，完整目标与默认展开的正文支持连续阅读，审批记录按需展开。“执行与结果” Tab（`?tab=execution`）集中进度、运行控制、报告、完成操作与 mapping；按 task 计数，epic 不计入完成率；
 缺失或损坏任务仍占总数并显示诊断，未物化/零 task 不显示虚假的完成率。CLI 更新任务后点击 Refresh 查看最新进度，
 进度查询不自动改写 Plan；全部落地后可显式标为完成。点击 Plan 映射任务进入 Backlog，完成状态更新后点击“返回原 Plan”
 会重新加载进度与推荐并定位原计划。链接可直接打开/刷新；失效任务显示错误并保留返回入口。未完成 Plan 可预览并确认修订，也可显式标为完成；Report、Docs、Retrospective 页面只读。任务详情也提供执行记录、控制和验收入口；创建及其他未提供的流转使用 CLI。
@@ -373,6 +373,7 @@ Research 使用 manifest 登记的 `markdown/research@1` root，提供只读列�
 HTTP `GET /api/projects/<id>/research` 返回列表，`?path=<root-relative-markdown-path>` 返回正文；只接受单个 path 参数，无写入入口。
 空目录显示空状态，root/descriptor 失效与无法读取目标显示诊断；目标及其子目录符号链接被拒绝。
 本地服务入口和固定端口见 AGENTS.md。CLI 更新后在 Web 使用 Refresh 重读数据，不假定实时推送。
+Plan 审阅页可复制当前快照的计划引用、revision 和任务上下文给 App 外 Agent；复制失败提供手动文本。外部修订后手动 Refresh，版本变化使旧 preview 失效并保留本地草稿，显式重读后重新预览。URL 保留 Plan 和执行 Tab，页面会话内保留阅读位置及草稿，不提供整页重载后的草稿持久化或自动推送。
 本文不是全局 skill；不能套用假定 Workspace Control schema/store 的 backlog、plan、report skill。
 
 验证命令示例时使用受信任的隔离临时 workspace，仅写入本次创建的明确目录，不需 native helper 或
