@@ -71,7 +71,10 @@ test("Docs retries failed reads, shows missing documents and discards late proje
   });
   await page.goto(`${workbench.origin}/#/projects/alpha/docs`);
   await seen;
-  await page.getByRole("combobox", { name: "Select active project" }).selectOption("empty");
+  await page
+    .getByRole("navigation", { name: "项目切换", exact: true })
+    .getByRole("link", { name: "empty", exact: true })
+    .click();
   await expect(page.getByRole("alert")).toContainText("文档不存在");
   const response = page.waitForResponse((r) => r.url().includes("/api/projects/alpha/docs?"));
   release();

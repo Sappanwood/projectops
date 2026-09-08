@@ -58,7 +58,10 @@ test("Overview controls independent dev services and keeps polling focus", async
     await panel.getByRole("button", { name: "停止", exact: true }).click();
     await expect(panel).toContainText("项目：stopped");
     expect(JSON.parse(workbench.cli(["dev", "status", "alpha", "--json"])).state).toBe("stopped");
-    await page.getByLabel("Select active project").selectOption("empty");
+    await page
+      .getByRole("navigation", { name: "项目切换", exact: true })
+      .getByRole("link", { name: "empty", exact: true })
+      .click();
     await expect(panel).toContainText("未配置开发服务");
     await expect(panel.getByRole("button", { name: "启动", exact: true })).toBeDisabled();
   } finally {
@@ -117,12 +120,18 @@ test("dev loading, errors, unknown recovery, duplicate submits and stale project
   const panel = page.getByRole("region", { name: "开发服务" });
   await expect(panel).toContainText("正在查询服务");
   await expect(panel.getByRole("button", { name: "启动", exact: true })).toBeDisabled();
-  await page.getByLabel("Select active project").selectOption("empty");
+  await page
+    .getByRole("navigation", { name: "项目切换", exact: true })
+    .getByRole("link", { name: "empty", exact: true })
+    .click();
   await expect(panel).toContainText("未配置开发服务");
   mode = "unknown";
   release?.();
   await expect(panel).toContainText("未配置开发服务");
-  await page.getByLabel("Select active project").selectOption("alpha");
+  await page
+    .getByRole("navigation", { name: "项目切换", exact: true })
+    .getByRole("link", { name: "alpha", exact: true })
+    .click();
   await expect(panel).toContainText("项目：unknown");
   await expect(panel.getByRole("button", { name: "重启", exact: true })).toBeDisabled();
   mode = "error";

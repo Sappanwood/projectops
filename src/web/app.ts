@@ -225,12 +225,24 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
             element: active,
           }
         : null;
+    const projectLinks = container.querySelector?.<HTMLElement>(".project-links");
+    const projectScroll = projectLinks?.scrollLeft ?? 0;
+    const projectFocus = active?.closest<HTMLAnchorElement>(".project-link")?.getAttribute("href");
     const devFocus =
       active?.closest?.("[data-dev-host]") && renderedProject === state.selectedProjectId
         ? active.id
         : null;
     devServices.saveReading();
     container.innerHTML = renderApp(state);
+    const nextProjectLinks = container.querySelector?.<HTMLElement>(".project-links");
+    if (nextProjectLinks) {
+      nextProjectLinks.scrollLeft = projectScroll;
+      if (!projectLinks || renderedProject !== state.selectedProjectId) revealActiveProject();
+      if (projectFocus)
+        Array.from(nextProjectLinks.querySelectorAll<HTMLAnchorElement>("a"))
+          .find((link) => link.getAttribute("href") === projectFocus)
+          ?.focus({ preventScroll: true });
+    }
     devServices.render();
     if (devFocus)
       container.querySelector<HTMLElement>(`#${devFocus}`)?.focus({ preventScroll: true });
@@ -812,17 +824,16 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
       render();
       return;
     }
-    const target = event.target as HTMLElement | null;
-    if (target === null) return;
+  }
 
-    if (target.id === "project-select") {
-      const select = target as HTMLSelectElement;
-      const nextProjectId = select.value === "" ? null : select.value;
-      router.navigate({
-        projectId: nextProjectId,
-        view: state.currentView,
-      });
-    }
+  function revealActiveProject(): void {
+    const links = container.querySelector?.<HTMLElement>(".project-links");
+    const active = links?.querySelector<HTMLElement>('[aria-current="true"]');
+    if (!links || !active) return;
+    const viewport = links.getBoundingClientRect();
+    const bounds = active.getBoundingClientRect();
+    if (bounds.left < viewport.left) links.scrollLeft += bounds.left - viewport.left - 4;
+    else if (bounds.right > viewport.right) links.scrollLeft += bounds.right - viewport.right + 4;
   }
 
   function handleSubmit(event: Event): void {
@@ -852,6 +863,7 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
   if (typeof window !== "undefined")
     window.addEventListener("scroll", saveReadingPosition, { passive: true });
   if (typeof window !== "undefined") window.addEventListener("projectops-mermaid-ready", render);
+  if (typeof window !== "undefined") window.addEventListener("resize", revealActiveProject);
   container.addEventListener("submit", handleSubmit);
   container.addEventListener("click", handleClick);
   container.addEventListener("change", handleChange);
@@ -902,6 +914,7 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
       container.removeEventListener("change", handleChange);
       container.removeEventListener("keydown", onPlanTabKey);
       router.cleanup();
+      if (typeof window !== "undefined") window.removeEventListener("resize", revealActiveProject);
       if (typeof window !== "undefined")
         window.removeEventListener("projectops-mermaid-ready", render);
       if (typeof window !== "undefined") window.removeEventListener("scroll", saveReadingPosition);

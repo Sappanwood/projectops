@@ -83,6 +83,7 @@ Project Docs 提供四份标准文档直达入口，逐项显示可读性与检�
   workspace Retrospective 记录；不接受 query 参数、文件路径或 mutation。Plan 可展开 goal、status、approval、
   materialization mapping 和带 parent/dependencies 的 item；Report 可展开 outcome、Plan/Backlog references、
   verification、deviations、workarounds、repo docs 与 Markdown 正文。Report 正文默认渲染，支持源码切换；技术记录折叠，关联 Plan、Backlog 与 Repo 文档支持跳转和返回。
+- Workbench 项目栏直接显示项目 ID，按 ID 固定排序并高亮当前项目；使用原生链接支持键盘导航和新标签页。功能导航位于独立下一行，切换项目保留当前栏目、清除原项目详情和过滤条件。窄屏在项目栏内横向滚动，首次加载、切换项目和窗口缩窄时露出当前项目；刷新保留栏内滚动位置。
 - Plan 列表按草案、已批准、已完成分组，草案优先，同组按 ID 排序。详情独立展示单份计划，默认“审阅计划” Tab，完整目标与默认展开的任务正文支持连续阅读；提供任务目录及全部展开/折叠，窄屏目录按需打开。
   “执行与结果” Tab 使用 `?tab=execution` 直达，集中进度、运行控制、下一步、报告、完成操作与 mapping；审批记录在审阅页折叠。审阅页只保留紧凑活动运行/异常提醒及恢复入口，不展示执行空面板。
 - Plan 的执行进度来自 materialization mapping 中各真实项目的实时 Backlog；显示 task 总数、todo、in_progress、done 与无法读取数量。

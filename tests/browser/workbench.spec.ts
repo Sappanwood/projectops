@@ -10,7 +10,10 @@ test("production Workbench updates Backlog with revisions and recovers from a co
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto(workbench.origin);
   await expect(page.getByRole("heading", { name: "Workspace Projects" })).toBeVisible();
-  await page.getByLabel("Select active project").selectOption("alpha");
+  await page
+    .getByRole("navigation", { name: "项目切换", exact: true })
+    .getByRole("link", { name: "alpha", exact: true })
+    .click();
   await page.getByRole("tab", { name: /^Backlog/ }).click();
   await page.getByRole("button", { name: /ALP-001 — Browser task/ }).click();
   const detail = page.getByRole("region", { name: "Backlog item detail" });
@@ -61,7 +64,10 @@ test("four read-only pages show details, empty states and malformed diagnostics"
 }) => {
   const before = workbench.snapshot();
   await page.goto(workbench.origin);
-  await page.getByLabel("Select active project").selectOption("alpha");
+  await page
+    .getByRole("navigation", { name: "项目切换", exact: true })
+    .getByRole("link", { name: "alpha", exact: true })
+    .click();
   await page.getByRole("tab", { name: /^Plans/ }).click();
   await page.getByRole("link", { name: /Browser plan/ }).click();
   await expect(page.getByRole("tabpanel").first()).toContainText("Validate production UI");
@@ -102,7 +108,10 @@ test("four read-only pages show details, empty states and malformed diagnostics"
     "browser",
   );
 
-  await page.getByLabel("Select active project").selectOption("empty");
+  await page
+    .getByRole("navigation", { name: "项目切换", exact: true })
+    .getByRole("link", { name: "empty", exact: true })
+    .click();
   await expect(page.getByRole("tabpanel").first()).toContainText("No inbox retrospectives found.");
   for (const [tab, empty] of [
     ["Plans", "暂无计划"],

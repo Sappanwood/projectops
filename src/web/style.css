@@ -192,19 +192,43 @@
 
 /* Project Navigation & Tabs */
 .project-nav {
-  display: flex;
-  align-items: center;
-  gap: 1.5rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.5rem;
   padding: 0.6rem 1.5rem;
   background-color: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
-  flex-wrap: wrap;
 }
 
-.project-selector-wrapper {
+.project-switcher {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.project-switcher > .selector-label {
+  flex: none;
+}
+
+.project-links {
+  display: flex;
+  gap: 0.25rem;
+  min-width: 0;
+  overflow-x: auto;
+  padding: 0.25rem;
+  scroll-padding-inline: 0.25rem;
+}
+
+.project-link {
+  flex: none;
+  min-height: 2.5rem;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+
+.project-link.active {
+  border-color: var(--accent);
 }
 
 .selector-label {
@@ -1574,12 +1598,8 @@
 
 /* Shared compact form layouts must shrink with long native select values. */
 .header-controls,
-.project-selector-wrapper,
 .model-selector {
   min-width: 0;
-}
-.project-selector-wrapper {
-  max-width: 100%;
 }
 .read-filters > input,
 .read-filters > select {

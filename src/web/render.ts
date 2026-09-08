@@ -110,37 +110,23 @@ export function renderProjectNav(state: AppState): string {
   }
 
   const projects = state.workspace?.projects ?? [];
-  const options = projects
-    .map((p) => {
-      const isSelected = p.id === state.selectedProjectId;
-      return `<option value="${escapeHtml(p.id)}" ${isSelected ? "selected" : ""}>${escapeHtml(p.id)} (${escapeHtml(p.path)})</option>`;
+  if (projects.length === 0) return "";
+  const links = projects
+    .toSorted((a, b) => a.id.localeCompare(b.id))
+    .map((project) => {
+      const selected = project.id === state.selectedProjectId;
+      const href = formatRoute({ projectId: project.id, view: state.currentView });
+      return `<a class="tab-link project-link${selected ? " active" : ""}" href="${escapeHtml(href)}"${selected ? ' aria-current="true"' : ""}>${escapeHtml(project.id)}</a>`;
     })
     .join("\n");
-
-  const selectorHtml = `
-    <div class="project-selector-wrapper">
-      <label for="project-select" class="selector-label">Project:</label>
-      <select
-        id="project-select"
-        class="form-select project-select"
-        aria-label="Select active project"
-      >
-        <option value="" ${state.selectedProjectId === null ? "selected" : ""}>-- Select Project --</option>
-        ${options}
-      </select>
-    </div>
-  `;
-
-  const tabsHtml =
-    state.selectedProjectId !== null
-      ? renderDomainTabs(state.selectedProjectId, state.currentView, state.projectOverview)
-      : "";
-
   return `
-    <nav class="project-nav" aria-label="Project and domain navigation">
-      ${selectorHtml}
-      ${tabsHtml}
-    </nav>
+    <div class="project-nav">
+      <nav class="project-switcher" aria-label="项目切换">
+        <span class="selector-label">项目</span>
+        <div class="project-links">${links}</div>
+      </nav>
+      ${state.selectedProjectId !== null ? renderDomainTabs(state.selectedProjectId, state.currentView, state.projectOverview) : ""}
+    </div>
   `;
 }
 

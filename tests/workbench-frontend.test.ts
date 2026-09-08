@@ -385,8 +385,10 @@ test("Workbench HTML Rendering covers loading, error, empty, header, and domain 
     projectOverview: mockProjectOverview,
   };
   const navHtml = renderProjectNav(navState);
-  assert.match(navHtml, /id="project-select"/);
-  assert.match(navHtml, /value="alpha" selected/);
+  assert.match(navHtml, /aria-label="项目切换"/);
+  assert.match(navHtml, /aria-current="true"[^>]*>alpha<\/a>/);
+  assert.match(navHtml, /href="#\/projects\/beta\/backlog"/);
+  assert.doesNotMatch(navHtml, /<select/);
   assert.match(navHtml, /role="tablist"/);
   assert.match(navHtml, /href="#\/projects\/alpha\/backlog"/);
   assert.match(navHtml, /3 todo/); // Backlog badge
