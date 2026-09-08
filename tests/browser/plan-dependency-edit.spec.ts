@@ -86,24 +86,22 @@ test("Plan dependency picker revises local and existing tasks and returns from c
   await page.getByRole("button", { name: "确认应用修订" }).click();
   await expect(card).toContainText("计划修订已保存");
   await expect(card).toContainText("2 项任务 · 1 个项目");
-  await expect(card.getByRole("region", { name: "既有任务依赖", exact: true })).toContainText(
-    "既有任务依赖 (1)",
-  );
+  const graph = card.getByRole("region", { name: "计划依赖图", exact: true });
+  await expect(graph.locator('[data-graph-node="empty:EMP-001"]')).toBeVisible();
+  await expect(card.getByRole("region", { name: "既有任务依赖", exact: true })).toHaveCount(0);
+  await expect(card.locator("#plan-browser--ui .dependency-line")).toContainText("empty:EMP-001");
   mkdirSync("/tmp/projectops-cross-project-plan", { recursive: true });
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.screenshot({
     path: "/tmp/projectops-cross-project-plan/pro062-plan-wide.png",
     fullPage: true,
   });
-  await card
-    .getByRole("region", { name: "既有任务依赖", exact: true })
-    .getByRole("link", { name: "empty:EMP-001" })
-    .click();
+  await graph.locator('[data-graph-node="empty:EMP-001"]').click();
   await expect(page).toHaveURL(/projects\/empty\/backlog\/EMP-001/);
   await page.reload();
   await page.getByRole("link", { name: "返回原 Plan" }).click();
   await expect(page).toHaveURL(/projects\/alpha\/plans\/plan-browser/);
-  await expect(card).toContainText("既有任务依赖 (1)");
+  await expect(graph.locator('[data-graph-node="empty:EMP-001"]')).toBeVisible();
   await page.setViewportSize({ width: 1024, height: 900 });
   await page.screenshot({
     path: "/tmp/projectops-cross-project-plan/pro062-plan-medium.png",

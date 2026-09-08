@@ -1,4 +1,66 @@
 /* Plan reading hierarchy and execution workspace. */
+.plan-graph {
+  padding: 0.75rem 1.5rem;
+  min-width: 0;
+}
+.plan-graph > .form-help {
+  margin-block: 0.5rem 0.75rem;
+}
+.plan-graph-scroll {
+  overflow: auto;
+  max-height: 28rem;
+  border: 1px solid var(--border-color);
+  border-radius: 0.5rem;
+  background: var(--bg-primary);
+}
+.plan-graph-canvas {
+  position: relative;
+}
+.plan-graph-canvas svg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.plan-graph-canvas [data-graph-edge] {
+  fill: none;
+  stroke: var(--text-secondary);
+  stroke-width: 1.5;
+}
+.plan-graph-canvas marker path {
+  fill: var(--text-secondary);
+}
+.plan-graph-node {
+  position: absolute;
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+.plan-graph-node:hover,
+.plan-graph-node:focus-visible {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.plan-graph-external {
+  border-style: dashed;
+  border-color: var(--text-secondary);
+}
+.plan-graph-tooltip {
+  position: fixed;
+  z-index: 10;
+  width: max-content;
+  max-width: min(24rem, calc(100vw - 2rem));
+  padding: 0.65rem 0.85rem;
+  border: 1px solid var(--control-border);
+  border-radius: 0.375rem;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
+@media (max-width: 800px) {
+  .plan-graph {
+    padding-inline: 1rem;
+  }
+}
 .plan-workspace {
   margin: 0 1.5rem 1.5rem;
   border: 1px solid var(--border-color);
@@ -184,8 +246,7 @@
 }
 .plan-reading-actions,
 .plan-run-notices,
-[data-plan-completion],
-[role="tabpanel"] > section[aria-label="既有任务依赖"] {
+[data-plan-completion] {
   padding: 0.75rem 1.5rem;
 }
 .plan-run-notices:has(> div:not(:empty)) {
@@ -232,12 +293,8 @@
   border: 0;
   flex: 1 1 12rem;
 }
-[data-plan-copy-result]:not(:empty),
 [data-plan-reading-notice]:not(:empty) {
   margin: 0.5rem 1.5rem;
-}
-[data-plan-copy-result] textarea {
-  font-family: var(--font-mono);
 }
 .plan-reading-actions {
   display: flex;

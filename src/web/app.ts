@@ -8,7 +8,7 @@ import { createExecutionUi } from "./executionUi.js";
 import { createFoundationUi } from "./foundationUi.js";
 import { rememberModel } from "./modelSelector.js";
 import { createParallelRunUi } from "./parallelRunUi.js";
-import { createPlanReviewUi } from "./planReviewUi.js";
+import { createPlanGraphUi } from "./planGraphUi.js";
 import { createPlanRunUi } from "./planRunUi.js";
 import { isReadPage } from "./readPagesView.js";
 import { renderApp } from "./render.js";
@@ -86,7 +86,7 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
   const parallelRuns = createParallelRunUi(container, apiClient, () => state);
   const planRuns = createPlanRunUi(container, apiClient, () => state);
   const executions = createExecutionUi(container, apiClient, () => state, refresh);
-  const planReview = createPlanReviewUi(container, () => state);
+  const planGraph = createPlanGraphUi(container, apiClient);
   const foundation = createFoundationUi(container, apiClient, () => state, refresh);
   const dependencies = createDependencyUi(container, apiClient, () => state, refresh);
 
@@ -105,7 +105,6 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
       "data-plan-draft",
       "data-plan-dependency-field",
       "data-foundation-action",
-      "data-plan-copy",
       "data-plan-run-field",
       "data-parallel-field",
     ].find((name) => active.hasAttribute(name));
@@ -177,10 +176,17 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
     return true;
   }
   const runScroll = new Map<string, number>();
+  const graphScroll = new Map<string, { left: number; top: number }>();
   let renderedProject: string | null = null;
   let renderedDoneTarget: string | null = null;
   function render(): void {
     if (destroyed) return;
+    const graph = container.querySelector?.<HTMLElement>(".plan-graph-scroll");
+    if (graph)
+      graphScroll.set(`${renderedProject}/${graph.id}`, {
+        left: graph.scrollLeft,
+        top: graph.scrollTop,
+      });
     for (const detail of container.querySelectorAll?.<HTMLDetailsElement>(
       "details[data-reading-key]",
     ) ?? []) {
@@ -229,7 +235,14 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
     if (devFocus)
       container.querySelector<HTMLElement>(`#${devFocus}`)?.focus({ preventScroll: true });
     foundation.render();
-    planReview.render();
+    const nextGraph = container.querySelector?.<HTMLElement>(".plan-graph-scroll");
+    const position = nextGraph
+      ? graphScroll.get(`${state.selectedProjectId}/${nextGraph.id}`)
+      : null;
+    if (nextGraph && position) {
+      nextGraph.scrollLeft = position.left;
+      nextGraph.scrollTop = position.top;
+    }
     dependencies.render();
     if (dependencyFocus?.attribute) {
       const name = dependencyFocus.attribute;
@@ -879,7 +892,7 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
       backlog.destroy();
       devServices.destroy();
       foundation.destroy();
-      planReview.destroy();
+      planGraph.destroy();
       dependencies.destroy();
       executions.destroy();
       planRuns.destroy();

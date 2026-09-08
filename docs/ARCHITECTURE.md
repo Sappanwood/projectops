@@ -608,4 +608,6 @@ execution 的可选 `input.plan.project` 保存来源 owner，任务输入及 Re
 
 ### Plan 审阅视图
 
-`src/web/planView.ts` 负责草案优先列表、独立详情和审阅/执行面板，`router.ts` 以 `?tab=execution` 表示执行视图。`planReviewUi.ts` 从现有 `WorkbenchPlan` 快照复制内容及 revision，不新增 HTTP 或持久化领域。`foundationUi.ts` 保留 JSON 修订草稿并在读取版本变化后清除旧 preview；`app.ts` 保存页面会话内的阅读位置、任务定位和焦点。串行与并行模块继续负责各自运行事实，`planRunNotice.ts` 只投影紧凑提醒；运行资格和 mutation 仍使用原 application/domain。
+`src/web/planView.ts` 负责草案优先列表、独立详情和审阅/执行面板，`router.ts` 以 `?tab=execution` 表示执行视图。`foundationUi.ts` 保留 JSON 修订草稿并在读取版本变化后清除旧 preview；`app.ts` 保存页面会话内的阅读位置、任务定位和焦点。串行与并行模块继续负责各自运行事实，`planRunNotice.ts` 只投影紧凑提醒；运行资格和 mutation 仍使用原 application/domain。
+
+`planDependencyGraph.ts` 从 Plan items、depends_on 和 materialization mapping 派生分层依赖图，使用原生 HTML 节点和 SVG 连线。图只表达 Plan 声明，parent 不作为依赖边；既有任务按限定引用去重。`planGraphUi.ts` 处理标题提示，并通过既有 `ApiClient.showBacklog` 按需读取既有任务标题；失效响应不更新已切换的节点。链接沿用完整项目身份和来源路由，未创建条目复用任务正文定位，`app.ts` 保留图的局部滚动位置。不新增 API、schema 或持久化图数据。

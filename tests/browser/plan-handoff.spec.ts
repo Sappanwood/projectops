@@ -2,28 +2,9 @@ import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { expect, test } from "./fixture.js";
 
-test("copy uses displayed revision and external revision preserves the local draft", async ({
-  workbench,
-  page,
-}) => {
-  await page.addInitScript(() =>
-    Object.defineProperty(navigator, "clipboard", {
-      value: {
-        writeText: async () => {
-          throw new Error("Denied");
-        },
-      },
-    }),
-  );
+test("external revision preserves the local draft", async ({ workbench, page }) => {
   await page.goto(`${workbench.origin}/#/projects/alpha/plans/plan-browser`);
-  await page.getByRole("button", { name: "复制计划引用", exact: true }).click();
-  const copied = page.getByLabel("手动复制上下文");
   const current = JSON.parse(workbench.cli(["plan", "show", "alpha", "plan-browser", "--json"]));
-  await expect(copied).toHaveValue(new RegExp(current.revision));
-  await expect(copied).toHaveValue(/pops plan show alpha plan-browser --json/);
-  await page.getByRole("button", { name: "复制任务上下文", exact: true }).click();
-  await expect(copied).toHaveValue(/Task key: ui/);
-  await expect(copied).toHaveValue(/Verify UI/);
   await page.getByRole("button", { name: "修订计划", exact: true }).click();
   const editor = page.getByLabel("计划 JSON 草案");
   await expect(editor).toHaveValue(/Validate production UI/);
@@ -88,25 +69,11 @@ test("execution tab and reading position survive task navigation and a refresh",
   expect(Math.abs((await page.evaluate(() => scrollY)) - position)).toBeLessThan(80);
 });
 
-test("copy success, failed refresh and missing plan keep clear feedback and recoverable draft", async ({
+test("failed refresh and missing plan keep clear feedback and recoverable draft", async ({
   workbench,
   page,
 }) => {
-  await page.addInitScript(() => {
-    Object.defineProperty(navigator, "clipboard", {
-      value: {
-        writeText: async (text: string) => {
-          (window as unknown as { copied: string }).copied = text;
-        },
-      },
-    });
-  });
   await page.goto(`${workbench.origin}/#/projects/alpha/plans/plan-browser`);
-  await page.getByRole("button", { name: "复制计划引用", exact: true }).click();
-  await expect(page.getByText("已复制当前阅读版本的上下文。", { exact: true })).toBeVisible();
-  expect(await page.evaluate(() => (window as unknown as { copied: string }).copied)).toContain(
-    "Reference: project-ops:plans/plan-browser.json",
-  );
   await page.getByRole("button", { name: "修订计划", exact: true }).click();
   const editor = page.getByLabel("计划 JSON 草案");
   await expect(editor).toHaveValue(/Validate production UI/);
