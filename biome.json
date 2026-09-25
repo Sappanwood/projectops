@@ -3,6 +3,7 @@
   "files": {
     "includes": [
       "src/**/*.ts",
+      "src/**/*.tsx",
       "src/**/*.css",
       "tests/**/*.ts",
       "scripts/**/*.mjs",

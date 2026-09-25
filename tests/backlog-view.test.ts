@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { renderBacklogPanel } from "../src/web/backlogView.js";
+import { renderBacklogPanel } from "./helpers/webRender.js";
 
 test("done backlog items are inside a collapsed counted details group", () => {
   const html = renderBacklogPanel({

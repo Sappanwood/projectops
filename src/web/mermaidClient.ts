@@ -43,7 +43,7 @@ const renderMermaidBlocks: MermaidRenderer = async (root) => {
     startOnLoad: false,
     securityLevel: "strict",
     htmlLabels: false,
-    theme: "dark",
+    theme: "neutral",
     flowchart: { htmlLabels: false },
     suppressErrorRendering: true,
     maxTextSize: 32_000,

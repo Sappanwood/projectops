@@ -197,7 +197,10 @@ test("Backlog reading mode and Plan task navigation work without changing author
   await expect(
     plan.getByRole("navigation", { name: "任务目录" }).locator(".plan-toc-button"),
   ).toHaveCount(4);
-  await plan.getByRole("button", { name: /Reading task 3 依赖/ }).click();
+  await plan
+    .getByRole("navigation", { name: "任务目录" })
+    .getByRole("button", { name: /Reading task 3/ })
+    .click();
   await expect(plan.getByRole("heading", { name: "Acceptance 3" })).toBeVisible();
   await expect(plan.getByRole("heading", { name: "Acceptance 2" })).toBeVisible();
   await page.getByRole("button", { name: "Refresh workspace and project data" }).click();

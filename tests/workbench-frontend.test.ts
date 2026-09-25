@@ -3,13 +3,6 @@ import test from "node:test";
 
 import { createApiClient } from "../src/web/apiClient.js";
 import { createWorkbenchApp } from "../src/web/app.js";
-import {
-  escapeHtml,
-  renderApp,
-  renderDiagnostics,
-  renderHeader,
-  renderProjectNav,
-} from "../src/web/render.js";
 import { formatRoute, parseRoute } from "../src/web/router.js";
 import {
   createInitialState,
@@ -25,6 +18,13 @@ import type {
   WorkbenchProjectOverview,
   WorkbenchWorkspaceOverview,
 } from "../src/web/types.js";
+import {
+  escapeHtml,
+  renderApp,
+  renderDiagnostics,
+  renderHeader,
+  renderProjectNav,
+} from "./helpers/webRender.js";
 
 const mockWorkspace: WorkbenchWorkspaceOverview = {
   workspace: { name: "demo-workspace" },
@@ -568,7 +568,7 @@ test("Workbench App discards out-of-order project responses when route changes",
   // State must NOT be overwritten by the stale alpha response!
   assert.equal(app.getState().selectedProjectId, "beta");
   assert.equal(app.getState().projectOverview?.project.id, "beta");
-  assert.match(fakeContainer.innerHTML, /beta/);
+  assert.match(renderApp(app.getState()), /beta/);
 
   app.destroy();
 });

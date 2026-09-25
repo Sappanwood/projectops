@@ -9,7 +9,7 @@ if (existsSync(srcDir)) {
   mkdirSync(destDir, { recursive: true });
   cpSync(srcDir, destDir, {
     recursive: true,
-    filter: (source) => !source.endsWith(".ts"),
+    filter: (source) => !/\.tsx?$/.test(source),
   });
 }
 
@@ -21,6 +21,17 @@ await build({
   outfile: path.join(destDir, "mermaid.js"),
   platform: "browser",
   target: "es2022",
+});
+
+await build({
+  bundle: true,
+  entryPoints: [path.join(srcDir, "app.ts")],
+  format: "esm",
+  minify: true,
+  outfile: path.join(destDir, "app.js"),
+  platform: "browser",
+  target: "es2022",
+  define: { "process.env.NODE_ENV": '"production"' },
 });
 
 await import("./buildSkill.mjs");

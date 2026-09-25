@@ -8,7 +8,7 @@ import type { WorkbenchReadPages } from "../src/application/workbenchReadModel.j
 import { type Report, serializeReport } from "../src/report/report.js";
 import { serializeRetrospective } from "../src/retrospective/retrospective.js";
 import { startWorkbenchServer } from "../src/server/workbenchServer.js";
-import { renderReadPages } from "../src/web/readPagesView.js";
+import { renderApp, renderReadPages } from "./helpers/webRender.js";
 
 function setup() {
   const root = mkdtempSync(path.join(tmpdir(), "pops-read-pages-"));
@@ -185,7 +185,7 @@ test("each page presents empty data and domain diagnostics without hiding health
     for (const view of ["plans", "reports", "retrospectives"] as const)
       assert.match(
         renderReadPages(view, data, { project: "alpha", status: "", task: "" }),
-        /No .*found|暂无计划/,
+        /No .*found|还没有计划/,
       );
     assert.equal(data.documents.length, 4);
     assert.ok(data.documents.every((document) => document.issue === "document is missing"));
@@ -271,7 +271,7 @@ test("mounted Workbench loads read pages, submits filters and refreshes authorit
       }
     }
     await until(() => app!.getState().readPages !== null);
-    assert.match(container.innerHTML, /Visible detail/);
+    assert.match(renderApp(app!.getState()), /Visible detail/);
     assert.equal(app.getState().retrospectiveFilters.project, "alpha");
     const values: Record<string, string> = { project: "alpha", status: "active", task: "ALP-001" };
     handlers.submit!({
@@ -281,8 +281,8 @@ test("mounted Workbench loads read pages, submits filters and refreshes authorit
       },
       preventDefault() {},
     });
-    assert.doesNotMatch(container.innerHTML, /Visible detail/);
-    assert.match(container.innerHTML, /No active retrospectives found/);
+    assert.doesNotMatch(renderApp(app!.getState()), /Visible detail/);
+    assert.match(renderApp(app!.getState()), /No active retrospectives found/);
     values.status = "inbox";
     handlers.submit!({
       target: {
@@ -291,10 +291,10 @@ test("mounted Workbench loads read pages, submits filters and refreshes authorit
       },
       preventDefault() {},
     });
-    assert.match(container.innerHTML, /Visible detail/);
+    assert.match(renderApp(app!.getState()), /Visible detail/);
     navigate({ projectId: "alpha", view: "plans" });
     await until(() => !app!.getState().readPagesLoading);
-    assert.match(container.innerHTML, /暂无计划/);
+    assert.deepEqual(app.getState().readPages?.plans, []);
     writeFileSync(
       path.join(ops, "plans/plan-new.json"),
       JSON.stringify({
@@ -309,7 +309,7 @@ test("mounted Workbench loads read pages, submits filters and refreshes authorit
     await app.refresh();
     navigate({ projectId: "alpha", view: "plans", planId: "plan-new" });
     await until(() => !app!.getState().readPagesLoading);
-    assert.match(container.innerHTML, /Fresh authority/);
+    assert.equal(app.getState().readPages?.plans[0]?.goal, "Fresh authority");
     assert.deepEqual(app.getState().retrospectiveFilters, {
       project: "alpha",
       status: "inbox",
@@ -407,30 +407,29 @@ test("read page requests discard stale responses and expose retry after a read f
   const settle = () => new Promise((resolve) => setImmediate(resolve));
   try {
     await settle();
-    assert.match(container.innerHTML, /Loading read-only view/);
+    assert.match(renderApp(app!.getState()), /Loading read-only view/);
     navigate({ projectId: "beta", view: "plans" });
     await settle();
     pending[1]!({ ok: true, data: pages("Beta fresh") });
     await settle();
     pending[0]!({ ok: true, data: pages("Alpha stale") });
     await settle();
-    assert.match(container.innerHTML, /Beta fresh/);
-    assert.doesNotMatch(container.innerHTML, /Alpha stale/);
+    assert.equal(app.getState().readPages?.plans[0]?.title, "Beta fresh");
     navigate({ projectId: "beta", view: "reports" });
     navigate({ projectId: "beta", view: "plans" });
     pending[3]!({ ok: false, error: { message: "Read unavailable" } });
     await settle();
     pending[2]!({ ok: true, data: pages("Stale same project") });
     await settle();
-    assert.match(container.innerHTML, /Read unavailable/);
-    assert.doesNotMatch(container.innerHTML, /Stale same project/);
+    assert.match(renderApp(app!.getState()), /Read unavailable/);
+    assert.doesNotMatch(renderApp(app!.getState()), /Stale same project/);
     handlers.click!({
       target: { closest: (selector: string) => (selector === "#read-pages-retry" ? {} : null) },
     });
     pending[4]!({ ok: true, data: pages("Recovered") });
     await settle();
-    assert.match(container.innerHTML, /Recovered/);
-    assert.doesNotMatch(container.innerHTML, /Read unavailable/);
+    assert.equal(app.getState().readPages?.plans[0]?.title, "Recovered");
+    assert.doesNotMatch(renderApp(app!.getState()), /Read unavailable/);
   } finally {
     app.destroy();
     rmSync(root, { recursive: true, force: true });

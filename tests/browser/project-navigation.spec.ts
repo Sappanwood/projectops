@@ -15,7 +15,7 @@ test("project links stay visible, preserve the section and support keyboard navi
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto(`${workbench.origin}/#/projects/projectops-with-a-long-name/plans`);
-  await expect(page.getByRole("heading", { name: "Plans (0)", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "计划", exact: true })).toBeVisible();
   mkdirSync("/tmp/projectops-project-navigation", { recursive: true });
   const phase = process.env.PROJECT_NAV_BEFORE ? "before" : "after";
   for (const width of [1440, 1024, 390]) {
@@ -46,7 +46,7 @@ test("project links stay visible, preserve the section and support keyboard navi
   await expect(projects.getByRole("link", { name: "empty", exact: true })).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/#\/projects\/empty\/plans$/);
-  await expect(page.getByRole("heading", { name: "Plans (0)", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "计划", exact: true })).toBeVisible();
   await expect(projects.getByRole("link", { name: "empty", exact: true })).toBeFocused();
   await page.goto(`${workbench.origin}/#/projects/alpha/plans/plan-browser?tab=execution`);
   await projects.getByRole("link", { name: "empty", exact: true }).click();
@@ -92,7 +92,7 @@ test("project navigation remains available while project data fails and recovers
   );
   await page.unroute("**/api/projects/empty");
   await page.getByRole("button", { name: "Refresh workspace and project data" }).click();
-  await expect(page.getByRole("heading", { name: "Plans (0)", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "计划", exact: true })).toBeVisible();
   await projects.getByRole("link", { name: "alpha", exact: true }).click();
   await expect(page.getByRole("link", { name: /Browser plan/ })).toBeVisible();
 });

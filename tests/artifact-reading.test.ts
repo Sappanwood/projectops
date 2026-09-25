@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { renderReadPages } from "../src/web/readPagesView.js";
 import type { WorkbenchReadPages } from "../src/application/workbenchReadModel.js";
+import { renderReadPages } from "./helpers/webRender.js";
 
 test("Reports and Retrospectives put rendered bodies before technical records", () => {
   const data: WorkbenchReadPages = {

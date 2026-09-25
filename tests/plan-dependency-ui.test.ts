@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import type { WorkbenchReadPages } from "../src/application/workbenchReadModel.js";
+import { PlansPage } from "../src/web/planView.js";
 import { editPlanDependency, renderPlanDependencyEditor } from "../src/web/planDependenciesUi.js";
 
 test("Plan dependency edits preserve draft and distinguish local keys from task references", () => {
@@ -33,67 +37,67 @@ test("Plan dependency edits preserve draft and distinguish local keys from task 
 });
 
 test("Plan read view separates owned work and existing prerequisites with a return route", async () => {
-  const { renderReadPages } = await import("../src/web/readPagesView.js");
   const { formatRoute } = await import("../src/web/router.js");
-  const html = renderReadPages(
-    "plans",
-    {
-      plans: [
-        {
-          schema: "plan/Plan@1",
-          id: "plan-deploy",
-          title: "Deploy",
-          goal: "Cloud",
-          status: "draft",
-          revision: "r1",
-          items: [
-            {
-              key: "web",
-              title: "Web",
-              item_type: "task",
-              priority: "P1",
-              body: "",
-              depends_on: ["mochi:MOC-001"],
-            },
-          ],
-          execution: {
-            materialized: false,
-            prerequisites: { evidence: [], diagnostics: [] },
-            counts: {
-              total: 0,
-              todo: 0,
-              in_progress: 0,
-              done: 0,
-              blocked: 0,
-              cancelled: 0,
-              unreadable: 0,
-            },
-            completion_percent: null,
-            items: [],
+  const data: WorkbenchReadPages = {
+    plans: [
+      {
+        schema: "plan/Plan@1",
+        id: "plan-deploy",
+        title: "Deploy",
+        goal: "Cloud",
+        status: "draft",
+        revision: "r1",
+        items: [
+          {
+            key: "web",
+            title: "Web",
+            item_type: "task",
+            priority: "P1",
+            body: "",
+            depends_on: ["mochi:MOC-001"],
           },
-          next_tasks: {
-            plan_id: "plan-deploy",
-            next: null,
-            ready: [],
-            in_progress: [],
-            blocked: [],
-            diagnostics: [],
+        ],
+        execution: {
+          materialized: false,
+          prerequisites: { evidence: [], diagnostics: [] },
+          counts: {
+            total: 0,
+            todo: 0,
+            in_progress: 0,
+            done: 0,
+            blocked: 0,
+            cancelled: 0,
+            unreadable: 0,
           },
-          delivery_reports: [],
+          completion_percent: null,
+          items: [],
         },
-      ],
-      reports: [],
-      documents: [],
-      retrospectives: [],
-      diagnostics: [],
-    },
-    { project: "write", status: "", task: "" },
-    { projectId: "write", planId: "plan-deploy" },
+        next_tasks: {
+          plan_id: "plan-deploy",
+          next: null,
+          ready: [],
+          in_progress: [],
+          blocked: [],
+          diagnostics: [],
+        },
+        delivery_reports: [],
+      },
+    ],
+    reports: [],
+    documents: [],
+    retrospectives: [],
+    diagnostics: [],
+  };
+  const html = renderToStaticMarkup(
+    createElement(PlansPage, {
+      plans: data.plans,
+      route: { projectId: "write", view: "plans", planId: "plan-deploy" },
+    }),
   );
   assert.match(html, /1 项任务 · 1 个项目/);
   assert.doesNotMatch(html, /aria-label="既有任务依赖"/);
   assert.match(html, /aria-label="计划依赖图"/);
-  assert.match(html, /class="dependency-line" aria-label="Dependencies">既有任务：/);
+  assert.match(html, /class="dependency-line" aria-label="Dependencies"><span>既有任务：/);
   const route = formatRoute({
     projectId: "mochi",
     view: "backlog",

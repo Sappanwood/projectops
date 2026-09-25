@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseItemFile } from "../src/backlog/item.js";
-import { createApiClient, type ApiResult } from "../src/web/apiClient.js";
-import { createBacklogController } from "../src/web/backlogController.js";
-import { renderBacklogPanel } from "../src/web/backlogView.js";
 import type { BacklogMutationReceipt } from "../src/application/backlogApi.js";
+import { parseItemFile } from "../src/backlog/item.js";
+import { type ApiResult, createApiClient } from "../src/web/apiClient.js";
+import { createBacklogController } from "../src/web/backlogController.js";
+import { renderBacklogPanel } from "./helpers/webRender.js";
 
 test("Backlog ignores a pending mutation response after switching projects and prevents double submit", async () => {
   const item = parseItemFile(

@@ -6,9 +6,9 @@ import test from "node:test";
 import { runCli } from "../src/app.js";
 import { startWorkbenchServer } from "../src/server/workbenchServer.js";
 import { createApiClient } from "../src/web/apiClient.js";
-import { createBacklogController } from "../src/web/backlogController.js";
-import { renderBacklogPanel } from "../src/web/backlogView.js";
 import { createWorkbenchApp } from "../src/web/app.js";
+import { createBacklogController } from "../src/web/backlogController.js";
+import { renderBacklogPanel } from "./helpers/webRender.js";
 
 test("Workbench Backlog lists, reads, updates and recovers from a real HTTP revision conflict", async () => {
   const workspace = mkdtempSync(path.join(tmpdir(), "pops-backlog-flow-"));

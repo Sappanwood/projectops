@@ -51,7 +51,7 @@ npm run workbench -- --workspace "$HOME/my-workspace"
 ```
 
 构建后 server 自动托管内置生产前端 Web 界面，浏览器访问 `http://127.0.0.1:7331` 即可体验。
-顶部项目栏按 ID 固定排序，一次点击切换项目；功能导航单独一行，切换项目保留当前栏目并返回该栏目的列表。窄屏项目栏可横向滚动，并自动露出当前项目。
+项目栏按 ID 固定排序，一次点击切换项目；所有页面宽屏使用左侧导航，窄屏使用顶部两行导航。切换项目保留当前栏目并返回列表；窄屏导航可横向滚动，并自动露出当前项目。
 进入 Backlog 后可按状态浏览全部条目；列表突出标题和选中态，详情顶部提供状态操作与刷新。
 正文默认使用阅读排版，可切换 Markdown 源码；支持标题、段落、嵌套列表、表格、引用块、只读任务列表、分隔线、强调、代码和 HTTP(S) 链接，
 其他语法保留为文本。原始 HTML 不执行，本地路径和非 HTTP(S) 链接只显示文本；revision 收入技术信息。
@@ -59,7 +59,7 @@ npm run workbench -- --workspace "$HOME/my-workspace"
 并更新为 `todo`、`in_progress` 或 `done`。更新会刷新条目和项目摘要；revision 冲突时保留当前选择，
 先点击 `Refresh item` 读取最新内容，再重新提交。未完成或缺失的依赖会显示提示；与 CLI 一样，
 状态更新由用户显式决定，不自动推进依赖或强制改变状态。
-Plans 列表优先展示草案，单份详情默认“审阅计划”：完整目标、任务目录和默认展开的正文供连续阅读。顶部可修订计划，App 外 Agent 直接读取 Plan 文件；手动刷新查看外部修改并保留本地草稿和阅读位置。执行控制、进度、报告与技术记录集中到“执行与结果” Tab，
+Workbench 的 Workspace、Overview、Backlog、Plan、Reports、Docs、Research 和 Retrospectives 页面主体统一使用 React + TypeScript 与浅色文档布局。编辑、运行与服务控制继续复用原控制器。Plan 列表优先展示草案并收起空分组，单份详情默认“审阅计划”：完整目标、任务目录和默认展开的正文供连续阅读，宽屏右侧展示状态与审阅提示。顶部可修订计划，App 外 Agent 直接读取 Plan 文件；手动刷新查看外部修改并保留本地草稿、阅读位置和未变化正文的选区。执行控制、进度、报告与技术记录集中到“执行与结果” Tab，
 审批记录在审阅页末尾折叠展示，materialization mapping 位于执行页。执行进度单独显示 task 的完成比例、状态计数及映射条目的实时标题/状态；
 epic 不计入完成率，缺失或损坏任务仍计入总数并显示诊断。未物化显示未开始执行，零 task 显示无可执行任务。
 CLI 更新 Backlog 后点击 Refresh 可查看新进度。Plan 同时展示进行中、可开始和受阻任务，
@@ -112,7 +112,7 @@ npm run quality:full  # quality、一次 build、Node 测试、Chromium E2E
 ```
 
 [biome.json](biome.json) 是格式与基本静态规则的唯一配置，覆盖全部 `src/**/*.ts`、
-`src/**/*.css`、`tests/**/*.ts`、`scripts/**/*.mjs`、根目录 JSON 和 `playwright.config.ts`。
+`src/**/*.tsx`、`src/**/*.css`、`tests/**/*.ts`、`scripts/**/*.mjs`、根目录 JSON 和 `playwright.config.ts`。
 生成物 `dist/`、依赖、测试输出及 npm 维护的 `package-lock.json` 不参与；Markdown 与 HTML 目前人工检查。
 格式为两空格缩进、100 列换行；显式启用未使用 import/变量、不可达代码、非法赋值、debugger、
 重复 case/参数等错误规则，不启用与现有 Alpha 开发无关的整套风格要求，也不设置 coverage 或行数门槛。

@@ -28,7 +28,7 @@ flowchart TD
 当前 Repo 已落地 Workspace/Catalog、Backlog、Plan authoring/query/validation/approval/materialization、Project Docs
 scaffold/check，以及 Report@1 schema、Markdown filesystem adapter、单 Plan Report 生成资格校验和
 `pops report create/list/show`；独立临时 workspace 的 built CLI smoke 已覆盖 Plan → Backlog → Report 的
-completed 路径、logical references、验证证据和 no-clobber 行为。Retrospective 的 Retrospective@1/Store@1 schema、workspace manifest 路由、Markdown store bootstrap、可重建索引、capture/query 与 revision-protected triage/archive lifecycle 已落地；独立临时 workspace 的 built CLI E2E 还验证了 metadata 保留、唯一 authority 移动、索引计数和 stale revision 不变式。Workbench 的 UI-neutral typed Application API、按请求重建的 workspace/project Read Model、loopback-only Local HTTP server 以及基于纯 TypeScript/原生 ESM 的可导航 Workbench 前端壳已落地，生产 build 由本地 server 直接托管；Backlog 可写切片、Plan/Report/Retrospective 阅读视图和 Docs 文档阅读已交付。上图是新增纵向能力时必须保持的目标依赖方向。
+completed 路径、logical references、验证证据和 no-clobber 行为。Retrospective 的 Retrospective@1/Store@1 schema、workspace manifest 路由、Markdown store bootstrap、可重建索引、capture/query 与 revision-protected triage/archive lifecycle 已落地；独立临时 workspace 的 built CLI E2E 还验证了 metadata 保留、唯一 authority 移动、索引计数和 stale revision 不变式。Workbench 的 UI-neutral typed Application API、按请求重建的 workspace/project Read Model、loopback-only Local HTTP server 以及基于 TypeScript/ESM 的可导航 Workbench 前端壳已落地，所有页面主体采用 React，生产 build 由本地 server 直接托管；Backlog 可写切片、Plan/Report/Retrospective 阅读视图和 Docs 文档阅读已交付。上图是新增纵向能力时必须保持的目标依赖方向。
 
 ## 核心技术栈
 
@@ -40,7 +40,7 @@ completed 路径、logical references、验证证据和 no-clobber 行为。Retr
 | Persistence | Markdown/JSON files | 人类可读、Git-friendly、Agent 可操作 |
 | Tests | Node test runner + tsx；Playwright Test + Chromium | Node 测试覆盖领域与 HTTP，浏览器 E2E 验证生产 UI 闭环 |
 | HTTP | Node.js `node:http` | 直接复用单运行时，不增加 server framework |
-| Web UI | 纯 TypeScript + 原生 ESM + 现代 CSS | 保持单运行时与零重型外部依赖，兼顾可访问性与直接静态托管 |
+| Web UI | TypeScript + React + CSS | 全站使用稳定组件树支持持续审阅，统一打包为本地静态资源，不增加服务端运行时 |
 
 ## 模块边界
 
@@ -84,21 +84,29 @@ src/
     workbenchServer.ts    HTTP routes、request boundary、static assets 与 server lifecycle
   web/
     index.html            Workbench HTML 骨架与挂载点
-    theme.css             深色主题变量、基础元素、全局内容链接及焦点样式
+    theme.css             浅色主题变量、基础元素、全局内容链接及焦点样式
     style.css             导入 theme.css，承载组件样式、页面布局与响应式规则
     planLayout.css        Plan 阅读区块、执行工作区与局部滚动布局
+    reviewTheme.css       全站侧栏、浅色阅读区与各页面布局
+    workbenchReact.tsx     全站 React root、共享壳、导航、加载与错误状态
+    overviewView.tsx      Workspace 首页与项目 Overview
+    documentView.tsx      Docs／Research 文档列表、正文与目录
+    artifactView.tsx      Report／Retrospective 阅读、筛选与技术记录
+    readingView.tsx       escaped HTML 的稳定 React 边界
+    planView.tsx          React Plan 列表、文档审阅、目录与状态栏
+    planExecutionView.tsx React 执行进度、后续任务和交付结果
     types.ts              前端 AppState、ViewType 与只读模型契约
     router.ts             URL Hash 路由解析、格式化与状态恢复
     apiClient.ts          HTTP API 客户端与网络/格式错误收敛
     backlogController.ts Backlog 列表、详情、revision mutation 与异步响应隔离
-    backlogView.ts        Backlog 分组列表、详情和状态更新控件
+    backlogView.tsx       React Backlog 列表、详情、状态按钮及控制器挂载区
     dependencyUi.ts       Backlog 依赖编辑与共享正反向关系展示
     planDependenciesUi.ts Plan local key / 既有引用选择及草案变更
     markdown.ts           各领域共用阅读子集与源码切换，HTML 转义、受限链接和标题回调
-    docsView.ts           文档导航、正文、章节目录及相对链接解析
+    docsView.ts           文档状态与相对链接解析
     state.ts              前端状态机核心与不可变状态转移
-    readPagesView.ts       Plan/Report/Docs/Retrospective 只读详情与回顾过滤
-    render.ts             语义化 HTML 纯函数渲染与可访问性属性
+    readPagesView.ts       阅读页面类型与回顾筛选类型
+    render.ts             共用 HTML 转义与诊断渲染
     app.ts                生命周期编排、事件委托与 DOM 挂载
   catalog/
     workspace.ts          Catalog domain：Manifest@1 schema 与纯路径逻辑
@@ -164,7 +172,7 @@ Plan、Report 保留各自 domain 类型，Docs 从 `PROJECT_DOC_TEMPLATES` 派�
 CLI JSON 或前端 schema parser 读取数据。此 projection 按需从 read-pages endpoint 加载，Alpha 阶段一次返回
 四个领域的完整内容，无分页或持久化缓存；overview 继续保留轻量摘要契约。
 
-`readPagesView.ts` 以原生 `<details>` 提供可键盘展开的 Plan、Report 和 Retrospective 详情，Report/Retrospective 正文默认通过共享阅读组件渲染，源码可切换；正文和关键行动优先，metadata 折叠。Plan 采用任务目录与独立折叠正文，技术记录单独折叠。
+`artifactView.tsx` 以 React 渲染原生 `<details>`，提供可键盘展开的 Report 和 Retrospective 详情，Report/Retrospective 正文默认通过共享阅读组件渲染，源码可切换；正文和关键行动优先，metadata 折叠。Plan 采用任务目录与独立折叠正文，技术记录单独折叠。
 Retrospective 在完整 typed 列表上按 status/project/task 精确过滤，默认 project 为当前项目，留空表示全部，
 `null` 表示 provenance 未记录；按 inbox/active/archive 分组并保留不受过滤影响的 malformed diagnostics。
 Docs 页面独立调用 docs endpoint 获取列表和单篇正文，`read-pages.documents` 仍仅保留固定路径检查摘要。`app.ts` 管理按需加载、重试、刷新和过滤状态，使用请求序号隔离过期响应；
@@ -357,10 +365,10 @@ Docs HTTP 测试覆盖正常阅读、缺失、非 Markdown、路径越界和 sym
 ## Alpha 样式约定
 
 `web/theme.css` 集中定义颜色、字体与阅读排版变量，以及 reset、body、普通链接和键盘焦点的基础样式；
-`web/style.css` 导入主题层，保留现有组件与页面布局。原生控件声明 dark color-scheme。
+`web/style.css` 导入主题层，保留现有组件与页面布局。原生控件统一声明 light color-scheme；`reviewTheme.css` 定义共享侧栏、文档阅读面板与各页面层级。
 普通内容链接使用统一的 link/link-hover 变量，已访问链接保持同一可读颜色；hover/focus 同时加强下划线，
 不依赖浏览器默认蓝紫色。基础链接选择器保持低优先级，品牌、导航、按钮等组件保留自己的语义样式。
-新页面的内容链接默认复用基础层，避免逐页补充颜色。新增主题颜色集中到 theme.css，以语义变量引用；
+新页面的内容链接默认复用基础层，避免逐页补充颜色。全站浅色主题颜色集中到 theme.css，以语义变量引用；
 阅读区域复用 bg-reading、text-reading、reading-measure、reading-line-height。Overview 使用两列响应式网格与
 独立内容高度，条目标题、元信息和 ID 纵向排列，相关样式限定在 overview-card 下，避免影响详情布局。
 不引入 CSS framework 或完整设计系统。共用控件和页面例外见 [前端规范](FRONTEND_GUIDELINES.md)。
@@ -535,7 +543,7 @@ Origin、JSON、body 上限与错误 envelope。返回的 endpoints 优先保留
 | `application/parallelRunApi.ts`、`planRun/parallelRun.ts` | 外部前置不加入本 Repo DAG 节点；重验依赖与冻结证据，保持本地 landed 与资源门禁 |
 | `execution/attempt.ts`、`execution/store.ts`、`application/verificationChecks.ts` | 按目标项目读取受管接受及对应输入/验证；并行成果同时检查 landed，不把模型成功当接受 |
 | `useCases/reportGenerate.ts`、`report/report.ts` 与两类 run 的 delivery evidence 查询 | 上游引用与证据属于前置说明，不能计入本 Plan 已交付任务；发布时再次检查有效性 |
-| `web/backlogView.ts`、`web/backlogController.ts`、Plan 阅读/修订与 HTTP adapter | 复用 typed application API，选择器区分项目/局部 key，支持 revision 编辑和真实项目导航，正反向关系暴露局部读取 diagnostics |
+| `web/backlogView.tsx`、`web/backlogController.ts`、Plan 阅读/修订与 HTTP adapter | 复用 typed application API，选择器区分项目/局部 key，支持 revision 编辑和真实项目导航，正反向关系暴露局部读取 diagnostics |
 
 `application/backlogDependencies.ts` 已提供 `readTaskReference`、`validateBacklogDependencies` 和
 `getBacklogDependencies`。创建通过 `createBacklogItem` 把共享验证注入 `backlog/add.ts`，编辑复用
@@ -608,6 +616,8 @@ execution 的可选 `input.plan.project` 保存来源 owner，任务输入及 Re
 
 ### Plan 审阅视图
 
-`src/web/planView.ts` 负责草案优先列表、独立详情和审阅/执行面板，`router.ts` 以 `?tab=execution` 表示执行视图。`foundationUi.ts` 保留 JSON 修订草稿并在读取版本变化后清除旧 preview；`app.ts` 保存页面会话内的阅读位置、任务定位和焦点。串行与并行模块继续负责各自运行事实，`planRunNotice.ts` 只投影紧凑提醒；运行资格和 mutation 仍使用原 application/domain。
+`src/web/planView.tsx` 和 `planExecutionView.tsx` 使用 React 渲染草案优先列表、独立详情、审阅正文与执行结果；`workbenchReact.tsx` 在整个 Workbench 生命周期维持同一个 root，关闭 app 时 unmount；所有页面及共享导航由 React 渲染，切换项目／栏目通过 key 隔离页面。`router.ts` 以 `?tab=execution` 表示执行视图。构建通过现有 esbuild 将 `app.ts` 及 React 打包为浏览器 ESM，Node HTTP server 继续静态托管，无 SSR 或额外服务。
+
+React 拥有页面组件树；已有 escaped Markdown、SVG 依赖图和模型选择通过稳定 HTML 边界复用；Backlog 编辑／依赖／执行、Plan 修订／运行和 Overview 服务控制只写 React 预留的空挂载区。同步提交边界使原 controller 可以在 render 返回后找到这些区域；不允许两个渲染器管理同一子树。`foundationUi.ts` 保留 JSON 修订草稿并在读取版本变化后清除旧 preview；`app.ts` 保存跨路由阅读位置、任务定位和焦点。全站刷新不再通过 container.innerHTML 替换整页 DOM；未变化的 Plan、Report 和 Retrospective 正文选区得以保留。React 静态渲染仅用于测试断言，生产浏览器不引入 react-dom/server。串行与并行模块继续负责各自运行事实，`planRunNotice.ts` 只投影紧凑提醒；运行资格和 mutation 仍使用原 application/domain。
 
 `planDependencyGraph.ts` 从 Plan items、depends_on 和 materialization mapping 派生分层依赖图，使用原生 HTML 节点和 SVG 连线。图只表达 Plan 声明，parent 不作为依赖边；既有任务按限定引用去重。`planGraphUi.ts` 处理标题提示，并通过既有 `ApiClient.showBacklog` 按需读取既有任务标题；失效响应不更新已切换的节点。链接沿用完整项目身份和来源路由，未创建条目复用任务正文定位，`app.ts` 保留图的局部滚动位置。不新增 API、schema 或持久化图数据。

@@ -11,7 +11,6 @@ import { createParallelRunUi } from "./parallelRunUi.js";
 import { createPlanGraphUi } from "./planGraphUi.js";
 import { createPlanRunUi } from "./planRunUi.js";
 import { isReadPage } from "./readPagesView.js";
-import { renderApp } from "./render.js";
 import { formatRoute, parseRoute, type Router, setupRouter } from "./router.js";
 import {
   createInitialState,
@@ -25,6 +24,7 @@ import {
   setWorkspaceSuccess,
 } from "./state.js";
 import type { AppState, RouteState } from "./types.js";
+import { createWorkbenchRenderer } from "./workbenchReact.js";
 
 export type WorkbenchAppOptions = {
   container: HTMLElement;
@@ -41,6 +41,7 @@ export type WorkbenchApp = {
 export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
   const container = options.container;
   const apiClient = options.apiClient ?? createApiClient();
+  const renderer = createWorkbenchRenderer(container);
 
   let state: AppState = createInitialState();
   let destroyed = false;
@@ -227,16 +228,18 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
         : null;
     const projectLinks = container.querySelector?.<HTMLElement>(".project-links");
     const projectScroll = projectLinks?.scrollLeft ?? 0;
+    const projectScrollTop = projectLinks?.scrollTop ?? 0;
     const projectFocus = active?.closest<HTMLAnchorElement>(".project-link")?.getAttribute("href");
     const devFocus =
       active?.closest?.("[data-dev-host]") && renderedProject === state.selectedProjectId
         ? active.id
         : null;
     devServices.saveReading();
-    container.innerHTML = renderApp(state);
+    if (container.ownerDocument) renderer.render(state);
     const nextProjectLinks = container.querySelector?.<HTMLElement>(".project-links");
     if (nextProjectLinks) {
       nextProjectLinks.scrollLeft = projectScroll;
+      nextProjectLinks.scrollTop = projectScrollTop;
       if (!projectLinks || renderedProject !== state.selectedProjectId) revealActiveProject();
       if (projectFocus)
         Array.from(nextProjectLinks.querySelectorAll<HTMLAnchorElement>("a"))
@@ -598,15 +601,7 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
       route.planTab !== previousRoute.planTab
     ) {
       const tabNavigation = container.ownerDocument.activeElement?.closest(".plan-section-nav");
-      const execution = route.planTab === "execution";
-      for (const panel of container.querySelectorAll<HTMLElement>(".plan-card > [role=tabpanel]"))
-        panel.hidden = panel.id.endsWith("-execution") !== execution;
-      for (const tab of container.querySelectorAll<HTMLElement>(".plan-section-nav [role=tab]")) {
-        const selected = tab.id.endsWith("-execution") === execution;
-        tab.setAttribute("aria-selected", String(selected));
-        tab.tabIndex = selected ? 0 : -1;
-        if (selected) tab.focus({ preventScroll: true });
-      }
+      if (container.ownerDocument) renderer.render(state);
       if (!restoreReadingPosition()) window.scrollTo({ top: 0, behavior: "instant" });
       if (tabNavigation)
         container
@@ -834,6 +829,9 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
     const bounds = active.getBoundingClientRect();
     if (bounds.left < viewport.left) links.scrollLeft += bounds.left - viewport.left - 4;
     else if (bounds.right > viewport.right) links.scrollLeft += bounds.right - viewport.right + 4;
+    if (bounds.top < viewport.top) links.scrollTop += bounds.top - viewport.top - 4;
+    else if (bounds.bottom > viewport.bottom)
+      links.scrollTop += bounds.bottom - viewport.bottom + 4;
   }
 
   function handleSubmit(event: Event): void {
@@ -901,6 +899,7 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
     refresh,
     destroy() {
       destroyed = true;
+      renderer.destroy();
       backlog.destroy();
       devServices.destroy();
       foundation.destroy();
