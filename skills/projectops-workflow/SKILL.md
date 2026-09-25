@@ -13,6 +13,7 @@ description: 使用 ProjectOps pops CLI 推进项目任务、计划、执行验�
 ## 路由与准备
 
 - ProjectOps manifest 与 Workspace Control Catalog 是不同 authority。只对 ProjectOps 管理的新条目使用此入口；旧条目留在原系统，不凭短 ID 推断 store。
+- Workspace 的共享规则、skill、tooling 和跨项目过程事项，使用宿主指引指定的已登记承载项目；回顾统一通过 manifest 的 workspace-level store 捕获，不自行建立 workspace Backlog/Plan schema。
 - 使用已安装的 `pops` 或明确构建版本的 `dist/cli.js`，在明确的数据 workspace 中执行 `project list --json` 和 `project doctor --json`。初始化只补明确缺失且已授权的部分；无效 descriptor 停止相关写入，不拼接 artifact 路径。
 - 先读契约的“选择 workspace 与入口”“调用与结果处理”。CLI 输出没有统一 envelope：不能对所有命令读取 `data`，也不能以不存在 `ok` 判断失败。检查退出码及 stdout/stderr，处理 diagnostics。
 - 初始化 Backlog 前读契约的“Backlog：初始化与代号”。省略代号时在当前 manifest 登记 store 内自动查重；需要固定代号用 `--id-prefix <PREFIX>`，不猜最终值，读取 `store.id_prefix`。自定义冲突/非法输入、不可读 store 或初始化锁占用时先处理诊断；不手改已有 store 前缀、迁移 ID 或删除数据绕过检查。

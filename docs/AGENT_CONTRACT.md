@@ -319,7 +319,9 @@ create 收据保留输入正文，写入时移除正文末尾空白并以一个�
 ## Retrospective：捕获与后续流转
 
 只在共享规则的回顾触发条件成立时捕获真实摩擦；主任务不扫描历史回顾，也不自动扩展为 triage 或修复。
-自身 dogfooding 记录进入 ProjectOps manifest 指定的 workspace-level store；全局/跨项目事项仍走 Workspace 路由。
+回顾进入 ProjectOps manifest 指定的 workspace-level store，可承载项目、跨项目和共享 tooling 事项。
+按宿主 Workspace 路由选择 `--project`：项目问题使用真实项目 ID，共享事项使用宿主指定的承载项目；
+没有项目归属时省略该参数或传 `null`。后续 Backlog/Plan 仍归属已登记的具体项目，不推断 workspace 级任务 store。
 `retrospective.md` 必须包含三个有正文的 Markdown section：`Hidden friction encountered`、
 `Workarounds used`、`Improvement candidates`。
 

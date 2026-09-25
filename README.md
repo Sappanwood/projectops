@@ -393,8 +393,8 @@ pops project doctor --json
 
 command 使用 argv；变量只替换 HOST 与端点 PORT/ORIGIN，自动注入对应 env。命令须支持并启用自身 strict-port；
 不通过 shell 执行。cwd 必须静态解析到 Repo 内。doctor 检查全 manifest 重复分配，check 额外探测端口占用。
-查询不会启动项目。已切换的项目使用 ProjectOps manifest，其余 Workspace Control 服务保持原 authority；
-登记真实端口前须同时核对两套系统的工作区保留分配。
+查询不会启动项目。本工作区的新开发服务统一使用 ProjectOps manifest；Workspace Control 已退出活动路由，
+其旧端口表仅保留历史。登记真实端口前核对 `pops dev ports --json`、实际监听进程和宿主明确保留的分配。
 
 
 ### 独立开发服务管理

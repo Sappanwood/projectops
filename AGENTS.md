@@ -1,6 +1,6 @@
 # AGENTS.md — ProjectOps 开发路由中枢
 
-> 人类开发者请阅读 [README.md](README.md)。共享行为规则与 Workspace Catalog 路由遵循
+> 人类开发者请阅读 [README.md](README.md)。共享行为规则与 ProjectOps Workspace 路由遵循
 > `/home/ling/workspace/AGENTS.md`。
 
 ## 项目定位
@@ -40,7 +40,7 @@ Local Web Workbench 管理项目注册表、Backlog、Plan、Delivery Report、�
 ## 绝对红线
 
 - 使用 Node.js 22+、TypeScript 和 npm；生产代码保持单运行时。
-- CLI 名称为 `pops`；Repo 和 Catalog project id 为 `projectops`。
+- CLI 名称为 `pops`；Repo 和 ProjectOps project id 为 `projectops`。
 - 业务 authority 使用可读、可版本控制的 Markdown 或 JSON；不以数据库作为业务 source of truth。
 - CLI、Web 和未来 Agent 接口必须调用同一 application/domain 实现，不通过内部 CLI subprocess 拼接业务能力。
 - 各领域保留自己的 schema 和 lifecycle；不建立万能 Artifact CRUD 或统一状态机。
@@ -55,7 +55,7 @@ Local Web Workbench 管理项目注册表、Backlog、Plan、Delivery Report、�
 
 - 自身 dogfooding 与已获 Workspace 授权的真实项目使用 ProjectOps；新增真实项目的范围以 Workspace `AGENTS.md` 为准。
 - 新产生的自身开发 Backlog、Plan、Report 和 dogfooding 回顾由 ProjectOps 管理，同一条目只有一个 authority，不双写。
-- Workspace Control 的既有条目（包括仍未完成的条目）留在原系统处理，不导入、不迁移，也不复制为自身条目。
+- Workspace Control 的既有条目（包括仍未完成的条目）留在原系统供只读历史查询，不导入、不迁移，也不复制为自身条目。
 - active item 指 dogfooding 过程中产生且仍在使用的条目，不是某个领域的固定 status 值；迁移前明确实际清单及必要引用。
 - schema 变化只迁移上述活动数据。运行时只支持当前 schema，不增加旧版读取、自动升级、双写或兼容分支。
 - 迁移采用针对实际数据的一次性脚本，先保留可恢复副本，再迁移并验证内容、状态、ID、依赖和跨 artifact 引用；
@@ -84,14 +84,14 @@ Agent 操作契约的“Workspace skill 安装与恢复”。开发维护 Repo �
 不修改安装副本或全局目录来代替源码变更。受管 Pi 显式发现已验证，其他外部 Agent 自动发现未验证。
 全局 skill 若假定 Workspace Control store/schema，不得直接套用于自身数据；使用 ProjectOps 当前 CLI 契约。
 ADR、Research 使用 ProjectOps 登记的对应 typed roots；自身 dogfooding 回顾使用其 workspace-level Retrospective store。
-跨项目或全局工作流事项仍遵循 Workspace 路由。
+共享规则、skill、tooling 与跨项目协调的过程事项归 `workspace-meta`；其回顾也使用同一 workspace-level store。
 
-只有显式处理 Workspace Control 既有条目时，才运行旧 resolver 并使用其 exact roots 与原有工具：
+只有明确查询 Workspace Control 历史记录时，才运行旧 resolver；仅读取返回的 exact roots，不续写旧条目：
 
 ```bash
 /home/ling/workspace/workspace-control/bin/workspace project resolve projectops \
   --catalog /home/ling/workspace/workspace-control/catalog/workspace.json --json
-backlog --store <resolved-artifacts.backlog.root> <command> --json
+backlog --store <resolved-artifacts.backlog.root> list --json
 ```
 
 ## 路由表
