@@ -2,7 +2,7 @@ import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { expect, test, type WorkbenchFixture } from "./fixture.js";
 
-function seed(workbench: WorkbenchFixture) {
+function seed(workbench: WorkbenchFixture, creativeSlice = false) {
   workbench.cli([
     "backlog",
     "add",
@@ -16,23 +16,46 @@ function seed(workbench: WorkbenchFixture) {
     "-b",
     "Service",
   ]);
+  if (creativeSlice)
+    workbench.cli([
+      "backlog",
+      "add",
+      "empty",
+      "-T",
+      "运行时",
+      "-c",
+      "feature",
+      "--priority",
+      "P1",
+      "-b",
+      "Runtime",
+    ]);
   const input = path.join(workbench.root, "graph.json");
   writeFileSync(
     input,
     JSON.stringify({
       title: "Dependency graph",
       goal: "通过依赖关系确认前置工作、并行分支和交付顺序。",
-      items: [
-        { key: "prepare", title: "准备接口与数据结构", depends_on: ["empty:EMP-001"] },
-        { key: "api", title: "实现 API 服务", depends_on: ["prepare"] },
-        {
-          key: "ui",
-          project: "empty",
-          title: "实现前端交互与长标题提示：<script>文本始终作为内容显示</script>",
-          depends_on: ["prepare"],
-        },
-        { key: "ship", title: "联合验收与交付", depends_on: ["api", "ui"] },
-      ].map((item) => ({
+      items: (creativeSlice
+        ? [
+            { key: "assets", title: "资产检索", depends_on: ["empty:EMP-001"] },
+            { key: "creation", title: "授权创建", depends_on: ["assets", "empty:EMP-001"] },
+            { key: "session", title: "创作会话", depends_on: ["creation", "empty:EMP-002"] },
+            { key: "acceptance", title: "切片验收", depends_on: ["session", "empty:EMP-002"] },
+          ]
+        : [
+            { key: "prepare", title: "准备接口与数据结构", depends_on: ["empty:EMP-001"] },
+            { key: "api", title: "实现 API 服务", depends_on: ["prepare"] },
+            {
+              key: "ui",
+              project: "empty",
+              title: "实现前端交互与长标题提示：<script>文本始终作为内容显示</script>",
+              depends_on: ["prepare"],
+            },
+            { key: "ship", title: "联合验收与交付", depends_on: ["api", "ui"] },
+            { key: "solo", title: "独立文档整理", depends_on: [] },
+          ]
+      ).map((item) => ({
         ...item,
         item_type: "task",
         priority: "P1",
@@ -42,6 +65,46 @@ function seed(workbench: WorkbenchFixture) {
   );
   workbench.cli(["plan", "create", "alpha", "--input", input]);
 }
+
+test("creative slice keeps dependency arrows separate on wide and narrow screens", async ({
+  workbench,
+  page,
+}) => {
+  seed(workbench, true);
+  await page.goto(`${workbench.origin}/#/projects/alpha/plans/plan-dependency-graph`);
+  const graph = page.getByRole("region", { name: "计划依赖图", exact: true });
+  await expect(graph.locator("[data-graph-edge]")).toHaveCount(7);
+  const creation = graph.locator('[data-graph-node="creation"]');
+  await creation.focus();
+  await expect(creation).toHaveClass(/is-current/);
+  await creation.locator(".plan-graph-title").hover();
+  await creation.locator(".plan-graph-identity").hover();
+  await expect(creation).toHaveClass(/is-current/);
+  await expect(graph.locator('[data-graph-node="assets"]')).not.toHaveClass(/is-muted/);
+  await expect(graph.locator('[data-graph-node="acceptance"]')).toHaveClass(/is-muted/);
+  await expect(graph.locator(".plan-graph-connection.is-emphasized")).toHaveCount(3);
+  await page.keyboard.press("Escape");
+  await expect(graph.locator(".is-muted")).toHaveCount(0);
+  await graph.locator(".plan-graph-scroll").focus();
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await graph.evaluate((element) => element.scrollIntoView({ block: "center" }));
+    await graph.screenshot({ path: `/tmp/plan-graph-slice-${width}.png` });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+      true,
+    );
+  }
+  const ports = await graph.locator("[data-graph-edge]").evaluateAll((edges) =>
+    edges.map((edge) => {
+      const path = edge as SVGPathElement;
+      const start = path.getPointAtLength(0);
+      const end = path.getPointAtLength(path.getTotalLength());
+      return { start: `${start.x},${start.y}`, end: `${end.x},${end.y}` };
+    }),
+  );
+  expect(new Set(ports.map(({ start }) => start)).size).toBe(7);
+  expect(new Set(ports.map(({ end }) => end)).size).toBe(7);
+});
 
 test("Plan graph supports draft focus, hover, cross-project navigation and refresh", async ({
   workbench,
@@ -53,10 +116,21 @@ test("Plan graph supports draft focus, hover, cross-project navigation and refre
   await page.goto(url);
   await expect(page.locator(".plan-title")).toHaveText("Dependency graph");
   const graph = page.getByRole("region", { name: "计划依赖图", exact: true });
-  await expect(graph.locator("[data-graph-node]")).toHaveCount(5);
+  await expect(graph.locator("[data-graph-node]")).toHaveCount(6);
   await expect(graph.locator("[data-graph-edge]")).toHaveCount(5);
+  await expect(graph.locator("[data-graph-reference] .plan-graph-title")).toHaveText(
+    "既有基础服务",
+  );
+  const independent = await graph
+    .locator('[data-graph-node="solo"]')
+    .evaluate((element) => element.getBoundingClientRect().top);
+  const flow = await graph
+    .locator('[data-graph-node="ship"]')
+    .evaluate((element) => element.getBoundingClientRect().bottom);
+  expect(independent).toBeGreaterThan(flow);
   const draft = graph.locator('[data-graph-node="ui"]');
-  await expect(draft).toHaveText("ui");
+  await expect(draft.locator(".plan-graph-identity")).toHaveText("empty:ui");
+  await expect(draft.locator(".plan-graph-title")).toContainText("实现前端交互");
   await draft.hover();
   await expect(graph.getByRole("tooltip")).toContainText("实现前端交互与长标题提示");
   await page.screenshot({ path: "/tmp/plan-graph-draft-hover.png", fullPage: true });
@@ -72,7 +146,7 @@ test("Plan graph supports draft focus, hover, cross-project navigation and refre
   ).mapping;
   await page.locator("#btn-refresh").click();
   const remote = graph.locator('[data-graph-node="ui"]');
-  await expect(remote).toHaveText(mapping.ui);
+  await expect(remote.locator(".plan-graph-identity")).toHaveText(mapping.ui);
   await remote.click();
   await expect(page).toHaveURL(/\/projects\/empty\/backlog\/EMP-002\?from=/);
   await expect(page.getByRole("region", { name: "Backlog item detail" })).toContainText(
@@ -124,11 +198,13 @@ test("external title loading and failure keep the graph usable with a retry on h
   await page.goto(`${workbench.origin}/#/projects/alpha/plans/plan-dependency-graph`);
   const graph = page.getByRole("region", { name: "计划依赖图", exact: true });
   const external = graph.locator('[data-graph-node="empty:EMP-001"]');
+  await expect(external.locator(".plan-graph-title")).toHaveText("正在读取…");
   await page.locator(".plan-items").scrollIntoViewIfNeeded();
   await external.hover();
   await expect(graph.getByRole("tooltip")).toContainText("正在读取标题");
   release();
   await expect(graph.getByRole("tooltip")).toContainText("标题读取失败");
+  await expect(external.locator(".plan-graph-title")).toHaveText("标题暂不可用");
   await expect(external).toHaveAttribute("href", /backlog\/EMP-001/);
   await page.unroute("**/api/projects/empty/backlog/EMP-001");
   await graph.getByRole("heading").hover();

@@ -292,7 +292,7 @@
   font-size: 0.78rem;
 }
 .review-workbench .plan-graph-scroll {
-  background: #fafbfc;
+  --plan-graph-background: #fafbfc;
   border-style: dashed;
 }
 .review-workbench .plan-graph-node {

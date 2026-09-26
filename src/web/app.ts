@@ -250,6 +250,7 @@ export function createWorkbenchApp(options: WorkbenchAppOptions): WorkbenchApp {
     if (devFocus)
       container.querySelector<HTMLElement>(`#${devFocus}`)?.focus({ preventScroll: true });
     foundation.render();
+    planGraph.render();
     const nextGraph = container.querySelector?.<HTMLElement>(".plan-graph-scroll");
     const position = nextGraph
       ? graphScroll.get(`${state.selectedProjectId}/${nextGraph.id}`)

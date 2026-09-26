@@ -7,11 +7,12 @@
   margin-block: 0.5rem 0.75rem;
 }
 .plan-graph-scroll {
+  --plan-graph-background: var(--bg-primary);
   overflow: auto;
   max-height: 28rem;
   border: 1px solid var(--border-color);
   border-radius: 0.5rem;
-  background: var(--bg-primary);
+  background: var(--plan-graph-background);
 }
 .plan-graph-canvas {
   position: relative;
@@ -23,19 +24,64 @@
 }
 .plan-graph-canvas [data-graph-edge] {
   fill: none;
-  stroke: var(--text-secondary);
+  stroke: var(--accent);
   stroke-width: 1.5;
 }
+.plan-graph-connection.external [data-graph-edge] {
+  stroke: var(--text-secondary);
+}
+.plan-graph-connection.is-emphasized [data-graph-edge] {
+  stroke-width: 2.5;
+}
+.plan-graph-canvas .is-muted {
+  opacity: 0.22;
+}
+.plan-graph-edge-clearance {
+  fill: none;
+  stroke: var(--plan-graph-background);
+  stroke-width: 5;
+}
 .plan-graph-canvas marker path {
+  fill: var(--accent);
+}
+.plan-graph-canvas marker.external path {
   fill: var(--text-secondary);
 }
 .plan-graph-node {
   position: absolute;
-  font-family: var(--font-mono);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.7rem 0.85rem;
+  text-align: left;
+  white-space: normal;
+  border-radius: 0.65rem;
+}
+.plan-graph-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  font-size: 0.85rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.plan-graph-identity {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 400;
+  color: var(--text-secondary);
 }
 .plan-graph-node:hover,
-.plan-graph-node:focus-visible {
+.plan-graph-node:focus-visible,
+.plan-graph-node.is-current {
   color: var(--accent);
   border-color: var(--accent);
 }
