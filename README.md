@@ -413,7 +413,9 @@ CLI 返回后项目继续运行，关闭终端或重启 Workbench 不影响它�
 没有开机自启。只支持受信任本地 Linux workspace；命令必须使用自身 strict-port 行为。
 
 status 的 failed/unknown 包含诊断及每个进程最多 4096 字符的近期输出。manager 异常失联时不按遗留 PID 接管或 kill，
-status/stop/restart 返回 unknown；人工恢复步骤见 [Agent 契约](docs/AGENT_CONTRACT.md#独立开发服务生命周期)。
+同次系统启动内失联时返回 unknown。新 manager 的锁与 ledger 记录 Linux `boot_id`；系统重启后，显式
+start/restart 自动清理已确认属于上次开机的固定 dev 临时文件，再启动服务，并提示已恢复。status/check/stop
+不执行恢复；没有 boot_id 的旧记录、损坏或不一致记录仍需人工核实。人工恢复步骤见 [Agent 契约](docs/AGENT_CONTRACT.md#独立开发服务生命周期)。
 IPC 路径过长、权限问题或版本不兼容会明确报错，不自动改用 TCP 或中断已有服务。
 
 项目 Overview 的“开发服务”区提供查询、启动、重启、停止及具名“打开成果”链接，并列出各进程状态和可展开诊断。

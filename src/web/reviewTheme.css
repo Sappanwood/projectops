@@ -277,7 +277,7 @@
   font-size: 0.96rem;
   line-height: 1.95;
   color: var(--text-reading);
-  white-space: pre-wrap;
+  white-space: normal;
   overflow-wrap: anywhere;
 }
 .review-workbench .plan-graph {

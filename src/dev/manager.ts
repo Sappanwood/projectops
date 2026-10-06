@@ -1,5 +1,6 @@
 import { chmodSync, readFileSync, unlinkSync } from "node:fs";
 import { createServer } from "node:net";
+import { currentBootId, type DevLock } from "./bootstrap.js";
 import { devFiles, type Ledger, saveLedger } from "./files.js";
 import { DEV_PROTOCOL, type DevAction, type DevReceipt } from "./protocol.js";
 import { DevServiceRuntime } from "./runtime.js";
@@ -8,13 +9,22 @@ const [workspace, instance] = process.argv.slice(2);
 if (!workspace || !instance || process.platform !== "linux")
   throw new Error("Dev manager requires local Linux workspace and instance");
 const files = devFiles(workspace);
-const lock = JSON.parse(readFileSync(files.lock, "utf8")) as {
-  instance: string;
-  workspace: string;
-};
-if (lock.instance !== instance || lock.workspace !== files.workspace)
+const lock = JSON.parse(readFileSync(files.lock, "utf8")) as DevLock;
+const boot = currentBootId();
+if (
+  lock.instance !== instance ||
+  lock.workspace !== files.workspace ||
+  !boot ||
+  lock.boot_id !== boot
+)
   throw new Error("Dev manager lock identity mismatch");
-const ledger: Ledger = { workspace: files.workspace, instance, pid: process.pid, projects: {} };
+const ledger: Ledger = {
+  workspace: files.workspace,
+  instance,
+  pid: process.pid,
+  boot_id: boot,
+  projects: {},
+};
 const runtime = new DevServiceRuntime(files.workspace, () => {
   ledger.projects = Object.fromEntries([...runtime.runs].map(([id, run]) => [id, run.status]));
   saveLedger(files, ledger);

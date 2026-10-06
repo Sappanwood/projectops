@@ -20,7 +20,7 @@ export async function devCommand(args: readonly string[], io: CliIO, cwd: string
       io.stdout(
         args.includes("--json")
           ? JSON.stringify(result)
-          : `${result.project || "manager"}: ${result.state}${result.issue ? ` — ${result.issue}` : ""}${result.affected ? ` (${result.affected.join(", ")})` : ""}`,
+          : `${result.project || "manager"}: ${result.state}${result.issue ? ` — ${result.issue}` : ""}${result.affected ? ` (${result.affected.join(", ")})` : ""}${result.recovered_from_boot ? " — Recovered dev runtime from previous system boot" : ""}`,
       );
       return result.ok ? 0 : 1;
     } catch (error) {

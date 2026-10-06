@@ -180,6 +180,8 @@ HTTP 成功返回 `{ok:true,data:...}`；创建 data 为 `{item}`，编辑 data 
 
 多项有依赖的工作可先准备 `plan-draft.json`；单项任务不必制造 Plan。以下是隔离验证可用的最小草案：
 
+`goal` 是支持 Markdown 阅读的字符串。首段简述交付目标；较长概述按 `## 范围`、`## 非目标`、`## 验收`、`## 执行与交接` 等实际需要分节，段落之间空行，平行条目和操作步骤分别使用无序、有序列表。必要约束保留全文，不用摘要替代验收或授权边界。短计划无需填满模板。使用现有 JSON 输入，不另建 XML/YAML authority；已完成计划仍不可修订。
+
 ```json
 {
   "title": "Agent workflow",
@@ -544,7 +546,7 @@ ports 返回 `{ok,projects,ports,problems}`，projects 为解析后的配置（c
 已有 manager 的 status、stop、manager stop 与 TERM/INT 清理使用 owner 的运行配置快照；当前 manifest 的 dev 配置编辑为无效值，不阻断查询、ledger 更新或旧进程组清理。启动新进程仍验证当前 manifest；无有效配置不 bootstrap 新 manager。
 
 `pops dev start/status/stop/restart <project> [--json]` 与 `pops dev manager stop [--json]` 调用同一 typed application/IPC。
-JSON 收据为 `{ok,project,state,manager,endpoints,processes,instance?,issue?,affected?}`；state 为
+JSON 收据为 `{ok,project,state,manager,endpoints,processes,instance?,issue?,affected?,recovered_from_boot?}`；state 为
 `stopped|starting|running|stopping|failed|unknown`，manager 为 `running|stopped|unknown`。
 processes 仅含 name、pid（也是该进程组 ID）、state、最多 4096 字符 log，不返回进程 env 或完整配置；affected 仅用于 manager stop。
 错误返回 `{ok:false,error:{code:"DEV_RUNTIME_ERROR",message}}`，失败退出 1。默认文本显示项目、状态和诊断。
@@ -552,9 +554,18 @@ processes 仅含 name、pid（也是该进程组 ID）、state、最多 4096 字
 start 可 bootstrap workspace 唯一 manager，restart 对 stopped 等价 start；status、check、stop 不拉起 manager。
 无 manager 返回 stopped，遗留 socket/lock 或活动 ledger 返回 unknown。启动有 8 秒端点就绪期限；停止每组先 TERM 等待
 1 秒，仍有活跃后代则 KILL 再等 1 秒；未确认清理成功的 unknown 禁止重启。IPC 单请求最多 4096 bytes，响应最多 1 MiB，
-请求总等待最多 15 秒。启动 manager 的等待最多 3 秒；并发 start 最多另等 2.5 秒当前 bootstrap，不自动抢旧锁。
+请求总等待最多 15 秒。启动 manager 的等待最多 3 秒；快照/恢复/建锁的进程间短互斥最多等待 3 秒；并发 start 最多另等 2.5 秒当前 bootstrap。
+不抢同次开机的旧锁。
 
-`.pops/runtime/dev/` 保存 socket、lock.json、ledger.json（last owner PID/instance/项目状态），不是业务 authority。
+`.pops/runtime/dev/` 保存 socket、lock.json、ledger.json（last owner PID/instance/boot_id/项目状态），不是业务 authority。
+新 lock 与 ledger 记录 Linux boot_id。系统重启后，显式 start/restart 核对已有记录的 workspace、instance 和 boot_id
+一致且属于不同于当前的启动周期，自动清理固定 `socket`、`ledger.next`、`ledger.json`、`lock.json` 后启动。
+恢复请求的 JSON 收据附带 `recovered_from_boot`（旧 boot_id），文本输出提示恢复；这不表示服务启动必然成功，仍检查 ok/state。
+status/check/stop/manager stop 不清理；检测到上次开机残留时提示显式 start。其他项目不会随恢复自动启动。
+同次开机内失联、旧记录缺少 boot_id、记录损坏或身份不一致、当前 boot_id 不可读取时均不自动清理。
+升级前遗留记录不能补猜 boot_id；仍按下述人工核实流程处理。活着的旧 manager 可以继续查询和正常停止，
+待无活动工作且可停止其全部受管服务时，使用 manager stop 再显式 start，使新 manager 写入 boot_id。
+
 status 失联时先读取 ledger 并人工检查命令、cwd、启动时间、进程组和后代；PID 可能复用，不能直接据此 kill。
 核实所有旧进程已停止后，只删除当前 workspace 的 `socket`、`lock.json`、`ledger.json`；若有中断写入留下的
 `ledger.next`，同样先确认 owner 已停止后单独删除。然后显式 start。端口空闲不能单独证明旧进程全部退出。

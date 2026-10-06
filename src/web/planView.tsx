@@ -1,5 +1,5 @@
 import type { WorkbenchPlan } from "../application/planExecution.js";
-import { renderReadingBody } from "./markdown.js";
+import { renderMarkdown, renderReadingBody } from "./markdown.js";
 import { renderPlanGraph } from "./planDependencyGraph.js";
 import { PlanExecutionView } from "./planExecutionView.js";
 import { formatRoute } from "./router.js";
@@ -209,7 +209,10 @@ function PlanDocument({ plan, route }: { plan: WorkbenchPlan; route: RouteState 
             <section className="plan-intro" id={`${plan.id}--section-goal`}>
               <p className="plan-eyebrow">01 / OVERVIEW</p>
               <h2>计划目标</h2>
-              <p className="plan-goal">{plan.goal}</p>
+              <RenderedHtml
+                className="plan-goal markdown-content"
+                html={renderMarkdown(plan.goal)}
+              />
             </section>
             <RenderedHtml html={renderPlanGraph(plan, route)} />
             <div className="plan-reading-actions">

@@ -1,10 +1,8 @@
 import { spawn } from "node:child_process";
-import { randomUUID } from "node:crypto";
-import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { readFileSync, unlinkSync } from "node:fs";
 import { createConnection } from "node:net";
 import { fileURLToPath } from "node:url";
-import { loadWorkspace } from "../catalog/workspaceStore.js";
-import { devFiles, readLedger } from "./files.js";
+import { prepareDevRequest } from "./bootstrap.js";
 import {
   DEV_PROTOCOL,
   DEV_TIMEOUT,
@@ -19,10 +17,8 @@ export async function devRequest(
   action: DevAction,
   project = "",
 ): Promise<DevReceipt> {
-  let files = devFiles(cwd);
-  let lock = existsSync(files.lock)
-    ? (JSON.parse(readFileSync(files.lock, "utf8")) as { instance: string })
-    : undefined;
+  const { files, lock, ledger, unknown, previousBoot, recovered, created } =
+    await prepareDevRequest(cwd, action === "start" || action === "restart");
   const send = async () => {
     if (!lock?.instance) throw new Error("No dev manager lock");
     const expected = lock.instance;
@@ -61,7 +57,10 @@ export async function devRequest(
           if (response.error) throw new Error(response.error);
           settled = true;
           socket.destroy();
-          resolve(response.result as DevReceipt);
+          resolve({
+            ...(response.result as DevReceipt),
+            ...(recovered ? { recovered_from_boot: recovered } : {}),
+          });
         } catch (error) {
           fail(error as Error);
         }
@@ -71,7 +70,7 @@ export async function devRequest(
       });
     });
   };
-  if (lock) {
+  if (lock && !created && !previousBoot) {
     try {
       return await send();
     } catch (error) {
@@ -92,12 +91,6 @@ export async function devRequest(
       }
     }
   }
-  const ledger = readLedger(files.ledger);
-  const unknown =
-    !!lock ||
-    existsSync(files.socket) ||
-    (!!ledger &&
-      Object.values(ledger.projects).some((s) => !["stopped", "failed"].includes(s.state)));
   if (unknown)
     return {
       ok: false,
@@ -106,7 +99,9 @@ export async function devRequest(
       manager: "unknown",
       endpoints: ledger?.projects[project]?.endpoints ?? [],
       processes: ledger?.projects[project]?.processes ?? [],
-      issue: recovery,
+      issue: previousBoot
+        ? "Previous system boot detected. Run pops dev start <project> to recover old dev runtime files."
+        : recovery,
     };
   if (action !== "start" && action !== "restart")
     return {
@@ -118,19 +113,7 @@ export async function devRequest(
       processes: [],
       ...(action === "manager-stop" ? { affected: [] } : {}),
     };
-  loadWorkspace(files.workspace);
-  files = devFiles(cwd, true);
-  lock = { instance: randomUUID() };
-  try {
-    writeFileSync(
-      files.lock,
-      JSON.stringify({ ...lock, workspace: files.workspace, version: DEV_PROTOCOL }),
-      { flag: "wx", mode: 0o600 },
-    );
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "EEXIST") return devRequest(cwd, action, project);
-    throw error;
-  }
+  if (!lock || !created) throw new Error("Dev manager lock was not acquired");
   const source = import.meta.url.endsWith(".ts");
   const entry = fileURLToPath(new URL(source ? "./manager.ts" : "./manager.js", import.meta.url));
   const child = spawn(

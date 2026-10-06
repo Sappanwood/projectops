@@ -14,6 +14,7 @@ export type Ledger = {
   workspace: string;
   instance: string;
   pid: number;
+  boot_id?: string;
   projects: Record<string, DevStatus>;
 };
 export function devFiles(cwd: string, create = false) {
@@ -54,6 +55,7 @@ export function devFiles(cwd: string, create = false) {
     socket,
     lock: path.join(dir, "lock.json"),
     ledger: path.join(dir, "ledger.json"),
+    next: path.join(dir, "ledger.next"),
   };
 }
 export function readLedger(file: string): Ledger | undefined {

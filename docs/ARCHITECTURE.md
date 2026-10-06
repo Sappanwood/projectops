@@ -510,7 +510,16 @@ IPC 验证协议版本、workspace 和启动 instance；固定动作只接受项
 socket 权限 0600，文件写入保持在固定 runtime 目录。ledger 用同目录排他临时文件加 rename 发布，
 只是最后 ownership 诊断，不是恢复 authority。manager TERM/INT 清理实际拥有的组；异常消失保留 unknown，
 不信任遗留 PID、不从端口空闲推断所有后代已退出。支持本地 Linux/Node.js 22+，不使用 native helper，
-不承诺 adversarial ancestor swap、跨平台等价或自动崩溃恢复。
+不承诺 adversarial ancestor swap、跨平台等价或同次开机内自动崩溃恢复。
+
+`dev/bootstrap.ts` 在读取运行快照、恢复和创建锁的短临界区使用 Linux 抽象 Unix socket 排他，地址由 canonical
+workspace 的 SHA256 派生；互斥不落盘，进程退出由内核释放，最多等待 3 秒。新 lock/ledger 写入
+`/proc/sys/kernel/random/boot_id`。显式 start/restart 只在已有 lock/ledger 的 workspace、instance 和有效 boot_id
+一致、boot_id 不同于当前值且锁协议可识别时，删除固定 socket、ledger.next、ledger.json、lock.json，再排他建锁。
+先删除临时文件、最后删除身份记录；整个恢复与建锁保持同一个互斥，避免并发启动删除新 owner 的文件。查询与 stop
+不清理也不启动。旧格式、损坏、身份不一致、当前 boot_id 不可读时不自动恢复；新建 manager 必须能读取有效 boot_id。
+这里只恢复本机重启后的 dev 管理状态，不恢复 execution 或 Plan run，不扫描其他文件，不发送旧 PID 信号。
+抽象 Unix socket 使用 Node.js 22 的内置 `node:net`，不新增依赖或 native helper；仍限定受信任本地 Linux workspace。
 
 `server/devRoutes.ts` 将固定 workspace 下的 `GET/POST /api/projects/:id/dev` 转为共享 devControl 调用，
 不创建第二套 runtime 或调用 CLI subprocess。GET 返回配置可用性、承载页面标记、DevStatus 与配置诊断，

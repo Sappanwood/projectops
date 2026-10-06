@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { once } from "node:events";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import path from "node:path";
 import test from "node:test";
@@ -38,6 +39,166 @@ async function freePort() {
   const port = (server.address() as { port: number }).port;
   await new Promise<void>((resolve) => server.close(() => resolve()));
   return port;
+}
+
+async function rebootFixture(t: { after: (fn: () => Promise<void>) => void }) {
+  const root = mkdtempSync("/tmp/pdev-reboot-");
+  mkdirSync(path.join(root, "repo"));
+  const port = await freePort();
+  const manifest = newWorkspaceManifest("test");
+  manifest.projects.app = {
+    path: "repo",
+    dev: {
+      host: "127.0.0.1",
+      endpoints: { web: { port } },
+      processes: {
+        web: {
+          command: [
+            process.execPath,
+            "-e",
+            'require("http").createServer((q,s)=>s.end("ok")).listen(Number(process.argv[1]),"127.0.0.1")',
+            String(port),
+          ],
+          cwd: ".",
+          env: {},
+        },
+      },
+    },
+  };
+  createWorkspaceManifestFile(root, manifest);
+  const dir = path.join(root, ".pops/runtime/dev");
+  mkdirSync(dir, { recursive: true });
+  const boot = "00000000-0000-4000-8000-000000000000";
+  const lock = { workspace: root, instance: "old-instance", version: 1, boot_id: boot };
+  const ledger = {
+    workspace: root,
+    instance: lock.instance,
+    boot_id: boot,
+    pid: process.pid,
+    projects: { app: { state: "running", endpoints: [], processes: [] } },
+  };
+  writeFileSync(path.join(dir, "lock.json"), JSON.stringify(lock));
+  writeFileSync(path.join(dir, "ledger.json"), JSON.stringify(ledger));
+  writeFileSync(path.join(dir, "ledger.next"), "interrupted write");
+  writeFileSync(path.join(dir, "keep.txt"), "unrelated");
+  t.after(async () => {
+    await command(root, "manager", "stop").catch(() => {});
+    rmSync(root, { recursive: true, force: true });
+  });
+  return { root, dir, port, boot, lock, ledger };
+}
+
+test("previous boot recovery is explicit, concurrent and preserves unrelated files", {
+  timeout: 20000,
+}, async (t) => {
+  const f = await rebootFixture(t);
+  const socketOwner = spawn(process.execPath, [
+    "-e",
+    'require("net").createServer().listen(process.argv[1],()=>console.log("ready"))',
+    path.join(f.dir, "socket"),
+  ]);
+  t.after(() => {
+    socketOwner.kill("SIGKILL");
+  });
+  await once(socketOwner.stdout, "data");
+  const exited = once(socketOwner, "exit");
+  socketOwner.kill("SIGKILL");
+  await exited;
+  assert.equal(existsSync(path.join(f.dir, "socket")), true);
+  for (const action of ["status", "stop"])
+    assert.equal((await command(f.root, action, "app")).result.state, "unknown");
+  assert.equal(readFileSync(path.join(f.dir, "lock.json"), "utf8"), JSON.stringify(f.lock));
+  const results = await Promise.all(
+    Array.from({ length: 4 }, () => command(f.root, "start", "app")),
+  );
+  for (const r of results) {
+    assert.equal(r.code, 0, JSON.stringify(r.result));
+    assert.equal(r.result.state, "running");
+    assert.equal(r.result.instance, results[0]!.result.instance);
+  }
+  assert.equal(results.filter((r) => r.result.recovered_from_boot === f.boot).length, 1);
+  const currentBoot = readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim();
+  for (const file of ["lock.json", "ledger.json"])
+    assert.equal(JSON.parse(readFileSync(path.join(f.dir, file), "utf8")).boot_id, currentBoot);
+  assert.equal(existsSync(path.join(f.dir, "ledger.next")), false);
+  assert.equal(readFileSync(path.join(f.dir, "keep.txt"), "utf8"), "unrelated");
+  assert.equal(await (await fetch(`http://127.0.0.1:${f.port}`)).text(), "ok");
+});
+
+test("previous boot recovery also handles ledger-only residue and restart", async (t) => {
+  const f = await rebootFixture(t);
+  rmSync(path.join(f.dir, "lock.json"));
+  const result = await command(f.root, "restart", "app");
+  assert.equal(result.code, 0, JSON.stringify(result.result));
+  assert.equal(result.result.recovered_from_boot, f.boot);
+  assert.equal(result.result.state, "running");
+});
+
+test("previous boot recovery handles lock-only interrupted bootstrap", async (t) => {
+  const f = await rebootFixture(t);
+  rmSync(path.join(f.dir, "ledger.json"));
+  const result = await command(f.root, "start", "app");
+  assert.equal(result.code, 0, JSON.stringify(result.result));
+  assert.equal(result.result.recovered_from_boot, f.boot);
+  assert.equal(result.result.state, "running");
+});
+
+test("recovery leaves an external port owner alive and reports startup failure", async (t) => {
+  const f = await rebootFixture(t);
+  const external = createServer();
+  await new Promise<void>((resolve) => external.listen(f.port, "127.0.0.1", resolve));
+  t.after(() => new Promise<void>((resolve) => external.close(() => resolve())));
+  const result = await command(f.root, "start", "app");
+  assert.equal(result.code, 1);
+  assert.equal(result.result.state, "failed");
+  assert.equal(result.result.recovered_from_boot, f.boot);
+  assert.equal(external.listening, true);
+  assert.match(result.result.issue, /externally occupied/);
+});
+
+test("recovery refuses corrupt records and static runtime symlinks", async (t) => {
+  const { symlinkSync } = await import("node:fs");
+  const f = await rebootFixture(t);
+  writeFileSync(path.join(f.dir, "ledger.json"), "{");
+  assert.equal((await command(f.root, "start", "app")).code, 1);
+  assert.equal(readFileSync(path.join(f.dir, "ledger.json"), "utf8"), "{");
+  assert.equal(readFileSync(path.join(f.dir, "lock.json"), "utf8"), JSON.stringify(f.lock));
+  writeFileSync(path.join(f.dir, "ledger.json"), JSON.stringify(f.ledger));
+  rmSync(path.join(f.dir, "ledger.next"));
+  symlinkSync(path.join(f.dir, "keep.txt"), path.join(f.dir, "ledger.next"));
+  const result = await command(f.root, "start", "app");
+  assert.equal(result.code, 1);
+  assert.match(result.result.error.message, /Unsafe dev runtime symlink/);
+  assert.equal(readFileSync(path.join(f.dir, "keep.txt"), "utf8"), "unrelated");
+  assert.equal(readFileSync(path.join(f.dir, "lock.json"), "utf8"), JSON.stringify(f.lock));
+});
+
+for (const scenario of [
+  "legacy",
+  "same-boot",
+  "mixed-boot",
+  "wrong-workspace",
+  "invalid-boot",
+] as const) {
+  test(`reboot recovery refuses ${scenario} evidence without changing files`, async (t) => {
+    const f = await rebootFixture(t);
+    const currentBoot = readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim();
+    if (scenario === "legacy") {
+      Reflect.deleteProperty(f.lock, "boot_id");
+      Reflect.deleteProperty(f.ledger, "boot_id");
+    } else if (scenario === "same-boot") f.lock.boot_id = f.ledger.boot_id = currentBoot;
+    else if (scenario === "mixed-boot") f.ledger.boot_id = currentBoot;
+    else if (scenario === "wrong-workspace") f.lock.workspace = "/tmp/another-workspace";
+    else f.lock.boot_id = f.ledger.boot_id = "invalid";
+    writeFileSync(path.join(f.dir, "lock.json"), JSON.stringify(f.lock));
+    writeFileSync(path.join(f.dir, "ledger.json"), JSON.stringify(f.ledger));
+    const result = await command(f.root, "start", "app");
+    assert.equal(result.code, 1);
+    assert.equal(result.result.state, "unknown");
+    assert.equal(readFileSync(path.join(f.dir, "lock.json"), "utf8"), JSON.stringify(f.lock));
+    assert.equal(readFileSync(path.join(f.dir, "ledger.json"), "utf8"), JSON.stringify(f.ledger));
+    assert.equal(readFileSync(path.join(f.dir, "ledger.next"), "utf8"), "interrupted write");
+  });
 }
 test("independent built CLI owns two processes after CLI exit, restart and isolated stop", {
   timeout: 40000,
