@@ -119,8 +119,8 @@ npm run quality:full  # quality、一次 build、Node 测试、Chromium E2E
 工具依据 [Biome 配置文档](https://biomejs.dev/reference/configuration/) 和
 [CLI 文档](https://biomejs.dev/reference/cli/)，版本由开发依赖和 lockfile 固定。
 
-低风险文案、样式和配置可实现后验证；Bug、数据或状态逻辑先用失败测试锁定行为；
-CLI/API、权限、路径及并发契约变更使用 Red-Green-Refactor。具体必跑门禁见 [AGENTS.md](AGENTS.md#完工验收)。
+测试顺序按共享测试纪律中的实际风险和现有覆盖选择，不因 CLI/API 或路径类别自动要求严格 TDD；
+具体必跑门禁见 [AGENTS.md](AGENTS.md#完工验收)。
 格式修正与行为或结构重构分开提交，避免机械 diff 隐藏行为变化。
 前端开发使用 [Workbench 前端规范](docs/FRONTEND_GUIDELINES.md)，其中的交付验收仅适用于实际受影响的前端页面与状态；Agent 操作项目数据仍从 [工作流 skill](skills/projectops-workflow/SKILL.md) 进入。
 
@@ -299,7 +299,7 @@ Plan 修订采用草案 JSON 输入，先查看变更与受影响任务，再确
 
 任务详情可查看执行尝试、冻结输入、改动快照、验证和验收结论。失败后重试保留原尝试。
 验收要求执行成功、当前代码上的检查通过、证据完整且任务输入未变化；有执行历史的任务不能绕过验收直接标记 done。
-没有执行记录的手工任务仍可按原工作流更新状态。
+没有执行记录的普通跟踪任务（包括外部 Agent 实施）仍可按原工作流更新状态。
 
 本版已接入 Pi 0.85.0。使用 `npm run workbench -- --workspace <workspace> --port <port> --pi` 启用本机 Pi；默认不配置 runner，启动/重试入口不可用；
 可以通过 CLI 记录外部执行，在网页核对并验收。CLI 的 finish/verify 记录调用方提交的事实，不执行命令或替调用方验证真实性。
@@ -313,7 +313,19 @@ Plan 修订采用草案 JSON 输入，先查看变更与受影响任务，再确
 执行操作的完整参数和返回值见 [Agent 操作契约](docs/AGENT_CONTRACT.md#执行记录与验收)。
 执行记录需要已登记的 Git Repo；普通项目登记、Backlog 和文档能力仍不要求 Git。
 
-执行收据可能包含完整代码快照，超过工具输出预算时会被截断。将完整 JSON 保存到本次任务的私有临时文件，检查命令退出码和 JSON 成功字段后，仅提取 `data.attempt.id`、`data.attempt.revision` 等所需字段。若写操作的返回已被截断，先用 `execution show` 以同样方式核对持久化状态，不因解析失败重复提交 `finish`、`verify` 或 `accept`。收据文件可能含代码和执行上下文，不提交到 Git；后续写入使用读回的最新 revision。
+Agent 日常执行优先使用 `--json --view summary`，收据保留 ID、最新 revision、状态、验证摘要、证据引用和已有 diagnostics，
+省略完整输入、diff、文件列表和进展历史；需要审阅时用 `execution show --view full`，默认仍为 full。
+收据不完整时先 show 核对，不重复提交写操作；精简视图只改变返回内容，不改变存储和验收。
+
+外部 Agent 完成代码并 finish 后，可用以下入口代替手工运行、保存日志和 verify 登记：
+
+```bash
+pops execution check <project> <attempt> --expected-revision <revision> --json --view summary -- npm test
+```
+
+`check` 在该尝试的 Repo/受管 checkout 中直接执行 argv，自动保存两路输出、退出码、时间和前后代码摘要；
+不启用隐式 shell、不自动 finish 或 accept。失败退出 1，已登记的失败检查仍返回 `ok:true`，须同时读取 `data.check.outcome`。
+默认超时 600000 ms，可传 `--timeout-ms`；输出缓冲上限 16 MiB，超限标记不完整并失败。完整规则见 Agent 操作契约。
 
 
 ### Pi 单任务工作

@@ -148,8 +148,7 @@ node dist/cli.js --version
 - 日常源码、测试、脚本和质量配置变更运行 `npm run quality`（lint、format check、typecheck）。
 - 跨模块重构、质量工具或构建/测试脚本变更，以及多阶段最终验收运行 `npm run quality:full`；该入口只构建一次。
 - `quality` 已覆盖 lint、format check 和 typecheck；`quality:full` 还覆盖 `quality`、build 与测试。已成功覆盖且后续改动未使证据失效的子检查无需另跑。
-- 风险分级：文案/样式/简单配置可实现后验证；Bug、数据模型和状态逻辑先验证失败用例；
-  CLI/API、权限、路径和并发契约采用 Red-Green-Refactor，保持 Alpha 已接受的安全边界。
+- 测试顺序与验证方式遵循共享测试纪律，按实际错误后果和现有覆盖选择；保持 Alpha 已接受的安全边界。
 - 测试失败必须区分基线失败、环境限制和新增回归，记录具体命令及诊断；不能以静态检查通过代替完整门禁。
   文件级失败、空子进程输出、loopback 代理与 Pi 配置读取的定位步骤见
   [README 测试环境诊断](README.md#测试环境诊断)。

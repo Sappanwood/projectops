@@ -5,13 +5,17 @@ import type { CliIO } from "../io.js";
 import { executionCli, type ExecutionCliOptions } from "./executionCli.js";
 
 export function executionCommand(args: readonly string[], io: CliIO, cwd: string): number {
+  const separator = args.indexOf("--");
+  const ownArgs = separator < 0 ? args : args.slice(0, separator);
   try {
     const parsed = parseArgs({
-      args: [...args],
+      args: [...ownArgs],
       allowPositionals: true,
       strict: true,
       options: {
         json: { type: "boolean" },
+        view: { type: "string" },
+        "timeout-ms": { type: "string" },
         "expected-revision": { type: "string" },
         instructions: { type: "string" },
         "retry-of": { type: "string" },
@@ -30,6 +34,7 @@ export function executionCommand(args: readonly string[], io: CliIO, cwd: string
       "show",
       "finish",
       "verify",
+      "check",
       "accept",
       "rework",
       "recover",
@@ -45,8 +50,25 @@ export function executionCommand(args: readonly string[], io: CliIO, cwd: string
     )
       throw new Error("Invalid execution arguments.");
     const v = parsed.values;
+    if (v.view !== undefined && !["summary", "full"].includes(v.view))
+      throw new Error("Invalid execution view.");
+    if (action === "check") {
+      if (
+        separator < 0 ||
+        separator === args.length - 1 ||
+        Object.keys(v).some(
+          (key) => !["json", "view", "expected-revision", "timeout-ms"].includes(key),
+        )
+      )
+        throw new Error("Check requires argv after -- and does not accept declared results.");
+    } else if (separator >= 0 || v["timeout-ms"] !== undefined) {
+      throw new Error("Command argv and timeout are only supported by check.");
+    }
     const options: ExecutionCliOptions = {
       ...(v.json === undefined ? {} : { json: v.json }),
+      ...(v.view === undefined ? {} : { view: v.view as "summary" | "full" }),
+      ...(action === "check" ? { argv: args.slice(separator + 1) } : {}),
+      ...(v["timeout-ms"] === undefined ? {} : { timeoutMs: Number(v["timeout-ms"]) }),
       ...(v["expected-revision"] === undefined ? {} : { expectedRevision: v["expected-revision"] }),
       ...(v.instructions === undefined ? {} : { instructions: v.instructions }),
       ...(v["retry-of"] === undefined ? {} : { retryOf: v["retry-of"] }),
@@ -65,7 +87,7 @@ export function executionCommand(args: readonly string[], io: CliIO, cwd: string
       code: "EXECUTION_INVALID",
       message: "Invalid execution arguments or unreadable evidence file. See pops --help.",
     };
-    if (args.includes("--json")) io.stdout(JSON.stringify({ ok: false, error }));
+    if (ownArgs.includes("--json")) io.stdout(JSON.stringify({ ok: false, error }));
     else io.stderr(error.message);
     return 1;
   }

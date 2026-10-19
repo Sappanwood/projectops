@@ -1,5 +1,9 @@
 # 隔离验证
 
+按改动范围选择验证：仅调整入口或指引时，用独立 Agent 做只读场景推演，覆盖直接实施、普通 Backlog、已有 execution/run
+和跨项目边界；检查测试策略与执行路径能独立选择。明确记录这是文档路由验证，不代表实际命令或 runtime 运行通过。
+修改 CLI、生命周期或恢复行为时，再按受影响范围选择下列隔离演练；普通文档调整不要求重跑完整执行链。
+
 使用调用方授权的受信任本地临时目录，创建独立数据 workspace、项目 Git fixture 和 evidence 目录。
 安全边界为 trusted local directories；不要求恶意 ancestor-swap resistance，不需要 native helper。
 使用当前 Repo 构建的 CLI，cwd 必须是 fixture workspace，不能沿用契约示例中的真实 workspace。

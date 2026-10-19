@@ -4,7 +4,7 @@
 
 | 需要 | 选择与边界 |
 |---|---|
-| Agent 在 CLI 外完成工作 | execution create/finish/verify/accept；CLI 只记载事实，不启动执行器 |
+| 已选择 execution 路径，Agent 在 CLI 外完成工作 | execution create/finish/check/accept；已有输出可用 verify 登记，CLI 不启动 Agent |
 | 持续串行派发 | Workbench 同一 runtime 持有 handles；plan-run create 只冻结，不在 CLI 启动短命 Pi |
 | 有限并行 | Plan 显式 max_parallel: 2、节点 parallel 与 resources；未声明不推定许可。parallel-run create 只准备，不派发 |
 

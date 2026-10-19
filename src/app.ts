@@ -96,6 +96,9 @@ Commands:
   execution show <project> <attempt>  Show input, results and evidence diagnostics
   execution finish <project> <attempt> --outcome succeeded|failed|stopped --summary <text> --expected-revision <revision>
   execution verify <project> <attempt> --command <text> --outcome passed|failed --evidence-file <file> --expected-revision <revision>
+  execution check <project> <attempt> --expected-revision <revision> [--timeout-ms <ms>] [--view summary] [--json] -- <program> [args...]
+                         Run verification in the attempt checkout and save actual output; does not accept
+  execution commands support --view summary|full (default full); summary retains revisions and evidence references
   execution accept|rework <project> <attempt> --note <text> --expected-revision <revision>
   execution recover <project>  Mark abandoned runtime work as awaiting confirmation
   execution confirm-interrupted <project> <attempt> --note <text> --expected-revision <revision>
@@ -103,12 +106,14 @@ Commands:
 Project workflows will be added as vertical slices during the alpha phase.`;
 
 export function runCli(args: readonly string[], io: CliIO, cwd = process.cwd()): number {
-  if (args.length === 0 || args.includes("--help") || args.includes("-h")) {
+  const separator = args[0] === "execution" && args[1] === "check" ? args.indexOf("--") : -1;
+  const ownArgs = separator < 0 ? args : args.slice(0, separator);
+  if (args.length === 0 || ownArgs.includes("--help") || ownArgs.includes("-h")) {
     io.stdout(HELP);
     return 0;
   }
 
-  if (args.includes("--version") || args.includes("-v")) {
+  if (ownArgs.includes("--version") || ownArgs.includes("-v")) {
     io.stdout(VERSION);
     return 0;
   }

@@ -401,6 +401,11 @@ RunnerContext.recordVerification 仅供当前 runtime handle 使用，在 runnin
 `server/workbenchServer.ts` 固定 workspace，新增 Plan revision 与 executions 路由，共用 JSON/Origin/body 限制和错误 envelope；
 请求不能改 workspace，运行输入由项目和任务解析。`useCases/executionCommand.ts` 解析 CLI 参数，
 `executionCli.ts` 调用同一 application API；finish/verify 是外部事实记录，不运行声明的验证命令。
+`application/executionCheck.ts` 为 CLI 提供同步 argv 验证：先核对 attempt 状态/revision 和 checkout，使用无隐式 shell 的 spawnSync，
+捕获输出及前后代码摘要，再复用 verifyExecution 持久化证据；验证期间代码变化记录失败，revision 漂移时保留独立 evidence 并拒绝附着。
+超时/输出超限均失败；该能力不接入 HTTP、不启动受管 runner、不自动 finish/accept，不改变 Attempt schema。
+`application/executionSummary.ts` 投影 CLI 的 summary 视图，保留 revision、验证计数、最近证据和状态；full 与持久化内容保持完整。
+CLI 仅投影成功数据，保留原错误/diagnostics；check 的命令失败与登记成功分别由退出码和 data.check.outcome/ok 表达。
 验收检查输入版本、当前 Git 快照与有效验证，持久化决定并推进 Backlog；失败尝试恢复相关文件，诊断无法恢复的情形。
 业务状态不写数据库，也不把 Plan 意图变成执行状态机。
 

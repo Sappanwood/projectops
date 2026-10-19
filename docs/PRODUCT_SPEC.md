@@ -22,6 +22,11 @@ Markdown/JSON artifact 为权威数据，通过统一 `pops` CLI 和 Local Web W
 5. 建立和检查 Repo 长期文档体系。
 6. 记录、分类并处理 Workflow Retrospective。
 
+工作流按实际需要选择：简单会话任务可直接实施和验证；需要持续跟踪时使用 Backlog；需要执行快照、正式验收交接、
+受管调度或重试恢复时使用 execution。Plan 用于多项依赖规划，run 用于持续派发或并行落地，外部 Agent 身份不强制启用这些能力。
+已有 execution/run 的验收、证据与恢复约束不因轻量路径改变；跨 owner mapping 保持各任务项目的 execution 要求。
+测试编写顺序由 Repo 与共享测试规则决定，与是否记录 execution 独立。
+
 ## 核心功能
 
 | 模块 | 目标能力 | 当前状态 |
@@ -266,6 +271,11 @@ Pi 任务按登记 Repo 执行，同项目已有其他 running/stop_requested/un
 页面轮询只重读数据，保留输入、焦点与选区；追加指示携带当前 revision，冲突或投递失败明确显示。工作完成以 Pi 完整 prompt settle 和最终 assistant stopReason 为依据，模型错误或中止不显示成功。进展中的工具事件只显示工具名和开始/结束；显式标记的验证命令及其实际结果另存为验证证据。
 
 验证结果提供“查看证据正文”。GET `/api/projects/<project>/executions/<attempt>/evidence?ref=<exact-ref>` 只接受该尝试的验证引用，核对静态 containment 与完整内容 SHA256 后返回最多 65,536 字符预览及 truncated 标记；缺失或篡改返回诊断，页面清除旧正文，不能以旧预览冒充当前有效证据。
+
+外部 Agent 可使用 `execution --view summary` 减少收据中的重复输入、快照和历史；需要审阅时读取 full，验收条件保持不变。
+`execution check` 在已结束且未验收的尝试 checkout 中运行显式 argv，自动保存真实输出、退出码、时间与代码摘要，减少手工证据登记。
+命令失败、超时、输出超限和执行期间代码变化不能作为通过证据；revision 变化拒绝附着并保留诊断与独立输出。
+运行检查不等于接受任务，finish 与 accept 继续单独执行。此能力只提供本地 CLI 入口，不向浏览器开放任意命令。
 
 
 ## 串行计划运行

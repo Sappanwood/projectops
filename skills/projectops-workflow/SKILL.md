@@ -18,15 +18,31 @@ description: 使用 ProjectOps pops CLI 推进项目任务、计划、执行验�
 - 先读契约的“选择 workspace 与入口”“调用与结果处理”。CLI 输出没有统一 envelope：不能对所有命令读取 `data`，也不能以不存在 `ok` 判断失败。检查退出码及 stdout/stderr，处理 diagnostics。
 - 初始化 Backlog 前读契约的“Backlog：初始化与代号”。省略代号时在当前 manifest 登记 store 内自动查重；需要固定代号用 `--id-prefix <PREFIX>`，不猜最终值，读取 `store.id_prefix`。自定义冲突/非法输入、不可读 store 或初始化锁占用时先处理诊断；不手改已有 store 前缀、迁移 ID 或删除数据绕过检查。
 
-## 从任务到交付
+## 选择执行路径
+
+按任务的跟踪、调度和交接需要选择最短适用路径；测试策略独立遵循 Repo 与共享规则。
+
+| 需要 | 路径 |
+|---|---|
+| 当前会话可完成，无持续跟踪需要 | 直接实施 → 验证 → 回复；不自动创建 Backlog、Plan、execution 或 Report |
+| 需要排期、跨会话续做或保留任务状态 | 使用 Backlog，正文记录范围与验收；实施、验证后更新状态并记录结果。无 execution 的任务可直接更新 done |
+| 需要执行快照、正式验收交接、受管调度或重试恢复 | 使用 execution；需要多项依赖规划时使用 Plan，需要持续派发或并行落地时使用对应 run |
+
+已有任务沿用其记录；已有 execution 或 run 必须按原验收、恢复与落地契约完成，不能改走轻量路径绕过检查。
+外部 Agent 身份本身不要求创建 execution；单项 execution 不要求 Plan。多项依赖规划也可仅使用 Plan/Backlog，
+但跨 owner mapping 仍遵循下文的单任务 execution 要求。简单直接任务到此完成路由，不继续加载无关执行或恢复章节。
+
+## 跟踪与正式交付
 
 1. **确定范围**：list/show 现有任务与计划，读取正文、依赖和 revision。单项任务不制造 Plan；多项计划先 create → show → validate，取得对具体范围的批准后 approve → materialize → show 核对 mapping。已有批准沿用，不重复要求确认。
-2. **选下一项**：用 `plan next` 获取建议，结合实际前置条件决定；空 next 不是完成证明。每次写入使用对应对象最新 revision，task、attempt、Plan、run 的 revision 不可互换。
-3. **执行与验证**：读取契约“执行记录与验收”。外部 Agent 先 create execution 记录，再完成实际工作，以 finish 记录结果。真实运行验证命令并保存输出，然后 verify 引入证据；CLI 不运行 `--command` 字符串。受管 Pi 按契约以 bash 首行 `# projectops-verify` 标记真实检查，由 runner 保存工具结果与当时代码快照，不自行调用 finish/verify/accept；普通命令和最终摘要不算验证证据。代码或任务输入变化后重新检查证据是否仍有效。
-4. **验收**：将执行成功、验证通过、验收结论分别记录。确认符合任务验收且在授权范围内，再 accept；已有 execution 不直接改 Backlog done。未通过时保留历史并 rework/retry，不覆盖失败记录。
-5. **结案**：重新核对所有映射任务、run 与证据，使用最新 Plan revision 执行 complete。Report 记录实际验证和文档同步；未完成只能依据用户对具体 partial 范围的明确接受生成 partial。无授权不填虚构接受说明，也不为生成报告改状态。
+2. **推进任务**：仅有 Backlog 时按契约“Backlog：创建与推进”操作；有 Plan 时用 `plan next` 获取建议，结合实际前置条件决定，空 next 不是完成证明。每次写入使用对应对象最新 revision，task、attempt、Plan、run 的 revision 不可互换。
+3. **执行与验证**：仅使用 execution 时读取契约“执行记录与验收”。外部 Agent 先 create execution，再完成实际工作，以 finish 记录结果。优先用 `execution check ... -- <program> [args...]` 运行验证并自动保存证据；已有真实输出可用 verify 登记，verify 不运行 `--command` 字符串。check 失败退出 1，即使记录成功返回 ok:true 也不能视为通过；读取 check.outcome 与诊断。受管 Pi 仍以 bash 首行 `# projectops-verify` 标记真实检查，由 runner 保存证据，不自行 finish/verify/accept。代码或任务输入变化后重新检查证据是否有效。
+4. **验收**：使用 execution 时分别记录执行成功、验证通过、验收结论。确认符合任务验收且在授权范围内，再 accept；未通过时保留历史并 rework/retry，不覆盖失败记录。
+5. **结案**：有 Plan 时核对所有映射任务、适用 run 与证据，使用最新 Plan revision 执行 complete。普通单项任务直接交付验证结果；多阶段交付的 Report 记录实际验证和文档同步。未完成只能依据用户对具体 partial 范围的明确接受生成 partial，不为生成报告改状态或补造 Plan。
 
 常规命令及返回字段按契约对应章节读取，不另建一份 schema。创建结果不明确时先 list/show，避免重复创建。
+execution 日常使用 `--json --view summary` 并复用收据的新 revision；需要输入、diff 或完整历史时再 show full。
+精简收据不替代证据审阅；check 报告独立保留输出时先核对最新状态与日志，不盲目重跑。
 
 ## 跨项目物化与依赖
 

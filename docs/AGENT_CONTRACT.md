@@ -21,6 +21,10 @@ pops project doctor --json
 只在用户授权且确实缺失时运行 `pops init <workspace>`、`pops project add <repo-relative-path>` 或
 `pops backlog init <project>`，然后重新 list/doctor。Workspace Control 既有条目留在原系统，不导入、迁移或双写。
 
+按工作流 skill 的“选择执行路径”区分直接实施、Backlog 跟踪和 execution 管理。简单会话任务不自动创建过程记录；
+仅需任务跟踪时可使用 Backlog，外部 Agent 身份不强制创建 execution。Plan 用于多项依赖规划，run 用于受管派发；
+已有 execution/run 继续遵守验收和恢复约束，跨 owner mapping 仍按跨项目契约使用各任务项目的 execution。
+
 ## 调用与结果处理
 
 Agent 优先传 `--json`，同时检查退出码、stdout 和 stderr。`init --json` 在数据初始化完成后返回
@@ -117,7 +121,7 @@ pops backlog init mochi-write --id-prefix MWT --json
 
 ## Backlog：创建与推进
 
-先列出现有任务，确认范围和依赖；正文写清目标、验收和不在范围。`task.md` 是调用方准备的正文输入文件。
+选择 Backlog 跟踪后，先列出现有任务，确认范围和依赖；正文写清目标、验收和不在范围。`task.md` 是调用方准备的正文输入文件。
 
 ```bash
 pops backlog list projectops --json
@@ -427,8 +431,9 @@ Web 提供对应内容编辑和修订预览，revision 冲突保留草稿，用�
 执行 API 只使用 manifest 解析的 root；descriptor/root 缺失或损坏时失败，不猜测或回退其他 store。
 执行快照要求登记 Repo 为 Git 仓库，支持尚无 commit 的仓库；其他 ProjectOps 功能仍不要求 Git。
 
-以下 CLI 记录外部完成的工作，不启动 Agent，也不会执行 `--command` 字符串。
-调用方负责提交真实结果；证据复制到 executions/evidence，不能只引用临时日志。
+create/finish/verify/accept 记录外部完成的工作，不启动 Agent，也不会执行 `--command` 字符串。
+verify 的调用方负责提交真实结果；证据复制到 executions/evidence，不能只引用临时日志。
+需要实际运行验证并自动记录证据时使用 check。Agent 日常调用 execution 优先传 `--json --view summary`。
 
 ```bash
 pops execution create projectops "$item_id" --instructions "本次具体指示" \
@@ -448,9 +453,38 @@ execution 成功统一 `{ok:true,data:...}`，失败 `{ok:false,error:{code,mess
 list 的 `data.attempts` 为尝试列表；create/show/finish/verify/accept/rework 的 `data.attempt` 为完整记录，
 `data.diagnostics` 表示证据不可读或变化等问题。task revision 与 attempt revision 是不同值。
 
+所有 execution 命令支持 `--view summary|full`，默认 full，错误和退出码语义不因视图改变。
+summary 返回 `data.view: "summary"`；`data.attempt` 或 `data.attempts[]` 只保留 id/project_id/item_id、revision、state、origin、retry_of、
+snapshot_digest、acceptance 的 decision/at 及 verification。verification.total 为全部历史检查数，passed/failed 为保存的 snapshot_digest 下
+每个 command 最新结果的计数，latest 含最后一项的 outcome/at、快照摘要、证据引用与 hash；command 最多 240 字符并附 command_truncated。
+这些计数不证明当前代码仍匹配，也不替代 diagnostics 或 accept。完整输入、summary 正文、diff、文件列表与进展历史按需用 show full 查看。
+summary 不修改持久化记录；已有 diagnostics 保留，list/recover 沿用原列表契约，不额外承诺逐项证据诊断。
+
+实际验证入口（以下变量必须来自真实收据）：
+
+```bash
+pops execution check projectops "$attempt_id" --expected-revision "$attempt_revision" \
+  --json --view summary -- npm test
+```
+
+- check 仅接受已结束且未作验收决定的 attempt，执行前检查 revision；cwd 由 Repo/受管 checkout 解析，不接受任意 cwd。
+- `--` 后为原样 argv，包括 `--help`、`--version` 等；不启用隐式 shell，stdin 关闭。需要 shell 时显式传入 shell 程序及参数。
+- 自动采集 argv、cwd、起止时间、exit_code、signal、error、stdout/stderr、前后快照 digest，作为 JSON 正文保存在现有 evidence 文件；
+  verification.command 使用 argv 的 JSON 字符串，复用 verify 的证据存储与验收规则，不改变 Attempt schema。
+- 只有退出 0、无运行错误、前后代码摘要一致才记录 passed；失败、信号中止、超时或代码变化均记录 failed。check 不自动 finish/accept。
+- 默认 timeout 为 600000 ms，`--timeout-ms` 接受 1..2147483647 的整数；输出缓冲上限 16 MiB。超限保留已捕获输出，
+  标记 output_incomplete 并失败。超时/超限对直接子进程发送 SIGKILL，不承诺清理其派生进程；此入口用于会自行结束的验证命令，不用于启动服务。
+- 成功登记返回 `ok:true`、`data.attempt`、`data.diagnostics` 和 `data.check`；check 含 outcome、exit_code、signal、error、
+  snapshot_changed、output_incomplete、evidence_ref。passed 退出 0，failed 退出 1，因此 `ok:true` 仅表示记录成功，不代表检查通过。
+- 执行期间 revision 变化或快照不可读时，不把输出附到已变化的 attempt；返回 `ok:false` 和诊断，附独立保留的 evidence 引用。
+  先核对该证据与最新状态，不自动重跑可能有副作用的命令。参数/前置校验失败时不执行命令。
+- 采用受信任本地 Linux workspace、Node.js 和现有静态 containment/no-clobber 边界，无 native helper；本入口不是 sandbox，
+  不提供崩溃自动恢复或恶意 ancestor-swap 防护。证据仍不得包含凭据。
+
 执行状态、验证结果与验收结论分别记录。accept 要求执行 succeeded、当前代码快照下每个已记录命令的最新结果通过、
 证据 SHA256 未变、任务内容未变、没有后继尝试；否则拒绝。任务状态保持不变或仅从 todo 推进到 in_progress 时，验收比较除 revision/updated 和该状态推进之外的完整任务内容；标题、正文、依赖及其他内容变化仍拒绝，done/cancelled 不接受旧尝试。accepted 才将任务设为 done。
-没有执行记录的普通手工任务仍按原 status update 工作流推进。
+没有执行记录的普通跟踪任务（包括外部 Agent 实施的任务）仍按 status update 工作流推进，保留实际验证结果；
+已有 execution 或 run 不能通过状态更新绕过验收。
 失败、中止或要求继续保留历史；新尝试明确引用前次尝试并读取当前输入，禁止覆盖历史：
 
 ```bash
