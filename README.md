@@ -265,7 +265,7 @@ capture 的显式和自动 ID 在三个状态目录中保持唯一；运行时�
   可开始任务按 P0 → P3、ID 排序，next 为首项或 null。依赖可以位于 Plan 外或其他已登记项目，查询实时核对完成/接受/落地依据，不自动改状态或启动任务
 - `pops plan create/list/show/validate/approve/materialize/revise/complete`：从 JSON 草案创建、列出、查看、校验、批准并将已批准的 `plan/Plan@1` artifact 写入 Backlog；Plan ID 由 title 稳定生成，
   无 ASCII slug 的标题使用每个 Unicode code point 的 `u<hex>` token
-- `pops report create/list/show`：从已批准且 materialized 的 Plan 生成 completed 或显式 partial Delivery Report，并查询已生成的 Report；create 需要至少一条 `--verification`
+- `pops report create/list/show`：从已批准且 materialized 的 Plan 生成 completed 或显式 partial Delivery Report，并查询已生成的 Report；create 自动引用已有有效 execution/run 证据；无 execution 的交付任务仍需真实 `--verification`
 - `pops retrospective capture/list/show`：将调用方提供的 trigger、harness、model、project/task provenance 和 Markdown 证据捕获到 workspace 级 inbox，并按 status/project/task 查询；capture 不自动分类或流转
 - `pops retrospective triage <id>`：使用 `--expected-revision` 将 inbox 记录分类到 active 或直接 archive，并保存 disposition、owner scope、categories、next action 和 related info
 - `pops retrospective archive <id>`：使用 `--expected-revision` 将 active 记录结案到 archive，并保存 action disposition、actioned_at、backlog links 和 resolution note；backlog link 必须使用 `project-ops:backlog/items/<PREFIX>-NNN.md`；两类流转均不覆盖既有目标，成功后重建派生索引
@@ -312,6 +312,12 @@ Plan 修订采用草案 JSON 输入，先查看变更与受影响任务，再确
 
 执行操作的完整参数和返回值见 [Agent 操作契约](docs/AGENT_CONTRACT.md#执行记录与验收)。
 执行记录需要已登记的 Git Repo；普通项目登记、Backlog 和文档能力仍不要求 Git。
+
+完成材料可用 `pops execution submit <project> <attempt> --file submission.json --expected-revision <revision> --view summary --json`
+一次提交 finish、check/verify，已获验收授权时另加 accept 步骤和 `--accept`。失败保留阶段收据，核对后以
+`--from-step` 和最新 revision 继续，不自动重跑前面的验证。输入格式与恢复规则见
+[批量提交完成材料](docs/AGENT_CONTRACT.md#批量提交完成材料)。Report 自动引用有效验收和验证日志，通常只需补交付说明；
+无 execution 的合法路径仍提供真实验证结果，不以 done 状态代替证据。
 
 Agent 日常执行优先使用 `--json --view summary`，收据保留 ID、最新 revision、状态、验证摘要、证据引用和已有 diagnostics，
 省略完整输入、diff、文件列表和进展历史；需要审阅时用 `execution show --view full`，默认仍为 full。

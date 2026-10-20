@@ -302,10 +302,8 @@ test("report create requires verification and explicit partial acceptance", () =
       workspace,
     );
     assert.equal(noEvidence.code, 1);
-    assert.deepEqual(JSON.parse(noEvidence.stdout[0] ?? "null"), {
-      ok: false,
-      error: "--verification is required at least once",
-    });
+    assert.equal(JSON.parse(noEvidence.stdout[0] ?? "null").ok, false);
+    assert.match(JSON.parse(noEvidence.stdout[0] ?? "null").error, /unfinished.*partial/);
 
     const unfinished = run(
       [

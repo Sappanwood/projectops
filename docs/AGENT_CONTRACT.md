@@ -313,8 +313,18 @@ pops report list projectops --json
 pops report show projectops "$report_id" --json
 ```
 
-`report_id` 取创建结果的 `report.id`。verification 必须至少一条，写实际执行及结果；可重复传
-`--verification`、`--deviation`、`--workaround`、`--repo-doc`。正文可用 `--body-file`。
+`report_id` 取创建结果的 `report.id`。有效 execution 的验收与验证自动汇总到 verification：按 Plan mapping
+记录真实 project/task、accepted 时间、attempt logical URI、snapshot/verification/landing 摘要，以及接受快照下
+各命令最后一次验证的结果、时间、command SHA256、evidence URI 和内容 SHA256。命令与原始输出留在证据中，
+不把机器绝对路径复制进 Report。URI 相对于该条 `Task project:ID` 的 project，通过 manifest 的 executions root 解析；
+run 引用相对于 Report owner，分别使用 `project-ops:executions/plan-runs/<id>.json` 和
+`project-ops:executions/parallel-runs/<id>.json`，并保留 revision。既有 run 的完成、当前代码基线、依赖和 landing 校验仍执行。
+
+全部交付任务都有有效 execution 证据时可省略 `--verification`，只补偏离、workaround、Repo 文档和交付说明。
+存在无 execution 的 done 任务，或没有任何有效 execution 交付证据时，仍须至少一条非空 `--verification`，
+写明对应任务实际执行及结果；状态 done 本身不是验证证据。无效执行证据不因手工说明而变成有效：
+没有具体 partial 授权时拒绝生成；已明确接受 partial 时保留诊断，不生成该项的通过摘要。
+可重复传 `--verification`、`--deviation`、`--workaround`、`--repo-doc`。正文可用 `--body-file`。
 `--repo-doc` 是 Repo 相对路径，Plan/Backlog 引用由产品生成 logical URI。Report 不覆盖已有文件。
 正文允许“文本/JSON”“编辑/审批”等普通斜杠表述；独立或由空白、引号等分隔的机器绝对路径仍会被拒绝。
 create 收据保留输入正文，写入时移除正文末尾空白并以一个换行结束文件；show 返回的正文不含该文件末尾换行。
@@ -480,6 +490,40 @@ pops execution check projectops "$attempt_id" --expected-revision "$attempt_revi
   先核对该证据与最新状态，不自动重跑可能有副作用的命令。参数/前置校验失败时不执行命令。
 - 采用受信任本地 Linux workspace、Node.js 和现有静态 containment/no-clobber 边界，无 native helper；本入口不是 sandbox，
   不提供崩溃自动恢复或恶意 ancestor-swap 防护。证据仍不得包含凭据。
+
+### 批量提交完成材料
+
+`submit` 复用 finish/check/verify/accept application API，逐步持久化并自动传递 revision；不创建新状态机或 HTTP endpoint。
+先准备 JSON 文件（建议放在 Repo 外，避免修改材料本身改变代码快照）：
+
+```json
+{"steps":[
+  {"kind":"finish","outcome":"succeeded","summary":"已完成约定修改"},
+  {"kind":"check","argv":["npm","test"]},
+  {"kind":"accept","note":"已审阅改动，依据当前授权验收；检查须通过"}
+]}
+```
+
+```bash
+pops execution submit projectops "$attempt_id" --file submission.json \
+  --expected-revision "$attempt_revision" --accept --view summary --json
+```
+
+- steps 为非空数组。可省略 finish 和 accept；finish 仅在首位，accept 仅在末位。check 可多项，支持可选 `timeout_ms`，运行边界同独立 check。
+  已有真实输出可用 `{"kind":"verify","command":"npm test","outcome":"passed","evidence":"真实输出正文"}` 登记，不再运行命令。
+- 提交前校验整份结构、起点、revision 和 accept 授权声明。出现 accept 步骤必须显式 `--accept` 且 note 非空；
+  该标志只记录调用方已获得授权，不代替审阅或用户决定。没有授权时省略 accept，后续独立验收。
+- 成功退出 0，`ok:true,data` 含最终 attempt、diagnostics、receipts、`next_step:null`。
+  receipts 每项含从 0 开始的 step、kind、该阶段 revision、outcome，验证另含 evidence_ref；summary 视图只精简最终 attempt。
+- 阶段拒绝或验证登记为 failed 后退出 1、`ok:false,error`，停止后续步骤；已保存事实不回滚。
+  `data`（可读取 attempt 时）保留当前 attempt/revision、已保存步骤收据和失败位置 next_step。
+  参数或初始读取失败可能没有 data。失败验证即使已登记，next_step 仍指向该步，不能跳过并宣称检查通过。
+- 先核对收据、日志与当前代码/任务状态，修复问题后用最新 revision 和 `--from-step <next_step>` 显式继续；
+  CLI 不重放前面的步骤。复用同一份步骤顺序；若改变材料则重新审阅。旧 revision 重提整份文件会在运行前拒绝。
+  运行中 revision 变化的独立日志按 check 诊断处理，不盲重跑。进程崩溃/收据丢失时先 show 对账；没有持久化批次账本或自动崩溃恢复。
+- 所有原有任务/代码快照、证据完整性、后继尝试和受管 checkout 保护不变。submit 不落地、merge、push 或自动生成 Report。
+
+### 验收与重试
 
 执行状态、验证结果与验收结论分别记录。accept 要求执行 succeeded、当前代码快照下每个已记录命令的最新结果通过、
 证据 SHA256 未变、任务内容未变、没有后继尝试；否则拒绝。任务状态保持不变或仅从 todo 推进到 in_progress 时，验收比较除 revision/updated 和该状态推进之外的完整任务内容；标题、正文、依赖及其他内容变化仍拒绝，done/cancelled 不接受旧尝试。accepted 才将任务设为 done。

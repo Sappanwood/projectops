@@ -38,7 +38,7 @@ export function reportCreate(
     return reportFailure(
       io,
       json,
-      "Usage: pops report create <project-id> <plan-id> --verification <evidence> [options]",
+      "Usage: pops report create <project-id> <plan-id> [--verification <evidence>] [options]",
     );
   }
 
@@ -79,8 +79,8 @@ export function reportCreate(
   }
 
   const verification = values.verification ?? [];
-  if (verification.length === 0 || verification.some((entry) => entry.trim() === "")) {
-    return reportFailure(io, json, "--verification is required at least once");
+  if (verification.some((entry) => entry.trim() === "")) {
+    return reportFailure(io, json, "--verification entries must be non-empty");
   }
 
   let body = values.body ?? "";

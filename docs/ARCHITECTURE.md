@@ -239,7 +239,7 @@ SIGTERM，2 秒未退出则 SIGKILL，4 秒仍未退出则报错；随后清理�
 - Report：`reports/report-<slug>.md` 使用独立的 `report/Report@1` frontmatter，保存标题、project、`created_at`、outcome、Plan logical reference、
   Backlog 结果、验证证据、偏离、workaround 与 `repo_docs`（Repo-relative 文档路径，如 `README.md`），正文为 Markdown body。Report adapter 只接受 workspace 内的 reports root，拒绝缺失或非目录 root、
   非普通 target、schema 无效文件和已存在 target；写入使用 `wx` no-clobber，序列化不会注入机器绝对路径。
-- Report generation 先从 `plansRoot` 读取并校验指定的已批准、已 materialize Plan，再按完整 mapping 身份读取各真实项目的 Backlog 条目；Report 记录所有映射结果，`completed|partial` 结合 task 实际状态、有效接受、适用 landing 及已有 run/前置证据检查决定；未满足 completed 条件时须显式 partial 接受，生成失败不写入 Report。CLI 通过 `--verification` 记录验证证据，未完成 task 必须以非空 `--partial-acceptance` 显式接受 partial。
+- Report generation 先从 `plansRoot` 读取并校验指定的已批准、已 materialize Plan，再按完整 mapping 身份读取各真实项目的 Backlog 条目；Report 记录所有映射结果，`completed|partial` 结合 task 实际状态、有效接受、适用 landing 及已有 run/前置证据检查决定；未满足 completed 条件时须显式 partial 接受，生成失败不写入 Report。`application/reportEvidence.ts` 从已校验的 task proof 生成接受时间、attempt/evidence logical URI、验证结果与 hash；保持 Report@1，原始输出不复制。CLI 可省略重复验证说明，无 execution 的交付仍通过 `--verification` 记录真实证据，未完成 task 必须以非空 `--partial-acceptance` 显式接受 partial。
 - Retrospective store：`retrospectives/retrospective.json` 声明 `retrospective/Store@1`、记录 schema 与索引 schema；`inbox/`、`active/`、`archive/` 保存 `*.md` 权威记录，`index.json` 和 `INDEX.md` 是可重建派生索引。Retrospective@1 的 `project`、`task` provenance 可为显式 `null`，但不能缺失；triage metadata 使用 `disposition`、`owner_scope`、`categories`、`next_action`、`related_info`，archive metadata 使用 `action_disposition`、`actioned_at`、`backlog`、`resolution_note`，并保留已有的 `next_action`。Store adapter 只接受 manifest descriptor 指定且位于 workspace 内的静态目录，bootstrap 和记录创建均使用 no-clobber；不把 Retrospective 纳入 per-project artifact 状态机。capture/transition 的共享锁按 store 相对路径生成稳定 identity，存放在 workspace `.pops/runtime/retrospectives/`，不写入版本化 Retrospective root。
 - Retrospective capture 只保存调用方提供的证据并强制写入 `inbox/`；Markdown body 必须包含三个非空 section：`Hidden friction encountered`、`Workarounds used` 和 `Improvement candidates`。记录输出的 revision 是 Markdown 文件内容 sha256，列表按相对 path 稳定排序并支持 status/project/task 过滤。显式 ID 与自动 ID 都在共享锁内跨 `inbox/`、`active/`、`archive/` 检查唯一性，自动 suffix 从所有状态和已有重试记录中分配。读取列表将 malformed 记录转换为 diagnostics，避免单个文件破坏 read model；capture 在索引刷新失败时回滚本次文件和完整索引快照，并清理已创建后发生写入错误的部分文件。`triage` 只允许 `inbox → active|archive`，显式要求 `--to` 和非空 `--next-action`；`archive` 只允许 `active → archive`，保留记录已有的 `next_action`，其 `--backlog` 只接受 `project-ops:backlog/items/<PREFIX>-NNN.md`。两者在共享锁内校验 expected revision、静态 regular target 与 no-clobber 目标，失败回滚 source/target/index 快照，成功后重建派生索引。不把 Retrospective 纳入 per-project artifact 状态机。
 
@@ -387,6 +387,10 @@ Plan 的 `readPagesView.ts` 输出执行工作区 host；`planRunUi.ts` 与 `par
 后续变更检查 revision；证据文件存于该 root 的 evidence 子目录。`execution/snapshot.ts` 调用 Git 参数数组，
 捕获 HEAD、diff 和工作文件摘要，不通过 shell 执行；证据和快照作为工作事实保存，不把临时日志作为唯一长期证据。
 `application/executionApi.ts` 提供 create/list/show/finish/verify/decide，共用 CLI 与 HTTP，无内部 CLI subprocess。验收允许冻结任务由 todo 正常推进到 in_progress，并忽略 revision/updated 的派生差异；其余完整内容仍比较，done/cancelled 与其他状态变化拒绝。
+
+`application/executionSubmit.ts` 预检步骤材料与显式 accept 声明，顺序调用 finish/check/verify/decide 并传递 revision。
+各事实分别持久化；失败返回部分收据与 next_step，显式 from-step 只执行剩余范围，不增加批次 store、自动重试或事务回滚。
+CLI 解析 JSON 文件，application 不调用内部 CLI；未增加 HTTP 路由或持久化 schema。
 
 `application/verificationChecks.ts` 供独立执行验收、串行 run 与并行 run 共用：按指定 snapshot digest 筛选验证，
 每个 command 只采用最后一条记录，再核对 passed 及持久化证据的可读性和内容摘要。调用方决定目标快照、

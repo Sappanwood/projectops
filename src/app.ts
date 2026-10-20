@@ -83,7 +83,7 @@ Commands:
   parallel-run pause|resume|close-stopped|rework <project> <run> --expected-revision <revision> [--note <text>] [--node <key>]
   docs scaffold <project>       Create the fixed Project Docs files
   docs check <project>          Check the fixed Project Docs files
-  report create <project> <plan> --verification <evidence>  Create a Delivery Report
+  report create <project> <plan> [--verification <evidence>]  Create a Delivery Report
   report list <project>          List Delivery Reports
   report show <project> <report> Show a complete Delivery Report
   retrospective capture       Capture a workflow retrospective in inbox
@@ -96,6 +96,7 @@ Commands:
   execution show <project> <attempt>  Show input, results and evidence diagnostics
   execution finish <project> <attempt> --outcome succeeded|failed|stopped --summary <text> --expected-revision <revision>
   execution verify <project> <attempt> --command <text> --outcome passed|failed --evidence-file <file> --expected-revision <revision>
+  execution submit <project> <attempt> --file <json> --expected-revision <revision> [--from-step <index>] [--accept] [--view summary] [--json]
   execution check <project> <attempt> --expected-revision <revision> [--timeout-ms <ms>] [--view summary] [--json] -- <program> [args...]
                          Run verification in the attempt checkout and save actual output; does not accept
   execution commands support --view summary|full (default full); summary retains revisions and evidence references

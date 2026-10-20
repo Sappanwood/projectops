@@ -146,6 +146,9 @@ test("Plan completion and Report refuse unmet external prerequisites even when m
       plansRoot: path.join(f.root, "ops/alpha/plans"),
       backlogRoot: path.join(f.root, "ops/alpha/backlog"),
       reportsRoot: path.join(f.root, "ops/alpha/reports"),
+      verification: [
+        "Fixture: mapped task status inspected; external prerequisite checked separately.",
+      ],
     };
     assert.throws(() => writeGeneratedReport(input), /infra:/);
     assert.equal(completePlan(request).ok, false);

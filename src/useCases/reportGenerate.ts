@@ -1,3 +1,4 @@
+import { reportTaskEvidence } from "../application/reportEvidence.js";
 import {
   planItemProject,
   planMappingReference,
@@ -108,20 +109,29 @@ function deriveReport(input: ReportDerivationInput): Report {
     );
   }
 
+  const manual = input.verification ?? [];
+  if (manual.some((entry) => !entry.trim()))
+    throw new ReportGenerationError("verification entries must be non-empty");
   const evidence: string[] = [];
+  const needsManual: string[] = [];
+  let verifiedTasks = 0;
   const evidenceProblems: string[] = [];
   for (const { planItem, item } of mappedItems) {
     if (planItem.item_type !== "task" || item.status !== "done") continue;
     try {
       const proof = freezeDependency(input.workspaceRoot, { project: item.project, item: item.id });
-      evidence.push(
-        `Task ${item.project}:${item.id}; basis: ${proof.basis}; attempt: ${proof.attempt_id ?? "none"}; snapshot: ${proof.snapshot_digest ?? "none"}; verification: ${proof.verification_digest ?? "none"}; landing: ${proof.landing_digest ?? "none"}`,
-      );
+      if (proof.basis === "done") needsManual.push(`${item.project}:${item.id}`);
+      else verifiedTasks++;
+      evidence.push(...reportTaskEvidence(input.workspaceRoot, proof));
     } catch (error) {
       if (!partialAcceptance) throw new ReportGenerationError(formatError(error));
       evidenceProblems.push(formatError(error));
     }
   }
+  if (!manual.length && (needsManual.length || !verifiedTasks))
+    throw new ReportGenerationError(
+      `--verification is required for tasks without accepted execution evidence: ${needsManual.join(", ") || "no verified delivery tasks"}`,
+    );
   const report: Report = {
     schema: "report/Report@1",
     id: input.reportId ?? reportIdForPlan(plan),
@@ -200,7 +210,9 @@ export function writeGeneratedReport(input: GeneratedReportInput): Report {
         `Run ${latest.id}: ${validation.error.message}`,
       );
     }
-    report.verification.push(`Plan run: ${latest.id}; state: ${latest.state}`);
+    report.verification.push(
+      `Plan run: ${latest.id}; state: ${latest.state}; revision: ${latest.revision}; source: project-ops:executions/plan-runs/${latest.id}.json`,
+    );
   }
   const parallel = listParallelRuns({
     workspaceDir: input.workspaceRoot,
@@ -232,7 +244,7 @@ export function writeGeneratedReport(input: GeneratedReportInput): Report {
       );
     }
     report.verification.push(
-      `Parallel run: ${latestParallel.id}; integration ref: ${latestParallel.workspace.integrationRef}; head: ${latestParallel.integration_head}`,
+      `Parallel run: ${latestParallel.id}; revision: ${latestParallel.revision}; integration ref: ${latestParallel.workspace.integrationRef}; head: ${latestParallel.integration_head}; source: project-ops:executions/parallel-runs/${latestParallel.id}.json`,
     );
   }
   writeReport(input.workspaceRoot, input.reportsRoot, report);

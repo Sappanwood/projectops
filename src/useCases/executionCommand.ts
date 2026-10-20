@@ -16,6 +16,9 @@ export function executionCommand(args: readonly string[], io: CliIO, cwd: string
         json: { type: "boolean" },
         view: { type: "string" },
         "timeout-ms": { type: "string" },
+        file: { type: "string" },
+        "from-step": { type: "string" },
+        accept: { type: "boolean" },
         "expected-revision": { type: "string" },
         instructions: { type: "string" },
         "retry-of": { type: "string" },
@@ -35,6 +38,7 @@ export function executionCommand(args: readonly string[], io: CliIO, cwd: string
       "finish",
       "verify",
       "check",
+      "submit",
       "accept",
       "rework",
       "recover",
@@ -64,7 +68,24 @@ export function executionCommand(args: readonly string[], io: CliIO, cwd: string
     } else if (separator >= 0 || v["timeout-ms"] !== undefined) {
       throw new Error("Command argv and timeout are only supported by check.");
     }
+    if (action === "submit") {
+      if (
+        !v.file ||
+        Object.keys(v).some(
+          (key) =>
+            !["json", "view", "expected-revision", "file", "from-step", "accept"].includes(key),
+        )
+      )
+        throw new Error("Submit requires --file and submission options only.");
+    } else if (v.file !== undefined || v["from-step"] !== undefined || v.accept !== undefined) {
+      throw new Error("Submission options require submit.");
+    }
     const options: ExecutionCliOptions = {
+      ...(v.file === undefined
+        ? {}
+        : { submission: JSON.parse(readFileSync(path.resolve(cwd, v.file), "utf8")) }),
+      ...(v["from-step"] === undefined ? {} : { fromStep: Number(v["from-step"]) }),
+      ...(v.accept === undefined ? {} : { accept: v.accept }),
       ...(v.json === undefined ? {} : { json: v.json }),
       ...(v.view === undefined ? {} : { view: v.view as "summary" | "full" }),
       ...(action === "check" ? { argv: args.slice(separator + 1) } : {}),

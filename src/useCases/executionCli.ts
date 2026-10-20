@@ -6,12 +6,16 @@ import {
   showExecution,
   verifyExecution,
 } from "../application/executionApi.js";
+import { submitExecution } from "../application/executionSubmit.js";
 import { ExecutionRuntime } from "../execution/runtime.js";
 import type { CliIO } from "../io.js";
 import { checkExecution } from "../application/executionCheck.js";
 import { executionSummary } from "../application/executionSummary.js";
 export type ExecutionCliOptions = {
   json?: boolean;
+  submission?: unknown;
+  fromStep?: number;
+  accept?: boolean;
   view?: "summary" | "full";
   argv?: string[];
   timeoutMs?: number;
@@ -40,6 +44,18 @@ export function executionCli(
     attemptId: target ?? "",
     expectedRevision: options.expectedRevision ?? "",
   };
+  if (action === "submit") {
+    const result = submitExecution({
+      ...mutation,
+      submission: options.submission,
+      ...(options.fromStep === undefined ? {} : { fromStep: options.fromStep }),
+      ...(options.accept === undefined ? {} : { accept: options.accept }),
+      ...(options.view === undefined ? {} : { view: options.view }),
+    });
+    if (options.json) io.stdout(JSON.stringify(result));
+    else io.stdout(JSON.stringify(result, null, 2));
+    return result.ok ? 0 : 1;
+  }
   const checked =
     action === "check"
       ? checkExecution({

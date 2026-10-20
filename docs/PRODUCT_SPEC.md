@@ -372,3 +372,14 @@ Backlog 来源采用相对或限定语法：`plan:plan-id#key` 相对于任务�
 App 外 Agent 直接读取 Plan 文件，或通过 `pops plan show <project> <plan-id> --json` 获取计划内容与 revision。
 
 “修订计划”位于审阅页顶部，按需打开现有 JSON 编辑和 preview/confirm。手动 Refresh 重读外部 Agent 或 CLI 修改；同一页面会话内保留本地草稿，发现 Plan revision 变化时提示并清除旧预览，显式重读后重新预览提交。Tab、任务展开与阅读位置在切换、刷新及任务/报告往返时保留，任务 key 可用时恢复相对位置。读取失败明确标记上次内容并保留重试入口。URL 保存 Plan 与执行 Tab，关闭页面或整页重新加载后的未提交草稿不持久化。跨页面自动更新、页内 Agent 会话和评论系统仍为独立后续能力。
+
+## 执行材料与交付证据复用
+
+外部 Agent 可用 execution submit 一次提交完成材料，内部独立保存执行结束、验证与显式验收事实，自动传递 revision。
+检查失败或状态冲突停止后续步骤，返回已保存阶段及恢复起点；核对后显式继续，不自动重跑或覆盖历史。
+accept 需独立授权声明，任务/代码、证据、后继尝试与受管 checkout/landing 边界保持原契约。
+
+Report 从 Plan mapping 和有效 execution/run 自动生成项目限定的验收与验证摘要、logical URI 和内容 hash，
+调用方只需补交付说明、偏离和 workaround。无 execution 的合法任务仍可用真实验证说明交付；
+缺证据不得仅凭 done 生成 completed。partial 仍需要用户对具体范围的明确接受，并保留失效证据诊断。
+两项能力不增加新的持久化 schema，不自动创建 Plan、接受任务、落地或发布代码。
